@@ -148,11 +148,10 @@
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
-            # Node.js development
+            # Node.js development (Node 22.6+ has built-in TypeScript support)
             nodejs
             nodePackages.typescript
             nodePackages.npm
-            nodePackages.ts-node
 
             # Build dependencies
             python3
