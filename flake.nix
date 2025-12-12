@@ -25,6 +25,19 @@
           # This hash needs to be calculated on first build
           # Run: nix build 2>&1 | grep "got:" to get the correct hash
           npmDepsHash = "sha256-u0xDEW8vlMcyJtnMEPuVDhJv/piK6lUHKPlkAU5H6+8=";
+          # Skip Puppeteer Chrome download (must be set before npm install)
+          # Using env vars instead of --ignore-scripts to avoid breaking native modules
+          makeCacheWritable = true;
+          
+          # Set in all phases to ensure puppeteer skips download
+          PUPPETEER_SKIP_DOWNLOAD = "true";
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true";
+          
+          # Also set in preConfigure for the npm deps phase
+          preConfigure = ''
+            export PUPPETEER_SKIP_DOWNLOAD=true
+            export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+          '';
 
           nativeBuildInputs = with pkgs; [
             nodejs
@@ -38,6 +51,8 @@
 
           buildPhase = ''
             export HOME=$TMPDIR
+            export PUPPETEER_SKIP_DOWNLOAD=true
+            export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
             npm run build
           '';
 
