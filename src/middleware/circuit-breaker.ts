@@ -1,5 +1,6 @@
 import type { CircuitBreakerState, CircuitBreakerMetrics } from '../types/middleware/rate-limiter.js';
 import { CircuitBreakerError } from '../types/middleware/rate-limiter.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Circuit Breaker - Phase 1.2 Implementation
@@ -135,7 +136,7 @@ export class CircuitBreaker {
     }
 
     // Log state transition for debugging
-    console.log(`[CircuitBreaker] State transition: ${oldState} → ${newState}`);
+    logger.debug({ oldState, newState }, "Circuit breaker state transition");
   }
 
   /**
@@ -174,6 +175,6 @@ export class CircuitBreaker {
     this.successCount = 0;
     this.lastFailureTime = 0;
     this.nextAttemptTime = 0;
-    console.log('[CircuitBreaker] Manual reset to closed state');
+    logger.info("Circuit breaker manually reset to closed state");
   }
 }
