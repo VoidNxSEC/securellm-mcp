@@ -25,6 +25,7 @@ import { PackageDownloadTool, packageDownloadSchema } from "./tools/package-down
 import { PackageConfigureTool, packageConfigureSchema } from "./tools/package-configure.js";
 import { detectProjectRoot } from "./utils/project-detection.js";
 import { detectNixOSHost } from "./utils/host-detection.js";
+import { logger, logStartupError } from "./utils/logger.js";
 import {
   emergencyTools,
   handleEmergencyStatus,
@@ -143,8 +144,9 @@ class SecureLLMBridgeMCPServer {
     this.setupToolHandlers();
     this.setupResourceHandlers();
 
-    this.server.onerror = (error) => console.error("[MCP Error]", error);
+    this.server.onerror = (error) => logger.error({ err: error }, "MCP server error");
     process.on("SIGINT", async () => {
+      logger.info("Received SIGINT, shutting down gracefully");
       if (this.db) {
         this.db.close();
       }
@@ -162,9 +164,13 @@ class SecureLLMBridgeMCPServer {
       // Detect project root
       const rootDetection = await detectProjectRoot();
       this.projectRoot = rootDetection.projectRoot;
-      console.error(
-        `[MCP] Project root detected: ${this.projectRoot} (method: ${rootDetection.method}${rootDetection.flakeFound ? ", flake.nix found" : ""
-        })`
+      logger.info(
+        {
+          projectRoot: this.projectRoot,
+          method: rootDetection.method,
+          flakeFound: rootDetection.flakeFound
+        },
+        "Project root detected"
       );
 
       // Log available API keys (masked)
@@ -172,9 +178,9 @@ class SecureLLMBridgeMCPServer {
         .filter(([_, key]) => key.length > 0)
         .map(([name, key]) => `${name}(${key.substring(0, 8)}...)`);
       if (availableKeys.length > 0) {
-        console.error(`[MCP] Available API keys: ${availableKeys.join(", ")}`);
+        logger.info({ apiKeys: availableKeys }, "API keys loaded");
       } else {
-        console.error(`[MCP] Warning: No API keys loaded. Provider tools will fail.`);
+        logger.warn("No API keys loaded - provider tools will fail");
       }
 
       // Detect NixOS hostname
@@ -183,18 +189,19 @@ class SecureLLMBridgeMCPServer {
           const hostDetection = await detectNixOSHost(this.projectRoot);
           this.hostname = hostDetection.hostname;
           if (hostDetection.warnings.length > 0) {
-            console.warn("Host detection warnings:");
-            hostDetection.warnings.forEach((w) => console.warn(`  ${w}`));
+            logger.warn({ warnings: hostDetection.warnings }, "Host detection warnings");
           }
         } catch (error) {
-          console.warn(
-            `Failed to detect NixOS host: ${error}. Using default hostname.`
+          logger.warn(
+            { err: error, defaultHostname: "default" },
+            "Failed to detect NixOS host, using default hostname"
           );
           this.hostname = "default";
         }
       } else {
-        console.warn(
-          "No flake.nix found. Using default hostname. Package tools may not work correctly."
+        logger.warn(
+          { defaultHostname: "default" },
+          "No flake.nix found, using default hostname - package tools may not work correctly"
         );
         this.hostname = "default";
       }
@@ -212,9 +219,9 @@ class SecureLLMBridgeMCPServer {
         this.initKnowledge();
       }
 
-      console.error("MCP Server initialization complete.");
+      logger.info("MCP Server initialization complete");
     } catch (error) {
-      console.error("Failed to initialize MCP server:", error);
+      logger.fatal({ err: error }, "Failed to initialize MCP server");
       throw error;
     }
   }
@@ -222,9 +229,9 @@ class SecureLLMBridgeMCPServer {
   private initKnowledge() {
     try {
       this.db = createKnowledgeDatabase(KNOWLEDGE_DB_PATH);
-      console.error('[Knowledge] Database initialized at:', KNOWLEDGE_DB_PATH);
+      logger.info({ dbPath: KNOWLEDGE_DB_PATH }, "Knowledge database initialized");
     } catch (error) {
-      console.error('[Knowledge] Failed to initialize:', error);
+      logger.error({ err: error, dbPath: KNOWLEDGE_DB_PATH }, "Failed to initialize knowledge database");
       this.db = null;
     }
   }
@@ -1816,7 +1823,7 @@ Generate server and client TLS certificates for secure communication.
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error("SecureLLM Bridge MCP server running on stdio");
+    logger.info({ transport: "stdio" }, "SecureLLM Bridge MCP server running");
   }
 }
 
@@ -1831,7 +1838,8 @@ async function main() {
     // Start MCP server
     await server.run();
   } catch (error) {
-    console.error("Failed to start MCP server:", error);
+    // Use startup logger for fatal errors during initialization (before MCP connection)
+    logStartupError("Failed to start MCP server", error as Error);
     process.exit(1);
   }
 }

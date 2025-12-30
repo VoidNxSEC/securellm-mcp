@@ -4,6 +4,7 @@ import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname } from 'path';
+import { logger } from '../utils/logger.js';
 import type {
   KnowledgeDatabase,
   Session,
@@ -23,7 +24,7 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
     const dir = dirname(dbPath);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
-      console.error(`[Knowledge DB] Created directory: ${dir}`);
+      logger.info({ directory: dir }, "Created knowledge database directory");
     }
     
     this.db = new Database(dbPath);
@@ -101,7 +102,7 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
       CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(last_active DESC);
     `);
 
-    console.error('[Knowledge DB] Database initialized successfully');
+    logger.info("Knowledge database schema initialized successfully");
   }
 
   /**

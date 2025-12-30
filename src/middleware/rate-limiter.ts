@@ -14,6 +14,7 @@ import { CircuitBreaker } from './circuit-breaker.js';
 import { RetryStrategy } from './retry-strategy.js';
 import { ErrorClassifier, ErrorCategory } from './error-classifier.js';
 import { MetricsCollector } from './metrics-collector.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Smart Rate Limiter - Phase 1.3 Implementation
@@ -166,8 +167,15 @@ export class SmartRateLimiter {
           ? retryStrategy.calculateDelay(attempt) * 2 // Double delay for rate limits
           : retryStrategy.calculateDelay(attempt);
 
-        console.log(
-          `[RateLimiter] Retry attempt ${attempt + 1}/${config.maxRetries} for ${provider} after ${Math.round(baseDelay)}ms (${classification.category})`
+        logger.debug(
+          {
+            provider,
+            attempt: attempt + 1,
+            maxRetries: config.maxRetries,
+            delayMs: Math.round(baseDelay),
+            errorCategory: classification.category
+          },
+          "Rate limiter retry attempt"
         );
         await this.sleep(baseDelay);
       }
@@ -219,7 +227,7 @@ export class SmartRateLimiter {
       // Start processing if not already processing
       if (!queue.processing) {
         this.processQueue(provider).catch((error) => {
-          console.error(`[RateLimiter] Error processing queue for ${provider}:`, error);
+          logger.error({ err: error, provider }, "Rate limiter queue processing error");
         });
       }
     });
@@ -317,7 +325,7 @@ export class SmartRateLimiter {
    */
   private updateRetryMetrics(provider: string, attemptCount: number): void {
     // Legacy method - metrics now handled by MetricsCollector
-    console.log(`[RateLimiter] Request for ${provider} succeeded after ${attemptCount} retries`);
+    logger.debug({ provider, attemptCount }, "Request succeeded after retries");
   }
 
 
