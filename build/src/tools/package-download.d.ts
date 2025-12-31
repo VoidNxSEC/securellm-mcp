@@ -1,6 +1,92 @@
 import { z } from "zod";
 import type { DownloadResult } from "../types/package-debugger.js";
-export declare const packageDownloadSchema: any;
+export declare const packageDownloadSchema: z.ZodObject<{
+    package_name: z.ZodString;
+    package_type: z.ZodEnum<["tar", "deb", "js"]>;
+    source: z.ZodObject<{
+        type: z.ZodEnum<["github_release", "npm", "url"]>;
+        url: z.ZodOptional<z.ZodString>;
+        github: z.ZodOptional<z.ZodObject<{
+            repo: z.ZodString;
+            tag: z.ZodOptional<z.ZodString>;
+            asset_pattern: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            repo: string;
+            tag?: string | undefined;
+            asset_pattern?: string | undefined;
+        }, {
+            repo: string;
+            tag?: string | undefined;
+            asset_pattern?: string | undefined;
+        }>>;
+        npm: z.ZodOptional<z.ZodObject<{
+            package: z.ZodString;
+            version: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            package: string;
+            version?: string | undefined;
+        }, {
+            package: string;
+            version?: string | undefined;
+        }>>;
+    }, "strip", z.ZodTypeAny, {
+        type: "github_release" | "npm" | "url";
+        npm?: {
+            package: string;
+            version?: string | undefined;
+        } | undefined;
+        url?: string | undefined;
+        github?: {
+            repo: string;
+            tag?: string | undefined;
+            asset_pattern?: string | undefined;
+        } | undefined;
+    }, {
+        type: "github_release" | "npm" | "url";
+        npm?: {
+            package: string;
+            version?: string | undefined;
+        } | undefined;
+        url?: string | undefined;
+        github?: {
+            repo: string;
+            tag?: string | undefined;
+            asset_pattern?: string | undefined;
+        } | undefined;
+    }>;
+}, "strip", z.ZodTypeAny, {
+    package_type: "tar" | "deb" | "js";
+    package_name: string;
+    source: {
+        type: "github_release" | "npm" | "url";
+        npm?: {
+            package: string;
+            version?: string | undefined;
+        } | undefined;
+        url?: string | undefined;
+        github?: {
+            repo: string;
+            tag?: string | undefined;
+            asset_pattern?: string | undefined;
+        } | undefined;
+    };
+}, {
+    package_type: "tar" | "deb" | "js";
+    package_name: string;
+    source: {
+        type: "github_release" | "npm" | "url";
+        npm?: {
+            package: string;
+            version?: string | undefined;
+        } | undefined;
+        url?: string | undefined;
+        github?: {
+            repo: string;
+            tag?: string | undefined;
+            asset_pattern?: string | undefined;
+        } | undefined;
+    };
+}>;
 export type PackageDownloadInput = z.infer<typeof packageDownloadSchema>;
 export declare class PackageDownloadTool {
     private workspaceDir;

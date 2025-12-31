@@ -56,8 +56,8 @@ class SecureLLMBridgeMCPServer {
         this.rateLimiter = new SmartRateLimiter(configMap);
         this.guideManager = new GuideManager();
         this.server = new Server({
-            name: "securellm-bridge",
-            version: "1.0.0",
+            name: "securellm-mcp",
+            version: "2.0.0",
         }, {
             capabilities: {
                 tools: {},

@@ -7,10 +7,11 @@
  * This logger writes to file asynchronously (non-blocking) and only
  * uses stderr during fatal startup errors (before MCP initialization).
  */
+import pino from 'pino';
 /**
  * Main logger - writes to file asynchronously
  */
-export declare const logger: any;
+export declare const logger: pino.Logger<never, boolean>;
 /**
  * Startup logger - ONLY for critical errors before MCP initialization
  * Uses stderr synchronously, safe to use ONLY during startup phase

@@ -1,6 +1,18 @@
 import { z } from "zod";
 import type { DiagnoseResult } from "../types/package-debugger.js";
-export declare const packageDiagnoseSchema: any;
+export declare const packageDiagnoseSchema: z.ZodObject<{
+    package_path: z.ZodString;
+    package_type: z.ZodEnum<["tar", "deb", "js"]>;
+    build_test: z.ZodDefault<z.ZodOptional<z.ZodBoolean>>;
+}, "strip", z.ZodTypeAny, {
+    package_path: string;
+    package_type: "tar" | "deb" | "js";
+    build_test: boolean;
+}, {
+    package_path: string;
+    package_type: "tar" | "deb" | "js";
+    build_test?: boolean | undefined;
+}>;
 export type PackageDiagnoseInput = z.infer<typeof packageDiagnoseSchema>;
 export declare class PackageDiagnoseTool {
     private errorClassifier;
