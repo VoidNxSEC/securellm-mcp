@@ -130,8 +130,8 @@ class SecureLLMBridgeMCPServer {
 
     this.server = new Server(
       {
-        name: "securellm-bridge",
-        version: "1.0.0",
+        name: "securellm-mcp",
+        version: "2.0.0",
       },
       {
         capabilities: {
