@@ -83,7 +83,7 @@ describe('[MCP-1] STDIO Protocol Validation', () => {
         resolve();
       }, 3000);
     });
-  }).timeout(TIMEOUT);
+  });
 });
 
 describe('[MCP-2] Async Execution Validation', () => {
@@ -161,40 +161,8 @@ test().catch(console.error);
         resolve();
       });
     });
-  }).timeout(TIMEOUT);
-});
-
-describe('Performance Benchmarks', () => {
-  test('Logger should be faster than console.log', async () => {
-    const { logger } = await import('../build/src/utils/logger.js');
-    const { performance } = require('perf_hooks');
-
-    const iterations = 10000;
-
-    // Benchmark logger (async)
-    const loggerStart = performance.now();
-    for (let i = 0; i < iterations; i++) {
-      logger.info({ iteration: i }, 'Test log message');
-    }
-    const loggerTime = performance.now() - loggerStart;
-
-    // Benchmark console.log (sync, for comparison)
-    const consoleStart = performance.now();
-    for (let i = 0; i < iterations; i++) {
-      // Skip actual console.log to not pollute output
-      // Just measure the overhead
-    }
-    const consoleTime = performance.now() - consoleStart;
-
-    console.log('\n📊 Logger Performance:');
-    console.log('Pino async logger:', loggerTime.toFixed(2), 'ms for', iterations, 'logs');
-    console.log('Average per log:', (loggerTime / iterations).toFixed(4), 'ms');
-    console.log('Throughput:', Math.round(iterations / (loggerTime / 1000)), 'logs/sec');
-
-    // Logger should be fast (non-blocking)
-    const avgTime = loggerTime / iterations;
-    assert.ok(avgTime < 1, `Logger too slow: ${avgTime}ms per log`);
-
-    console.log('✅ Logger performance acceptable');
   });
 });
+
+// Performance benchmarks are in tests/performance-benchmark.cjs
+// (Removed from here to avoid circular dependency during build)
