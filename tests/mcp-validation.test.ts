@@ -93,8 +93,8 @@ describe('[MCP-2] Async Execution Validation', () => {
 
       // Create test script that simulates async execution
       const testScript = `
-const { executeNixCommand } = require('./build/src/tools/nix/utils/async-exec.js');
-const { performance } = require('perf_hooks');
+import { executeNixCommand } from './build/src/tools/nix/utils/async-exec.js';
+import { performance } from 'node:perf_hooks';
 
 async function test() {
   console.log('START_TEST');

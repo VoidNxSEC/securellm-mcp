@@ -30,24 +30,24 @@ export declare const packageDownloadSchema: z.ZodObject<{
             version?: string | undefined;
         }>>;
     }, "strip", z.ZodTypeAny, {
-        type: "github_release" | "npm" | "url";
+        type: "url" | "github_release" | "npm";
+        url?: string | undefined;
         npm?: {
             package: string;
             version?: string | undefined;
         } | undefined;
-        url?: string | undefined;
         github?: {
             repo: string;
             tag?: string | undefined;
             asset_pattern?: string | undefined;
         } | undefined;
     }, {
-        type: "github_release" | "npm" | "url";
+        type: "url" | "github_release" | "npm";
+        url?: string | undefined;
         npm?: {
             package: string;
             version?: string | undefined;
         } | undefined;
-        url?: string | undefined;
         github?: {
             repo: string;
             tag?: string | undefined;
@@ -58,12 +58,12 @@ export declare const packageDownloadSchema: z.ZodObject<{
     package_type: "tar" | "deb" | "js";
     package_name: string;
     source: {
-        type: "github_release" | "npm" | "url";
+        type: "url" | "github_release" | "npm";
+        url?: string | undefined;
         npm?: {
             package: string;
             version?: string | undefined;
         } | undefined;
-        url?: string | undefined;
         github?: {
             repo: string;
             tag?: string | undefined;
@@ -74,12 +74,12 @@ export declare const packageDownloadSchema: z.ZodObject<{
     package_type: "tar" | "deb" | "js";
     package_name: string;
     source: {
-        type: "github_release" | "npm" | "url";
+        type: "url" | "github_release" | "npm";
+        url?: string | undefined;
         npm?: {
             package: string;
             version?: string | undefined;
         } | undefined;
-        url?: string | undefined;
         github?: {
             repo: string;
             tag?: string | undefined;

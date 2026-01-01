@@ -1,3 +1,3 @@
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-export declare const knowledgeTools: Tool[];
+import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
+export declare const knowledgeTools: ExtendedTool[];
 //# sourceMappingURL=knowledge.d.ts.map

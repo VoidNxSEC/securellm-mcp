@@ -7,6 +7,7 @@
  * - Fact-checking
  * - Actionable recommendations
  */
+import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 export interface ResearchAgentArgs {
     query: string;
     depth?: "quick" | "standard" | "deep";
@@ -16,53 +17,7 @@ export interface ResearchAgentArgs {
 /**
  * Research Agent tool definition for MCP
  */
-export declare const researchAgentTool: {
-    name: string;
-    description: string;
-    defer_loading: boolean;
-    input_examples: ({
-        query: string;
-        depth: string;
-        require_official_source: boolean;
-        max_sources?: undefined;
-    } | {
-        query: string;
-        depth: string;
-        require_official_source?: undefined;
-        max_sources?: undefined;
-    } | {
-        query: string;
-        depth: string;
-        max_sources: number;
-        require_official_source?: undefined;
-    })[];
-    inputSchema: {
-        type: string;
-        properties: {
-            query: {
-                type: string;
-                description: string;
-            };
-            depth: {
-                type: string;
-                enum: string[];
-                description: string;
-                default: string;
-            };
-            require_official_source: {
-                type: string;
-                description: string;
-                default: boolean;
-            };
-            max_sources: {
-                type: string;
-                description: string;
-                default: number;
-            };
-        };
-        required: string[];
-    };
-};
+export declare const researchAgentTool: ExtendedTool;
 /**
  * Handle research_agent tool call
  */

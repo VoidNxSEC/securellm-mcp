@@ -3,79 +3,8 @@
  *
  * MCP tools for emergency response and system recovery
  */
-export declare const emergencyTools: ({
-    name: string;
-    description: string;
-    inputSchema: {
-        type: string;
-        properties: {
-            force?: undefined;
-            confirm?: undefined;
-            detailed?: undefined;
-        };
-    };
-    defer_loading?: undefined;
-} | {
-    name: string;
-    description: string;
-    defer_loading: boolean;
-    inputSchema: {
-        type: string;
-        properties: {
-            force: {
-                type: string;
-                description: string;
-                default: boolean;
-            };
-            confirm?: undefined;
-            detailed?: undefined;
-        };
-    };
-} | {
-    name: string;
-    description: string;
-    defer_loading: boolean;
-    inputSchema: {
-        type: string;
-        properties: {
-            force?: undefined;
-            confirm?: undefined;
-            detailed?: undefined;
-        };
-    };
-} | {
-    name: string;
-    description: string;
-    defer_loading: boolean;
-    inputSchema: {
-        type: string;
-        properties: {
-            confirm: {
-                type: string;
-                description: string;
-                default: boolean;
-            };
-            force?: undefined;
-            detailed?: undefined;
-        };
-    };
-} | {
-    name: string;
-    description: string;
-    inputSchema: {
-        type: string;
-        properties: {
-            detailed: {
-                type: string;
-                description: string;
-                default: boolean;
-            };
-            force?: undefined;
-            confirm?: undefined;
-        };
-    };
-    defer_loading?: undefined;
-})[];
+import type { ExtendedTool } from '../../types/mcp-tool-extensions.js';
+export declare const emergencyTools: ExtendedTool[];
 interface EmergencyStatusResult {
     status: 'ok' | 'warning' | 'critical' | 'emergency';
     timestamp: string;
