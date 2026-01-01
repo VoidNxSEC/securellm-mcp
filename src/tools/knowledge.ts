@@ -1,8 +1,8 @@
 // Knowledge Management Tools for MCP
 
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 
-export const knowledgeTools: Tool[] = [
+export const knowledgeTools: ExtendedTool[] = [
   {
     name: "create_session",
     description: "Create a new knowledge session to organize your work. Sessions help group related knowledge entries together.",

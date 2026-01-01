@@ -16,6 +16,7 @@ import * as fs from "fs/promises";
 import { createKnowledgeDatabase } from "./knowledge/database.js";
 import { knowledgeTools } from "./tools/knowledge.js";
 import type { KnowledgeDatabase, CreateSessionInput, SaveKnowledgeInput, SearchKnowledgeInput } from "./types/knowledge.js";
+import type { ExtendedTool } from "./types/mcp-tool-extensions.js";
 import { GuideManager } from "./resources/guides.js";
 import * as path from "path";
 import { SmartRateLimiter } from "./middleware/rate-limiter.js";
@@ -490,7 +491,7 @@ class SecureLLMBridgeMCPServer {
         ...webSearchTools,
         // Add Research Agent tool
         researchAgentTool,
-      ],
+      ] as ExtendedTool[],
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {

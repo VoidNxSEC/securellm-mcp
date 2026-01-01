@@ -8,10 +8,11 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import type { ExtendedTool } from '../../types/mcp-tool-extensions.js';
 
 const execAsync = promisify(exec);
 
-export const laptopDefenseTools = [
+export const laptopDefenseTools: ExtendedTool[] = [
   {
     name: "thermal_check",
     description: "Quick thermal check before operation (temperature verification)",

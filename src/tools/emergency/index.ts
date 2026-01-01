@@ -6,10 +6,11 @@
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import type { ExtendedTool } from '../../types/mcp-tool-extensions.js';
 
 const execAsync = promisify(exec);
 
-export const emergencyTools = [
+export const emergencyTools: ExtendedTool[] = [
   {
     name: "emergency_status",
     description: "Get comprehensive emergency system status (CPU, memory, SWAP, thermal, load)",

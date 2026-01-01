@@ -1,6 +1,6 @@
 /**
  * Research Agent Tool for MCP
- * 
+ *
  * Provides deep multi-source research with:
  * - Parallel source querying
  * - Credibility scoring
@@ -9,6 +9,7 @@
  */
 
 import { deepResearch, type ResearchResult } from "../intelligence/deep-research.js";
+import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 
 export interface ResearchAgentArgs {
     query: string;
@@ -20,7 +21,7 @@ export interface ResearchAgentArgs {
 /**
  * Research Agent tool definition for MCP
  */
-export const researchAgentTool = {
+export const researchAgentTool: ExtendedTool = {
     name: "research_agent",
     description: "Deep multi-source research with fact-checking and credibility scoring. Use this to verify information, find best practices, and reduce hallucinations by grounding responses in real sources.",
     defer_loading: true,

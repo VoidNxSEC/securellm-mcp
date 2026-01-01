@@ -1,12 +1,14 @@
 /**
  * Web Search Tools for MCP Server
- * 
+ *
  * Enhanced version with:
  * - Native fetch (no curl dependency)
  * - Intelligent formatted outputs
  * - Actionable summaries
  * - Source credibility indicators
  */
+
+import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 
 export interface WebSearchArgs {
   query: string;
@@ -75,7 +77,7 @@ function formatIntelligentOutput(data: {
 /**
  * Web search tool schemas for MCP
  */
-export const webSearchTools = [
+export const webSearchTools: ExtendedTool[] = [
   {
     name: "web_search",
     description: "Search the web for configurations, news, features, issues, and bug reports. Uses DuckDuckGo for privacy-focused searches.",
