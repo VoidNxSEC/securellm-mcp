@@ -5,13 +5,14 @@
  * upward from the current working directory.
  *
  * Priority:
- * 1. Explicit PROJECT_ROOT environment variable
- * 2. Search for flake.nix upward from cwd
- * 3. Fallback to process.cwd()
+ * 1. MCP_WORKDIR environment variable (Recommended)
+ * 2. PROJECT_ROOT environment variable (Legacy)
+ * 3. Search for flake.nix upward from cwd
+ * 4. Fallback to process.cwd()
  */
 export interface ProjectDetectionResult {
     projectRoot: string;
-    method: "env_var" | "flake_search" | "fallback";
+    method: "mcp_workdir" | "env_var" | "flake_search" | "fallback";
     flakeFound: boolean;
 }
 /**

@@ -5,9 +5,10 @@
  * upward from the current working directory.
  *
  * Priority:
- * 1. Explicit PROJECT_ROOT environment variable
- * 2. Search for flake.nix upward from cwd
- * 3. Fallback to process.cwd()
+ * 1. MCP_WORKDIR environment variable (Recommended)
+ * 2. PROJECT_ROOT environment variable (Legacy)
+ * 3. Search for flake.nix upward from cwd
+ * 4. Fallback to process.cwd()
  */
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -24,7 +25,7 @@ async function findFlakeNix(startDir) {
             return currentDir;
         }
         catch {
-            // File doesn't exist or not readable, go up one level
+            // File doesn"t exist or not readable, go up one level
             const parentDir = path.dirname(currentDir);
             if (parentDir === currentDir) {
                 // Reached root
@@ -42,7 +43,27 @@ async function findFlakeNix(startDir) {
  * @throws Error if no valid project root can be determined
  */
 export async function detectProjectRoot() {
-    // Priority 1: Explicit PROJECT_ROOT environment variable
+    // Priority 1: Explicit MCP_WORKDIR environment variable (Standard)
+    const mcpWorkDir = process.env.MCP_WORKDIR;
+    if (mcpWorkDir) {
+        try {
+            await fs.access(mcpWorkDir, fs.constants.R_OK);
+            const flakePath = path.join(mcpWorkDir, "flake.nix");
+            const flakeFound = await fs
+                .access(flakePath, fs.constants.R_OK)
+                .then(() => true)
+                .catch(() => false);
+            return {
+                projectRoot: path.resolve(mcpWorkDir),
+                method: "mcp_workdir",
+                flakeFound,
+            };
+        }
+        catch {
+            console.warn(`MCP_WORKDIR set to "${mcpWorkDir}" but directory is not accessible. Falling back.`);
+        }
+    }
+    // Priority 2: Explicit PROJECT_ROOT environment variable (Legacy)
     const envProjectRoot = process.env.PROJECT_ROOT;
     if (envProjectRoot) {
         try {
@@ -62,7 +83,7 @@ export async function detectProjectRoot() {
             console.warn(`PROJECT_ROOT env var set to "${envProjectRoot}" but directory is not accessible. Falling back to auto-detection.`);
         }
     }
-    // Priority 2: Search for flake.nix upward
+    // Priority 3: Search for flake.nix upward
     const cwd = process.cwd();
     const flakeRoot = await findFlakeNix(cwd);
     if (flakeRoot) {
@@ -72,9 +93,9 @@ export async function detectProjectRoot() {
             flakeFound: true,
         };
     }
-    // Priority 3: Fallback to current working directory
+    // Priority 4: Fallback to current working directory
     console.warn(`No flake.nix found in directory tree. Using cwd as project root: ${cwd}`);
-    console.warn("Consider setting PROJECT_ROOT environment variable for explicit configuration.");
+    console.warn("Consider setting MCP_WORKDIR environment variable for explicit configuration.");
     return {
         projectRoot: cwd,
         method: "fallback",

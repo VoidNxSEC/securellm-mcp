@@ -73,6 +73,7 @@ import {
   executeInSandboxTool,
   handleExecuteInSandbox,
 } from "./tools/secure-execution.js";
+import { SemanticCache } from "./middleware/semantic-cache.js";
 
 const execAsync = promisify(exec);
 
@@ -134,6 +135,7 @@ class SecureLLMBridgeMCPServer {
   private packageConfigure!: PackageConfigureTool;
   private projectRoot: string = PROJECT_ROOT;
   private hostname: string = "default";
+  private semanticCache: SemanticCache | null = null;
 
   constructor() {
     // Initialize smart rate limiter for API protection
@@ -163,6 +165,9 @@ class SecureLLMBridgeMCPServer {
       logger.info("Received SIGINT, shutting down gracefully");
       if (this.db) {
         this.db.close();
+      }
+      if (this.semanticCache) {
+        this.semanticCache.close();
       }
       await this.server.close();
       process.exit(0);
@@ -233,6 +238,9 @@ class SecureLLMBridgeMCPServer {
         this.initKnowledge();
       }
 
+      // Initialize Semantic Cache
+      this.initSemanticCache();
+
       logger.info("MCP Server initialization complete");
     } catch (error) {
       logger.fatal({ err: error }, "Failed to initialize MCP server");
@@ -255,6 +263,39 @@ class SecureLLMBridgeMCPServer {
     } catch (error) {
       logger.error({ err: error, dbPath: KNOWLEDGE_DB_PATH }, "Failed to initialize knowledge database");
       this.db = null;
+    }
+  }
+
+  private initSemanticCache() {
+    try {
+      const cacheDbPath = process.env.SEMANTIC_CACHE_DB_PATH ||
+        path.join(
+          process.env.HOME || process.env.USERPROFILE || ".",
+          ".local/share/securellm/semantic_cache.db"
+        );
+
+      this.semanticCache = new SemanticCache(cacheDbPath, {
+        enabled: process.env.ENABLE_SEMANTIC_CACHE !== 'false',
+        similarityThreshold: parseFloat(process.env.SEMANTIC_CACHE_THRESHOLD || '0.85'),
+        ttlSeconds: parseInt(process.env.SEMANTIC_CACHE_TTL || '3600', 10),
+        llamaCppUrl: process.env.LLAMA_CPP_URL || 'http://localhost:8080',
+      });
+
+      logger.info({ dbPath: cacheDbPath }, "Semantic cache initialized");
+
+      // Start periodic cleanup (every 10 minutes)
+      setInterval(() => {
+        if (this.semanticCache) {
+          const deleted = this.semanticCache.cleanExpired();
+          if (deleted > 0) {
+            logger.info({ deleted }, "Cleaned expired semantic cache entries");
+          }
+        }
+      }, 10 * 60 * 1000);
+
+    } catch (error) {
+      logger.error({ err: error }, "Failed to initialize semantic cache");
+      this.semanticCache = null;
     }
   }
 
@@ -534,101 +575,159 @@ class SecureLLMBridgeMCPServer {
       try {
         const { name, arguments: args } = request.params;
 
+        // SEMANTIC CACHE: Check cache before executing tool
+        if (this.semanticCache) {
+          const cacheKey = JSON.stringify({ name, args });
+          const cached = await this.semanticCache.lookup({
+            toolName: name,
+            queryText: cacheKey,
+            toolArgs: args,
+          });
+
+          if (cached) {
+            // Return cached response
+            return cached;
+          }
+        }
+
+        // Execute tool
+        let result;
         switch (name) {
           case "provider_test":
-            return await this.handleProviderTest(args as unknown as ProviderTestArgs);
+            result = await this.handleProviderTest(args as unknown as ProviderTestArgs);
+            break;
           case "security_audit":
-            return await this.handleSecurityAudit(args as unknown as SecurityAuditArgs);
+            result = await this.handleSecurityAudit(args as unknown as SecurityAuditArgs);
+            break;
           case "rate_limit_check":
-            return await this.handleRateLimitCheck(args as unknown as RateLimitCheckArgs);
+            result = await this.handleRateLimitCheck(args as unknown as RateLimitCheckArgs);
+            break;
           case "build_and_test":
-            return await this.handleBuildAndTest(args as unknown as BuildAndTestArgs);
+            result = await this.handleBuildAndTest(args as unknown as BuildAndTestArgs);
+            break;
           case "provider_config_validate":
-            return await this.handleProviderConfigValidate(args as unknown as ProviderConfigValidateArgs);
+            result = await this.handleProviderConfigValidate(args as unknown as ProviderConfigValidateArgs);
+            break;
           case "crypto_key_generate":
-            return await this.handleCryptoKeyGenerate(args as unknown as CryptoKeyGenerateArgs);
+            result = await this.handleCryptoKeyGenerate(args as unknown as CryptoKeyGenerateArgs);
+            break;
           case "rate_limiter_status":
-            return await this.handleRateLimiterStatus();
+            result = await this.handleRateLimiterStatus();
+            break;
           case "package_diagnose":
-            return await this.handlePackageDiagnose(args);
+            result = await this.handlePackageDiagnose(args);
+            break;
           case "package_download":
-            return await this.handlePackageDownload(args);
+            result = await this.handlePackageDownload(args);
+            break;
           case "package_configure":
-            return await this.handlePackageConfigure(args);
+            result = await this.handlePackageConfigure(args);
+            break;
           case "create_session":
-            return await this.handleCreateSession(args);
+            result = await this.handleCreateSession(args);
+            break;
           case "save_knowledge":
-            return await this.handleSaveKnowledge(args);
+            result = await this.handleSaveKnowledge(args);
+            break;
           case "search_knowledge":
-            return await this.handleSearchKnowledge(args);
+            result = await this.handleSearchKnowledge(args);
+            break;
           case "load_session":
-            return await this.handleLoadSession(args);
+            result = await this.handleLoadSession(args);
+            break;
           case "list_sessions":
-            return await this.handleListSessions(args);
+            result = await this.handleListSessions(args);
+            break;
           case "get_recent_knowledge":
-            return await this.handleGetRecentKnowledge(args);
+            result = await this.handleGetRecentKnowledge(args);
+            break;
 
           // Emergency Framework handlers
           case "emergency_status":
-            return await this.handleEmergencyStatus();
+            result = await this.handleEmergencyStatus();
+            break;
           case "emergency_abort":
-            return await this.handleEmergencyAbort(args);
+            result = await this.handleEmergencyAbort(args);
+            break;
           case "emergency_cooldown":
-            return await this.handleEmergencyCooldown();
+            result = await this.handleEmergencyCooldown();
+            break;
           case "emergency_nuke":
-            return await this.handleEmergencyNuke(args);
+            result = await this.handleEmergencyNuke(args);
+            break;
           case "emergency_swap":
-            return await this.handleEmergencySwap();
+            result = await this.handleEmergencySwap();
+            break;
           case "system_health_check":
-            return await this.handleSystemHealthCheck(args);
+            result = await this.handleSystemHealthCheck(args);
+            break;
           case "safe_rebuild_check":
-            return await this.handleSafeRebuildCheck();
+            result = await this.handleSafeRebuildCheck();
+            break;
 
           // Laptop Defense handlers
           case "thermal_check":
-            return await this.handleThermalCheck(args);
+            result = await this.handleThermalCheck(args);
+            break;
           case "rebuild_safety_check":
-            return await this.handleRebuildSafetyCheck();
+            result = await this.handleRebuildSafetyCheck();
+            break;
           case "thermal_forensics":
-            return await this.handleThermalForensics(args);
+            result = await this.handleThermalForensics(args);
+            break;
           case "thermal_warroom":
-            return await this.handleThermalWarroom(args);
+            result = await this.handleThermalWarroom(args);
+            break;
           case "laptop_verdict":
-            return await this.handleLaptopVerdict(args);
+            result = await this.handleLaptopVerdict(args);
+            break;
           case "full_investigation":
-            return await this.handleFullInvestigation();
+            result = await this.handleFullInvestigation();
+            break;
           case "force_cooldown":
-            return await this.handleForceCooldown();
+            result = await this.handleForceCooldown();
+            break;
           case "reset_performance":
-            return await this.handleResetPerformance();
+            result = await this.handleResetPerformance();
+            break;
 
           // Web Search handlers
           case "web_search":
-            return await this.handleWebSearch(args);
+            result = await this.handleWebSearch(args);
+            break;
           case "nix_search":
-            return await this.handleNixSearch(args);
+            result = await this.handleNixSearch(args);
+            break;
           case "github_search":
-            return await this.handleGithubSearch(args);
+            result = await this.handleGithubSearch(args);
+            break;
           case "tech_news_search":
-            return await this.handleTechNewsSearch(args);
+            result = await this.handleTechNewsSearch(args);
+            break;
           case "nixos_discourse_search":
-            return await this.handleDiscourseSearch(args);
+            result = await this.handleDiscourseSearch(args);
+            break;
           case "stackoverflow_search":
-            return await this.handleStackOverflowSearch(args);
+            result = await this.handleStackOverflowSearch(args);
+            break;
 
           // Research Agent handler
           case "research_agent":
-            return await handleResearchAgent(args as any);
+            result = await handleResearchAgent(args as any);
+            break;
 
           // Codebase Analysis handlers
           case "analyze_complexity":
-            return await analyzeComplexity(args as any);
+            result = await analyzeComplexity(args as any);
+            break;
           case "find_dead_code":
-            return await findDeadCode(args as any);
+            result = await findDeadCode(args as any);
+            break;
 
           // Secure Execution handler
           case "execute_in_sandbox":
-            return await handleExecuteInSandbox(args as any);
+            result = await handleExecuteInSandbox(args as any);
+            break;
 
           default:
             throw new McpError(
@@ -636,6 +735,20 @@ class SecureLLMBridgeMCPServer {
               `Unknown tool: ${name}`
             );
         }
+
+        // SEMANTIC CACHE: Store result for future lookups
+        if (this.semanticCache && result) {
+          const cacheKey = JSON.stringify({ name, args });
+          await this.semanticCache.store({
+            toolName: name,
+            queryText: cacheKey,
+            toolArgs: args,
+            response: result,
+          });
+        }
+
+        return result;
+
       } catch (error) {
         if (error instanceof McpError) throw error;
         throw new McpError(
@@ -672,6 +785,12 @@ class SecureLLMBridgeMCPServer {
           name: "Prometheus Metrics",
           description: "System metrics in Prometheus text format",
           mimeType: "text/plain",
+        },
+        {
+          uri: "metrics://semantic-cache",
+          name: "Semantic Cache Metrics",
+          description: "Semantic cache performance statistics",
+          mimeType: "application/json",
         },
         {
           uri: "docs://api",
@@ -738,6 +857,20 @@ class SecureLLMBridgeMCPServer {
                   uri: "metrics://prometheus",
                   mimeType: "text/plain",
                   text: this.rateLimiter.getAggregatePrometheusMetrics(),
+                },
+              ],
+            };
+          case "metrics://semantic-cache":
+            return {
+              contents: [
+                {
+                  uri: "metrics://semantic-cache",
+                  mimeType: "application/json",
+                  text: JSON.stringify(
+                    this.semanticCache?.getStats() || { error: "Semantic cache not initialized" },
+                    null,
+                    2
+                  ),
                 },
               ],
             };
