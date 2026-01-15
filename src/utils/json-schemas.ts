@@ -17,7 +17,7 @@ const toolResponseSchema = {
       },
     },
   },
-};
+} as const;
 
 export const stringifyToolResponse = fastJson(toolResponseSchema);
 
@@ -36,7 +36,7 @@ const knowledgeEntrySchema = {
       tags: { type: 'array', items: { type: 'string' } },
     },
   },
-};
+} as const;
 
 export const stringifyKnowledgeEntries = fastJson(knowledgeEntrySchema);
 

@@ -91,6 +91,20 @@ import {
 import { SemanticCache } from "./middleware/semantic-cache.js";
 import { ContextManager } from "./reasoning/context-manager.js";
 import { PreActionInterceptor } from "./reasoning/proactive/pre-action-interceptor.js";
+import {
+  stringifyToolResponse,
+  stringifyKnowledgeEntries,
+  stringifyGeneric,
+} from './utils/json-schemas.js';
+
+const shouldPrettyPrint = process.env.NODE_ENV === 'development';
+
+function stringify(obj: any): string {
+  if (shouldPrettyPrint) {
+    return JSON.stringify(obj, null, 2);
+  }
+  return stringifyGeneric(obj);
+}
 
 const execAsync = promisify(exec);
 
