@@ -23,8 +23,8 @@ const INTENT_KEYWORDS = {
  * Entity patterns (simple regex-based extraction)
  */
 const ENTITY_PATTERNS = [
-    { type: 'file', pattern: /([a-zA-Z0-9_-]+\.[a-z]{1,4})\b/g },
     { type: 'file', pattern: /([a-zA-Z0-9_-]+\/[a-zA-Z0-9_/-]+\.[a-z]{1,4})\b/g },
+    { type: 'file', pattern: /([a-zA-Z0-9_-]+\.[a-z]{1,4})\b/g },
     { type: 'function', pattern: /\b([a-z][a-zA-Z0-9]*)\s*\(/g },
     { type: 'module', pattern: /\bmodules?\/([a-zA-Z0-9_/-]+)/g },
     { type: 'error', pattern: /\berror[:\s]+([A-Z][a-zA-Z0-9]*)/gi },

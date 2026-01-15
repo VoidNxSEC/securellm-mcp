@@ -23,8 +23,11 @@ import { laptopDefenseTools, handleThermalCheck, handleRebuildSafetyCheck, handl
 import { webSearchTools, handleWebSearch, handleNixSearch, handleGithubSearch, handleTechNewsSearch, handleDiscourseSearch, handleStackOverflowSearch, } from "./tools/web-search.js";
 import { researchAgentTool, handleResearchAgent, } from "./tools/research-agent.js";
 import { analyzeComplexity, findDeadCode, analyzeComplexitySchema, findDeadCodeSchema, } from "./tools/codebase-analysis.js";
+import { sshExecuteSchema, sshFileTransferSchema, sshMaintenanceCheckSchema, sshTunnelSchema, sshJumpHostSchema, sshSessionSchema, SSHExecuteTool, SSHFileTransferTool, SSHMaintenanceCheckTool, SSHTunnelTool, SSHJumpHostTool, SSHSessionTool, } from "./tools/ssh/index.js";
 import { executeInSandboxTool, handleExecuteInSandbox, } from "./tools/secure-execution.js";
 import { SemanticCache } from "./middleware/semantic-cache.js";
+import { ContextManager } from "./reasoning/context-manager.js";
+import { PreActionInterceptor } from "./reasoning/proactive/pre-action-interceptor.js";
 const execAsync = promisify(exec);
 // Legacy constants for backward compatibility - will be overridden by auto-detection
 const PROJECT_ROOT = process.env.PROJECT_ROOT || process.cwd();
@@ -55,6 +58,8 @@ class SecureLLMBridgeMCPServer {
     projectRoot = PROJECT_ROOT;
     hostname = "default";
     semanticCache = null;
+    contextManager = null;
+    preActionInterceptor = null;
     constructor() {
         // Initialize smart rate limiter for API protection
         // Convert Record to Map for SmartRateLimiter
@@ -153,6 +158,10 @@ class SecureLLMBridgeMCPServer {
                 this.projectWatcher = new ProjectWatcher(this.projectRoot);
                 this.projectWatcher.setDatabase(this.db);
                 this.projectWatcher.start();
+                // Initialize Proactive Logic components
+                this.contextManager = new ContextManager(this.projectRoot, this.db); // Cast to any to avoid type mismatch if different SQLite wrapper
+                this.preActionInterceptor = new PreActionInterceptor(this.contextManager);
+                logger.info("Proactive Logic Layer initialized");
             }
         }
         catch (error) {
@@ -455,6 +464,43 @@ class SecureLLMBridgeMCPServer {
                 },
                 // Add Secure Execution Tool
                 executeInSandboxTool,
+                // Add SSH Tools
+                {
+                    name: sshExecuteSchema.name,
+                    description: sshExecuteSchema.description,
+                    defer_loading: true,
+                    inputSchema: sshExecuteSchema.inputSchema,
+                },
+                {
+                    name: sshFileTransferSchema.name,
+                    description: sshFileTransferSchema.description,
+                    defer_loading: true,
+                    inputSchema: sshFileTransferSchema.inputSchema,
+                },
+                {
+                    name: sshMaintenanceCheckSchema.name,
+                    description: sshMaintenanceCheckSchema.description,
+                    defer_loading: true,
+                    inputSchema: sshMaintenanceCheckSchema.inputSchema,
+                },
+                {
+                    name: sshTunnelSchema.name,
+                    description: sshTunnelSchema.description,
+                    defer_loading: true,
+                    inputSchema: sshTunnelSchema.inputSchema,
+                },
+                {
+                    name: sshJumpHostSchema.name,
+                    description: sshJumpHostSchema.description,
+                    defer_loading: true,
+                    inputSchema: sshJumpHostSchema.inputSchema,
+                },
+                {
+                    name: sshSessionSchema.name,
+                    description: sshSessionSchema.description,
+                    defer_loading: true,
+                    inputSchema: sshSessionSchema.inputSchema,
+                },
             ],
         }));
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -472,6 +518,15 @@ class SecureLLMBridgeMCPServer {
                         // Return cached response
                         return cached;
                     }
+                }
+                // PROACTIVE LOGIC: Pre-action checks
+                if (this.preActionInterceptor) {
+                    const interception = await this.preActionInterceptor.intercept(name, args);
+                    if (!interception.shouldProceed) {
+                        throw new McpError(ErrorCode.InvalidParams, interception.reason || "Tool execution blocked by proactive checks");
+                    }
+                    // If enrichedArgs were returned, we could use them here, but for now we stick to original args
+                    // or we could merge: args = interception.enrichedArgs || args;
                 }
                 // Execute tool
                 let result;
@@ -523,6 +578,9 @@ class SecureLLMBridgeMCPServer {
                         break;
                     case "get_recent_knowledge":
                         result = await this.handleGetRecentKnowledge(args);
+                        break;
+                    case "knowledge_maintenance":
+                        result = await this.handleKnowledgeMaintenance();
                         break;
                     // Emergency Framework handlers
                     case "emergency_status":
@@ -604,6 +662,25 @@ class SecureLLMBridgeMCPServer {
                     // Secure Execution handler
                     case "execute_in_sandbox":
                         result = await handleExecuteInSandbox(args);
+                        break;
+                    // SSH Tool handlers
+                    case "ssh_execute":
+                        result = await new SSHExecuteTool().execute(args);
+                        break;
+                    case "ssh_file_transfer":
+                        result = await new SSHFileTransferTool().execute(args);
+                        break;
+                    case "ssh_maintenance_check":
+                        result = await new SSHMaintenanceCheckTool().execute(args);
+                        break;
+                    case "ssh_tunnel":
+                        result = await new SSHTunnelTool().execute(args);
+                        break;
+                    case "ssh_jump_host":
+                        result = await new SSHJumpHostTool().execute(args);
+                        break;
+                    case "ssh_session_manager":
+                        result = await new SSHSessionTool().execute(args);
                         break;
                     default:
                         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
@@ -1258,6 +1335,30 @@ class SecureLLMBridgeMCPServer {
                 content: [{
                         type: "text",
                         text: JSON.stringify({ entries, count: entries.length }, null, 2)
+                    }]
+            };
+        }
+        catch (error) {
+            return {
+                content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+                isError: true
+            };
+        }
+    }
+    async handleKnowledgeMaintenance() {
+        if (!this.db) {
+            return {
+                content: [{ type: "text", text: "Knowledge database not available" }],
+                isError: true
+            };
+        }
+        try {
+            await this.db.maintenance();
+            const stats = await this.db.getStats();
+            return {
+                content: [{
+                        type: "text",
+                        text: JSON.stringify({ message: "Maintenance completed successfully", stats }, null, 2)
                     }]
             };
         }

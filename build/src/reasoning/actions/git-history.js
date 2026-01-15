@@ -3,7 +3,7 @@
  *
  * Retrieves recent git history when relevant to user's query.
  */
-import { execSync } from 'child_process';
+import { execa } from 'execa';
 /**
  * Git History Action
  */
@@ -27,9 +27,8 @@ export class GitHistoryAction {
         try {
             const { projectRoot, timeout } = context;
             // Get last 10 commits
-            const output = execSync('git log -10 --pretty=format:"%H|%s|%an|%ad" --date=short', {
+            const { stdout: output } = await execa('git', ['log', '-10', '--pretty=format:%H|%s|%an|%ad', '--date=short'], {
                 cwd: projectRoot,
-                encoding: 'utf-8',
                 timeout: Math.min(timeout, 1000),
             });
             const commits = output.split('\n').map(line => {
@@ -37,9 +36,8 @@ export class GitHistoryAction {
                 return { hash: hash.substring(0, 7), message, author, date };
             });
             // Get files changed in recent commits
-            const filesOutput = execSync('git diff --name-only HEAD~10..HEAD', {
+            const { stdout: filesOutput } = await execa('git', ['diff', '--name-only', 'HEAD~10..HEAD'], {
                 cwd: projectRoot,
-                encoding: 'utf-8',
                 timeout: Math.min(timeout, 500),
             });
             const files = filesOutput.split('\n').filter(f => f.length > 0).slice(0, 20);

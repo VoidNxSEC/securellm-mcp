@@ -155,6 +155,18 @@ export interface TunnelStatus {
     readonly metrics: TunnelMetrics;
 }
 /**
+ * Tunnel creation result
+ */
+export interface TunnelResult extends ToolResult {
+    data?: {
+        tunnel_id: string;
+        type: TunnelType;
+        local_endpoint: string;
+        remote_endpoint: string;
+        status: string;
+    };
+}
+/**
  * Single port forward rule
  */
 export interface PortForwardRule {

@@ -218,10 +218,12 @@ export class SQLiteKnowledgeDatabase {
         return this.rowToKnowledgeEntry(row);
     }
     async searchKnowledge(input) {
+        // Use snippet() and highlight() for better search results
         let query = `
       SELECT 
         ke.*,
-        kf.rank
+        kf.rank,
+        snippet(knowledge_fts, 1, '***', '***', '...', 64) as search_snippet
       FROM knowledge_entries ke
       JOIN knowledge_fts kf ON ke.id = kf.entry_id
       WHERE knowledge_fts MATCH ?
@@ -242,8 +244,23 @@ export class SQLiteKnowledgeDatabase {
         return rows.map(row => ({
             entry: this.rowToKnowledgeEntry(row),
             relevance: -row.rank, // FTS5 rank is negative
-            snippet: this.createSnippet(row.content, input.query),
+            snippet: row.search_snippet || this.createSnippet(row.content, input.query),
         }));
+    }
+    /**
+     * Run database maintenance (VACUUM, ANALYZE, OPTIMIZE)
+     */
+    async maintenance() {
+        logger.info("Running knowledge database maintenance...");
+        try {
+            this.db.pragma('optimize');
+            this.db.exec('VACUUM');
+            this.db.exec('ANALYZE');
+            logger.info("Database maintenance completed successfully");
+        }
+        catch (err) {
+            logger.error({ err }, "Database maintenance failed");
+        }
     }
     async getRecentKnowledge(session_id, limit = 20) {
         let query = 'SELECT * FROM knowledge_entries';

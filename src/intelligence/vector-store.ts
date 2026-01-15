@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import * as path from 'path';
-import { execSync } from 'child_process';
+
 import { LRUCache } from 'lru-cache';
 
 /**

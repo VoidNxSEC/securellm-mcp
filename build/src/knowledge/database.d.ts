@@ -15,6 +15,10 @@ export declare class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
     saveKnowledge(input: SaveKnowledgeInput): Promise<KnowledgeEntry>;
     getKnowledgeEntry(id: number): Promise<KnowledgeEntry | null>;
     searchKnowledge(input: SearchKnowledgeInput): Promise<SearchResult[]>;
+    /**
+     * Run database maintenance (VACUUM, ANALYZE, OPTIMIZE)
+     */
+    maintenance(): Promise<void>;
     getRecentKnowledge(session_id?: string, limit?: number): Promise<KnowledgeEntry[]>;
     deleteKnowledgeEntry(id: number): Promise<void>;
     getStats(): Promise<SessionStats>;

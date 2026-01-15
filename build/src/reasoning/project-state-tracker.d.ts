@@ -17,11 +17,11 @@ export declare class ProjectStateTracker {
     /**
      * Get current project state (cached)
      */
-    getState(): ProjectState;
+    getState(): Promise<ProjectState>;
     /**
      * Force refresh state
      */
-    refresh(): ProjectState;
+    refresh(): Promise<ProjectState>;
     /**
      * Build complete project state
      */

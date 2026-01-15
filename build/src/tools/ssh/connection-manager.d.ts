@@ -1,32 +1,59 @@
 /**
  * SSH Connection Manager
- * Manages SSH connections with security controls
+ * Manages SSH connections with security controls, pooling, and health monitoring
  */
 import { Client } from 'ssh2';
 import type { SSHConnectArgs, SSHConnectionResult } from '../../types/extended-tools.js';
-interface Connection {
+export interface Connection {
     id: string;
     client: Client;
     host: string;
     username: string;
     connected: boolean;
     created: Date;
-    created_at?: Date;
-    last_used?: Date;
-    error_count?: number;
-    config?: any;
-    health_status?: string;
-    bytes_sent?: number;
-    bytes_received?: number;
-    commands_executed?: number;
+    config: any;
+    created_at: Date;
+    last_used: Date;
+    error_count: number;
+    health_status: 'healthy' | 'degraded' | 'failed';
+    bytes_sent: number;
+    bytes_received: number;
+    commands_executed: number;
+}
+export interface ConnectionPoolConfig {
+    max_connections: number;
+    max_idle_time_ms: number;
+    health_check_interval_ms: number;
+}
+export interface HealthStatus {
+    connection_id: string;
+    status: 'healthy' | 'degraded' | 'failed';
+    latency_ms: number;
+    uptime_seconds: number;
+    last_check: Date;
+    issues: string[];
+    metrics: {
+        success_rate: number;
+        avg_latency_ms: number;
+        error_count: number;
+    };
 }
 export declare class SSHConnectionManager {
     private connections;
+    private pool;
     private allowedHosts;
-    constructor(allowedHosts?: string[]);
+    private config;
+    private healthCheckInterval?;
+    constructor(allowedHosts?: string[], config?: Partial<ConnectionPoolConfig>);
+    private startHealthMonitoring;
+    private checkAllConnections;
     connect(args: SSHConnectArgs): Promise<SSHConnectionResult>;
+    connectWithMFA(config: SSHConnectArgs, mfaCode: string): Promise<SSHConnectionResult>;
     getConnection(connectionId: string): Connection | undefined;
+    private generateConnectionKey;
     getOrCreateConnection(args: SSHConnectArgs): Promise<Connection>;
+    pruneIdleConnections(maxIdleTime?: number): Promise<number>;
+    private healthCheck;
     disconnect(connectionId: string): boolean;
     disconnectAll(): void;
     listConnections(): Array<{
@@ -34,6 +61,7 @@ export declare class SSHConnectionManager {
         host: string;
         username: string;
         uptime: number;
+        health: string;
     }>;
 }
 export declare const sshConnectSchema: {
@@ -70,5 +98,4 @@ export declare const sshConnectSchema: {
         required: string[];
     };
 };
-export {};
 //# sourceMappingURL=connection-manager.d.ts.map

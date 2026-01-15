@@ -38,6 +38,6 @@ export declare class ContextManager {
     /**
      * Refresh project state
      */
-    refreshState(): ProjectState;
+    refreshState(): Promise<ProjectState>;
 }
 //# sourceMappingURL=context-manager.d.ts.map

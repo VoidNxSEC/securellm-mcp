@@ -143,7 +143,7 @@ export class PreActionInterceptor {
       case 'check_git':
         // Reuse ProjectStateTracker from ContextManager if accessible, 
         // or just use a lightweight git check
-        return this.contextManager.refreshState().git; // Assuming refreshState returns ProjectState
+        return (await this.contextManager.refreshState()).git; // Assuming refreshState returns ProjectState
       
       case 'check_auth':
         // Simple env check

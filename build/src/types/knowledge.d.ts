@@ -68,6 +68,8 @@ export interface KnowledgeDatabase {
     }): void;
     getRecentProjectStates(limit?: number): any[];
     cleanupOldSessions(days: number): Promise<number>;
+    maintenance(): Promise<void>;
+    getPatterns(type?: string, limit?: number): any[];
     close(): void;
 }
 //# sourceMappingURL=knowledge.d.ts.map

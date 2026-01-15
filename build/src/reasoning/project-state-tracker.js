@@ -4,7 +4,7 @@
  * Monitors project state including file system, git, and build status.
  * Provides real-time awareness of project changes.
  */
-import { execSync } from 'child_process';
+import { execa } from 'execa';
 import { readdirSync, statSync } from 'fs';
 import { join, extname } from 'path';
 /**
@@ -21,31 +21,31 @@ export class ProjectStateTracker {
     /**
      * Get current project state (cached)
      */
-    getState() {
+    async getState() {
         const now = Date.now();
         if (this.cache && now < this.cacheExpiry) {
             return this.cache;
         }
-        this.cache = this.buildState();
+        this.cache = await this.buildState();
         this.cacheExpiry = now + this.CACHE_TTL;
         return this.cache;
     }
     /**
      * Force refresh state
      */
-    refresh() {
+    async refresh() {
         this.cacheExpiry = 0;
         return this.getState();
     }
     /**
      * Build complete project state
      */
-    buildState() {
+    async buildState() {
         return {
             root: this.projectRoot,
-            git: this.getGitState(),
-            build: this.getBuildState(),
-            recentFiles: this.getRecentFiles(),
+            git: await this.getGitState(),
+            build: await this.getBuildState(),
+            recentFiles: await this.getRecentFiles(),
             fileTypes: this.getFileTypeCounts(),
             timestamp: Date.now(),
         };
@@ -53,27 +53,26 @@ export class ProjectStateTracker {
     /**
      * Get git repository state
      */
-    getGitState() {
+    async getGitState() {
         try {
             // Check if git repo
-            execSync('git rev-parse --git-dir', {
+            await execa('git', ['rev-parse', '--git-dir'], {
                 cwd: this.projectRoot,
                 stdio: 'ignore',
             });
             // Get current branch
-            const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+            const branchResult = await execa('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
                 cwd: this.projectRoot,
-                encoding: 'utf-8',
-            }).trim();
+            });
+            const branch = branchResult.stdout.trim();
             // Get status
-            const statusOutput = execSync('git status --porcelain', {
+            const statusResult = await execa('git', ['status', '--porcelain'], {
                 cwd: this.projectRoot,
-                encoding: 'utf-8',
             });
             const modified = [];
             const staged = [];
             const untracked = [];
-            for (const line of statusOutput.split('\n')) {
+            for (const line of statusResult.stdout.split('\n')) {
                 if (!line)
                     continue;
                 const status = line.substring(0, 2);
@@ -92,14 +91,14 @@ export class ProjectStateTracker {
             let lastCommit;
             let lastCommitMessage;
             try {
-                lastCommit = execSync('git rev-parse --short HEAD', {
+                const lastCommitResult = await execa('git', ['rev-parse', '--short', 'HEAD'], {
                     cwd: this.projectRoot,
-                    encoding: 'utf-8',
-                }).trim();
-                lastCommitMessage = execSync('git log -1 --pretty=%B', {
+                });
+                lastCommit = lastCommitResult.stdout.trim();
+                const msgResult = await execa('git', ['log', '-1', '--pretty=%B'], {
                     cwd: this.projectRoot,
-                    encoding: 'utf-8',
-                }).trim();
+                });
+                lastCommitMessage = msgResult.stdout.trim();
             }
             catch {
                 // No commits yet
@@ -121,13 +120,14 @@ export class ProjectStateTracker {
     /**
      * Get build state (check if nix build succeeds)
      */
-    getBuildState() {
+    async getBuildState() {
         try {
             // Try nix flake check
-            execSync('nix flake check --no-build 2>&1', {
+            // Use execa directly as we want to capture error output for analysis
+            await execa('nix', ['flake', 'check', '--no-build'], {
                 cwd: this.projectRoot,
-                encoding: 'utf-8',
                 timeout: 5000, // 5s timeout
+                stderr: 'pipe', // Capture stderr
             });
             return {
                 success: true,
@@ -175,14 +175,13 @@ export class ProjectStateTracker {
     /**
      * Get recently modified files
      */
-    getRecentFiles() {
+    async getRecentFiles() {
         try {
-            const output = execSync('git diff --name-only HEAD~5..HEAD', {
+            const result = await execa('git', ['diff', '--name-only', 'HEAD~5..HEAD'], {
                 cwd: this.projectRoot,
-                encoding: 'utf-8',
                 timeout: 2000,
             });
-            return output.split('\n').filter(f => f.length > 0).slice(0, 20);
+            return result.stdout.split('\n').filter(f => f.length > 0).slice(0, 20);
         }
         catch {
             return [];

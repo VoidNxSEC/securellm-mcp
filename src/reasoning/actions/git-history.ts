@@ -4,7 +4,7 @@
  * Retrieves recent git history when relevant to user's query.
  */
 
-import { execSync } from 'child_process';
+import { execa } from 'execa';
 import type { ProactiveAction, ActionContext, GitHistoryResult } from '../../types/proactive-actions.js';
 
 /**
@@ -36,9 +36,8 @@ export class GitHistoryAction implements ProactiveAction {
       const { projectRoot, timeout } = context;
       
       // Get last 10 commits
-      const output = execSync('git log -10 --pretty=format:"%H|%s|%an|%ad" --date=short', {
+      const { stdout: output } = await execa('git', ['log', '-10', '--pretty=format:%H|%s|%an|%ad', '--date=short'], {
         cwd: projectRoot,
-        encoding: 'utf-8',
         timeout: Math.min(timeout, 1000),
       });
 
@@ -48,9 +47,8 @@ export class GitHistoryAction implements ProactiveAction {
       });
 
       // Get files changed in recent commits
-      const filesOutput = execSync('git diff --name-only HEAD~10..HEAD', {
+      const { stdout: filesOutput } = await execa('git', ['diff', '--name-only', 'HEAD~10..HEAD'], {
         cwd: projectRoot,
-        encoding: 'utf-8',
         timeout: Math.min(timeout, 500),
       });
 

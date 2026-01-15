@@ -4,7 +4,7 @@
  * Search for Nix packages across nixpkgs and other channels.
  */
 
-import { execSync } from 'child_process';
+import { executeNixCommand } from './utils/async-exec.js';
 import type { NixPackage } from '../../types/nix-tools.js';
 
 /**
@@ -17,8 +17,7 @@ export class PackageSearch {
   public async search(query: string, limit: number = 20): Promise<NixPackage[]> {
     try {
       // Use nix search for fast searching
-      const output = execSync(`nix search nixpkgs ${query} --json`, {
-        encoding: 'utf-8',
+      const output = await executeNixCommand(['search', 'nixpkgs', query, '--json'], {
         timeout: 30000,
         maxBuffer: 5 * 1024 * 1024,
       });
@@ -51,8 +50,7 @@ export class PackageSearch {
    */
   public async getPackageInfo(attrPath: string): Promise<NixPackage | null> {
     try {
-      const output = execSync(`nix eval nixpkgs#${attrPath}.meta --json`, {
-        encoding: 'utf-8',
+      const output = await executeNixCommand(['eval', `nixpkgs#${attrPath}.meta`, '--json'], {
         timeout: 10000,
       });
 
@@ -74,8 +72,7 @@ export class PackageSearch {
    */
   private async fallbackSearch(query: string, limit: number): Promise<NixPackage[]> {
     try {
-      const output = execSync(`nix search nixpkgs ${query}`, {
-        encoding: 'utf-8',
+      const output = await executeNixCommand(['search', 'nixpkgs', query], {
         timeout: 30000,
         maxBuffer: 5 * 1024 * 1024,
       });

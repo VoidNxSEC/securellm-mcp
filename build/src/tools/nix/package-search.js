@@ -3,7 +3,7 @@
  *
  * Search for Nix packages across nixpkgs and other channels.
  */
-import { execSync } from 'child_process';
+import { executeNixCommand } from './utils/async-exec.js';
 /**
  * Package Search
  */
@@ -14,8 +14,7 @@ export class PackageSearch {
     async search(query, limit = 20) {
         try {
             // Use nix search for fast searching
-            const output = execSync(`nix search nixpkgs ${query} --json`, {
-                encoding: 'utf-8',
+            const output = await executeNixCommand(['search', 'nixpkgs', query, '--json'], {
                 timeout: 30000,
                 maxBuffer: 5 * 1024 * 1024,
             });
@@ -44,8 +43,7 @@ export class PackageSearch {
      */
     async getPackageInfo(attrPath) {
         try {
-            const output = execSync(`nix eval nixpkgs#${attrPath}.meta --json`, {
-                encoding: 'utf-8',
+            const output = await executeNixCommand(['eval', `nixpkgs#${attrPath}.meta`, '--json'], {
                 timeout: 10000,
             });
             const meta = JSON.parse(output);
@@ -65,8 +63,7 @@ export class PackageSearch {
      */
     async fallbackSearch(query, limit) {
         try {
-            const output = execSync(`nix search nixpkgs ${query}`, {
-                encoding: 'utf-8',
+            const output = await executeNixCommand(['search', 'nixpkgs', query], {
                 timeout: 30000,
                 maxBuffer: 5 * 1024 * 1024,
             });

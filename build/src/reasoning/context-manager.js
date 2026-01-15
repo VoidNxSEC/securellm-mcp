@@ -28,7 +28,7 @@ export class ContextManager {
         // Analyze input
         const inputAnalysis = this.inputAnalyzer.analyze(userInput);
         // Get project state
-        const projectState = this.stateTracker.getState();
+        const projectState = await this.stateTracker.getState();
         // Get relevant patterns
         const patterns = this.database.getPatterns(undefined, 5);
         // Get relevant knowledge
@@ -104,7 +104,7 @@ export class ContextManager {
     /**
      * Refresh project state
      */
-    refreshState() {
+    async refreshState() {
         return this.stateTracker.refresh();
     }
 }

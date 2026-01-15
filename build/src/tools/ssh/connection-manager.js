@@ -1,20 +1,45 @@
 /**
  * SSH Connection Manager
- * Manages SSH connections with security controls
+ * Manages SSH connections with security controls, pooling, and health monitoring
  */
 // @ts-ignore - ssh2 types are in @types/ssh2
 import { Client } from 'ssh2';
 import * as fs from 'fs/promises';
 export class SSHConnectionManager {
     connections = new Map();
+    pool = new Map();
     allowedHosts;
-    constructor(allowedHosts = ['localhost', '127.0.0.1']) {
+    config;
+    healthCheckInterval;
+    constructor(allowedHosts = ['localhost', '127.0.0.1'], config) {
         this.allowedHosts = allowedHosts;
+        this.config = {
+            max_connections: config?.max_connections || 10,
+            max_idle_time_ms: config?.max_idle_time_ms || 300000, // 5 min
+            health_check_interval_ms: config?.health_check_interval_ms || 60000
+        };
+        this.startHealthMonitoring();
+    }
+    startHealthMonitoring() {
+        if (this.healthCheckInterval) {
+            clearInterval(this.healthCheckInterval);
+        }
+        this.healthCheckInterval = setInterval(() => this.checkAllConnections(), this.config.health_check_interval_ms);
+    }
+    async checkAllConnections() {
+        // Prune idle connections first
+        await this.pruneIdleConnections();
+        // Check health of remaining
+        for (const conn of this.connections.values()) {
+            await this.healthCheck(conn);
+        }
     }
     async connect(args) {
         const { host, port = 22, username, auth_method, key_path, password } = args;
         // Security: whitelist hosts
         if (!this.allowedHosts.includes(host)) {
+            // Check CIDR ranges if needed, for now just simple includes
+            // A more robust implementation would use 'ip-range-check' or similar
             return {
                 success: false,
                 error: `Host '${host}' not in whitelist`,
@@ -33,8 +58,18 @@ export class SSHConnectionManager {
                         username,
                         connected: true,
                         created: new Date(),
+                        config: args,
+                        created_at: new Date(),
+                        last_used: new Date(),
+                        error_count: 0,
+                        health_status: 'healthy',
+                        bytes_sent: 0,
+                        bytes_received: 0,
+                        commands_executed: 0
                     };
                     this.connections.set(connectionId, conn);
+                    // If pooling logic warrants, we could add to pool here or in getOrCreateConnection
+                    // For now, connections map serves as the registry
                     resolve({
                         success: true,
                         data: {
@@ -80,13 +115,93 @@ export class SSHConnectionManager {
             };
         }
     }
+    async connectWithMFA(config, mfaCode) {
+        if (!/^\d{6}$/.test(mfaCode)) {
+            return {
+                success: false,
+                error: 'Invalid MFA code format',
+                timestamp: new Date().toISOString()
+            };
+        }
+        try {
+            const client = new Client();
+            const connectionId = `ssh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const connectPromise = new Promise((resolve, reject) => {
+                client.on('keyboard-interactive', (name, instructions, lang, prompts, finish) => {
+                    finish([mfaCode]);
+                });
+                client.on('ready', () => {
+                    const conn = {
+                        id: connectionId,
+                        client,
+                        host: config.host,
+                        username: config.username,
+                        connected: true,
+                        created: new Date(),
+                        config,
+                        created_at: new Date(),
+                        last_used: new Date(),
+                        error_count: 0,
+                        health_status: 'healthy',
+                        bytes_sent: 0,
+                        bytes_received: 0,
+                        commands_executed: 0
+                    };
+                    this.connections.set(connectionId, conn);
+                    resolve({
+                        success: true,
+                        data: {
+                            connection_id: connectionId,
+                            host: config.host,
+                            username: config.username,
+                            connected: true
+                        },
+                        timestamp: new Date().toISOString()
+                    });
+                });
+                client.on('error', reject);
+                client.connect({
+                    host: config.host,
+                    port: config.port || 22,
+                    username: config.username,
+                    tryKeyboard: true,
+                    // other options...
+                });
+            });
+            return await connectPromise;
+        }
+        catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                timestamp: new Date().toISOString()
+            };
+        }
+    }
     getConnection(connectionId) {
-        return this.connections.get(connectionId);
+        const conn = this.connections.get(connectionId);
+        if (conn) {
+            conn.last_used = new Date();
+        }
+        return conn;
+    }
+    generateConnectionKey(config) {
+        return `${config.username}@${config.host}:${config.port || 22}`;
     }
     async getOrCreateConnection(args) {
-        // Try to find existing connection
-        const existing = Array.from(this.connections.values()).find(conn => conn.host === args.host && conn.username === args.username && conn.connected);
+        const key = this.generateConnectionKey(args);
+        // Check pool/existing connections
+        // Note: This implementation treats 'pool' and 'connections' a bit synonymously for simplicity
+        // Ideally, 'pool' would map keys to connection IDs or objects
+        let existing;
+        for (const conn of this.connections.values()) {
+            if (this.generateConnectionKey(conn.config) === key && conn.connected) {
+                existing = conn;
+                break;
+            }
+        }
         if (existing) {
+            existing.last_used = new Date();
             return existing;
         }
         // Create new connection
@@ -100,6 +215,70 @@ export class SSHConnectionManager {
         }
         return connection;
     }
+    async pruneIdleConnections(maxIdleTime) {
+        const threshold = maxIdleTime || this.config.max_idle_time_ms;
+        const now = Date.now();
+        let pruned = 0;
+        for (const [id, conn] of this.connections.entries()) {
+            const idleTime = now - conn.last_used.getTime();
+            if (idleTime > threshold) {
+                conn.client.end();
+                this.connections.delete(id);
+                pruned++;
+            }
+        }
+        return pruned;
+    }
+    async healthCheck(conn) {
+        try {
+            // Send keepalive packet (executing simple command like 'true' or 'echo')
+            const start = Date.now();
+            // Using a simple exec to test responsiveness. 
+            // Ideally client.ping() should be used if available, ssh2 client doesn't expose it directly easily?
+            // Actually ssh2 types might not show it but it might exist, or we rely on exec.
+            // Let's use a lightweight exec.
+            await new Promise((resolve, reject) => {
+                conn.client.exec('true', (err, stream) => {
+                    if (err)
+                        return reject(err);
+                    stream.on('close', () => resolve()).on('data', () => { });
+                });
+            });
+            const latency = Date.now() - start;
+            const status = latency < 1000 ? 'healthy' : 'degraded';
+            conn.health_status = status;
+            return {
+                connection_id: conn.id,
+                status,
+                latency_ms: latency,
+                uptime_seconds: (Date.now() - conn.created_at.getTime()) / 1000,
+                last_check: new Date(),
+                issues: latency > 1000 ? ['High latency'] : [],
+                metrics: {
+                    success_rate: 1 - (conn.error_count / Math.max(conn.commands_executed, 1)),
+                    avg_latency_ms: latency,
+                    error_count: conn.error_count
+                }
+            };
+        }
+        catch (error) {
+            conn.health_status = 'failed';
+            conn.error_count++;
+            return {
+                connection_id: conn.id,
+                status: 'failed',
+                latency_ms: 0,
+                uptime_seconds: 0,
+                last_check: new Date(),
+                issues: [error.message],
+                metrics: {
+                    success_rate: 0,
+                    avg_latency_ms: 0,
+                    error_count: conn.error_count
+                }
+            };
+        }
+    }
     disconnect(connectionId) {
         const conn = this.connections.get(connectionId);
         if (conn) {
@@ -110,8 +289,13 @@ export class SSHConnectionManager {
         return false;
     }
     disconnectAll() {
+        if (this.healthCheckInterval) {
+            clearInterval(this.healthCheckInterval);
+        }
         for (const conn of this.connections.values()) {
-            conn.client.end();
+            if (conn.client && typeof conn.client.end === 'function') {
+                conn.client.end();
+            }
         }
         this.connections.clear();
     }
@@ -121,6 +305,7 @@ export class SSHConnectionManager {
             host: conn.host,
             username: conn.username,
             uptime: Date.now() - conn.created.getTime(),
+            health: conn.health_status || 'unknown'
         }));
     }
 }
