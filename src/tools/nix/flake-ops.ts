@@ -9,12 +9,17 @@
 import { executeNixCommand, executeNixCommandStreaming } from './utils/async-exec.js';
 import { logger } from '../../utils/logger.js';
 import type { FlakeBuildResult, FlakeOperation, FlakeMetadata } from '../../types/nix-tools.js';
+import { CacheManager } from '../../utils/cache-manager.js';
 
 /**
  * Flake Operations
  */
 export class FlakeOps {
   private projectRoot: string;
+  private metadataCache = new CacheManager<string, FlakeMetadata>({
+    max: 100,
+    ttl: 600000,  // 10 min
+  });
 
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
@@ -45,7 +50,18 @@ export class FlakeOps {
   /**
    * Show flake metadata
    */
+  /**
+   * Show flake metadata
+   */
   public async show(): Promise<FlakeMetadata> {
+    const cacheKey = `metadata:${this.projectRoot}`;
+
+    // Check cache
+    const cached = this.metadataCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     try {
       const output = await executeNixCommand(
         ['flake', 'metadata', '--json'],
@@ -57,16 +73,30 @@ export class FlakeOps {
 
       const metadata = JSON.parse(output);
 
-      return {
+      const result = {
         description: metadata.description || '',
         lastModified: metadata.lastModified || 0,
         revision: metadata.revision,
         inputs: this.parseInputs(metadata.locks?.nodes || {}),
         outputs: Object.keys(metadata.locks?.nodes?.root?.outputs || {}),
       };
+
+      // Store in cache
+      this.metadataCache.set(cacheKey, result);
+
+      return result;
     } catch (error: any) {
       throw new Error(`Failed to show flake metadata: ${error.message}`);
     }
+  }
+
+  /**
+   * Get cache statistics
+   */
+  public getCacheStats() {
+    return {
+      metadata: this.metadataCache.getStats(),
+    };
   }
 
   /**
