@@ -33,7 +33,7 @@ echo "  Branch: $HEAD → $BASE"
 echo "  Body: See PR_DESCRIPTION.md"
 echo ""
 echo "🔗 Open this URL to create the PR:"
-PR_URL="https://github.com/VoidNxSEC/securellm-mcp/compare/${BASE}...${HEAD}?expand=1"
+PR_URL="https://github.com/marcosfpina/securellm-mcp/compare/${BASE}...${HEAD}?expand=1"
 echo "$PR_URL"
 echo ""
 

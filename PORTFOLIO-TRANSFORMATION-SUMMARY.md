@@ -235,9 +235,9 @@ After first CI run, update badge URLs in README:
 
 ```markdown
 <!-- Replace placeholders with actual URLs -->
-[![Build Status](https://github.com/VoidNxSEC/securellm-mcp/workflows/Advanced%20CI%2FCD%20Pipeline/badge.svg)](...)
-[![codecov](https://codecov.io/gh/VoidNxSEC/securellm-mcp/branch/main/graph/badge.svg)](...)
-[![Snyk](https://snyk.io/test/github/VoidNxSEC/securellm-mcp/badge.svg)](...)
+[![Build Status](https://github.com/marcosfpina/securellm-mcp/workflows/Advanced%20CI%2FCD%20Pipeline/badge.svg)](...)
+[![codecov](https://codecov.io/gh/marcosfpina/securellm-mcp/branch/main/graph/badge.svg)](...)
+[![Snyk](https://snyk.io/test/github/marcosfpina/securellm-mcp/badge.svg)](...)
 ```
 
 ---

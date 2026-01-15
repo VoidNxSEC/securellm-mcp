@@ -32,7 +32,7 @@ Optional but recommended:
 
 ```bash
 # Clone the repository
-git clone https://github.com/VoidNxSEC/securellm-mcp.git
+git clone https://github.com/marcosfpina/securellm-mcp.git
 cd securellm-mcp
 
 # Install dependencies

@@ -6,19 +6,19 @@ Replace the current badge section in README.md (lines 5-8) with this enhanced ve
 
 ```markdown
 <!-- Build & Quality -->
-[![CI/CD Pipeline](https://github.com/VoidNxSEC/securellm-mcp/workflows/Advanced%20CI%2FCD%20Pipeline/badge.svg)](https://github.com/VoidNxSEC/securellm-mcp/actions)
-[![Build Status](https://github.com/VoidNxSEC/securellm-mcp/workflows/CI/badge.svg)](https://github.com/VoidNxSEC/securellm-mcp/actions/workflows/ci.yml)
-[![Nix Build](https://img.shields.io/badge/nix-reproducible-5277C3?logo=nixos&logoColor=white)](https://github.com/VoidNxSEC/securellm-mcp/actions)
+[![CI/CD Pipeline](https://github.com/marcosfpina/securellm-mcp/workflows/Advanced%20CI%2FCD%20Pipeline/badge.svg)](https://github.com/marcosfpina/securellm-mcp/actions)
+[![Build Status](https://github.com/marcosfpina/securellm-mcp/workflows/CI/badge.svg)](https://github.com/marcosfpina/securellm-mcp/actions/workflows/ci.yml)
+[![Nix Build](https://img.shields.io/badge/nix-reproducible-5277C3?logo=nixos&logoColor=white)](https://github.com/marcosfpina/securellm-mcp/actions)
 
 <!-- Coverage & Testing -->
-[![codecov](https://codecov.io/gh/VoidNxSEC/securellm-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/VoidNxSEC/securellm-mcp)
-[![Test Coverage](https://img.shields.io/badge/coverage-85%2B%25-brightgreen)](https://codecov.io/gh/VoidNxSEC/securellm-mcp)
-[![Tests](https://img.shields.io/badge/tests-passing-success)](https://github.com/VoidNxSEC/securellm-mcp/actions)
+[![codecov](https://codecov.io/gh/marcosfpina/securellm-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/marcosfpina/securellm-mcp)
+[![Test Coverage](https://img.shields.io/badge/coverage-85%2B%25-brightgreen)](https://codecov.io/gh/marcosfpina/securellm-mcp)
+[![Tests](https://img.shields.io/badge/tests-passing-success)](https://github.com/marcosfpina/securellm-mcp/actions)
 
 <!-- Security & Compliance -->
-[![Security Rating](https://img.shields.io/badge/security-A+-success?logo=security)](https://github.com/VoidNxSEC/securellm-mcp/security)
-[![Snyk Vulnerabilities](https://img.shields.io/snyk/vulnerabilities/github/VoidNxSEC/securellm-mcp)](https://snyk.io/)
-[![CodeQL](https://github.com/VoidNxSEC/securellm-mcp/workflows/CodeQL/badge.svg)](https://github.com/VoidNxSEC/securellm-mcp/security/code-scanning)
+[![Security Rating](https://img.shields.io/badge/security-A+-success?logo=security)](https://github.com/marcosfpina/securellm-mcp/security)
+[![Snyk Vulnerabilities](https://img.shields.io/snyk/vulnerabilities/github/marcosfpina/securellm-mcp)](https://snyk.io/)
+[![CodeQL](https://github.com/marcosfpina/securellm-mcp/workflows/CodeQL/badge.svg)](https://github.com/marcosfpina/securellm-mcp/security/code-scanning)
 [![OpenSSF Best Practices](https://bestpractices.coreinfrastructure.org/projects/XXXX/badge)](https://bestpractices.coreinfrastructure.org/projects/XXXX)
 
 <!-- Tech Stack & Standards -->
@@ -30,14 +30,14 @@ Replace the current badge section in README.md (lines 5-8) with this enhanced ve
 
 <!-- Project Status & Community -->
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.0.0-blue)](https://github.com/VoidNxSEC/securellm-mcp/releases)
-[![Production Ready](https://img.shields.io/badge/status-production--ready-success)](https://github.com/VoidNxSEC/securellm-mcp)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue)](https://github.com/marcosfpina/securellm-mcp/releases)
+[![Production Ready](https://img.shields.io/badge/status-production--ready-success)](https://github.com/marcosfpina/securellm-mcp)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/VoidNxSEC/securellm-mcp/graphs/commit-activity)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/marcosfpina/securellm-mcp/graphs/commit-activity)
 
 <!-- Dependencies & Performance -->
 [![Dependencies](https://img.shields.io/badge/dependencies-up%20to%20date-brightgreen)](package.json)
-[![DevDependencies](https://img.shields.io/david/dev/VoidNxSEC/securellm-mcp)](package.json)
+[![DevDependencies](https://img.shields.io/david/dev/marcosfpina/securellm-mcp)](package.json)
 [![Bundle Size](https://img.shields.io/badge/bundle%20size-980KB-informational)](package.json)
 ```
 

@@ -276,4 +276,4 @@ grep -rn "execSync" src/tools/nix/flake-ops.ts src/reasoning/actions/file-scanne
 - `tests/validate-refactoring.cjs` (STDIO protocol compliance)
 - `tests/test-refactored-functions.cjs` (5/5 passed - 100%)
 - `tests/performance-benchmark.cjs` (actual metrics)
-**Commits**: https://github.com/VoidNxSEC/securellm-mcp/tree/claude/refactor-mcp-server-rv8Ek
+**Commits**: https://github.com/marcosfpina/securellm-mcp/tree/claude/refactor-mcp-server-rv8Ek
