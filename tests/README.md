@@ -21,6 +21,9 @@ node --test tests/circuit-breaker.test.js
 - **Retry Strategy**: Exponential, linear, fibonacci algorithms with jitter
 - **Error Classifier**: Error categorization, HTTP status detection, keyword matching
 - **Metrics Collector**: Success/failure tracking, percentiles, queue metrics
+- **Reasoning System**: Input analysis, intent classification, entity extraction, context enrichment
+- **Proactive Logic**: Pre-action interception, proactive checks (git, build), authentication validation
+- **SSH Advanced Tools**: Connection pooling, tunneling (local/remote/dynamic), jump hosts, session persistence
 
 ## Test Structure
 
