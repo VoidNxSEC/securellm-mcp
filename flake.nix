@@ -16,7 +16,7 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
-        
+
         # Toolchain Rust estável com suporte a análise de código
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" "rust-analyzer" "clippy" ];
@@ -24,8 +24,8 @@
 
         # Build the MCP server package
         mcpServer = pkgs.buildNpmPackage {
-          pname = "securellm-bridge-mcp";
-          version = "2.1.0";
+          pname = "securellm-mcp";
+          version = "2.0.0";
 
           src = ./.;
 
@@ -68,7 +68,7 @@
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             # Node.js Environment (Legacy/Transition)
-            nodejs_20
+            nodejs_24
             nodePackages.npm
             nodePackages.typescript
             nodePackages.typescript-language-server
