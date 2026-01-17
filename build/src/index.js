@@ -23,6 +23,8 @@ import { laptopDefenseTools, handleThermalCheck, handleRebuildSafetyCheck, handl
 import { webSearchTools, handleWebSearch, handleNixSearch, handleGithubSearch, handleTechNewsSearch, handleDiscourseSearch, handleStackOverflowSearch, getNixCacheStats, } from "./tools/web-search.js";
 import { researchAgentTool, handleResearchAgent, } from "./tools/research-agent.js";
 import { analyzeComplexity, findDeadCode, analyzeComplexitySchema, findDeadCodeSchema, } from "./tools/codebase-analysis.js";
+import { zodToMcpSchema } from "./utils/schema-converter.js";
+import { devTools, devToolHandlers } from "./tools/dev-tools.js";
 import { sshExecuteSchema, sshFileTransferSchema, sshMaintenanceCheckSchema, sshTunnelSchema, sshJumpHostSchema, sshSessionSchema, SSHExecuteTool, SSHFileTransferTool, SSHMaintenanceCheckTool, SSHTunnelTool, SSHJumpHostTool, SSHSessionTool, } from "./tools/ssh/index.js";
 import { executeInSandboxTool, handleExecuteInSandbox, } from "./tools/secure-execution.js";
 import { SemanticCache } from "./middleware/semantic-cache.js";
@@ -86,17 +88,44 @@ class SecureLLMBridgeMCPServer {
         this.setupToolHandlers();
         this.setupResourceHandlers();
         this.server.onerror = (error) => logger.error({ err: error }, "MCP server error");
-        process.on("SIGINT", async () => {
-            logger.info("Received SIGINT, shutting down gracefully");
-            if (this.db) {
-                this.db.close();
+        // Register shutdown handlers for graceful cleanup
+        const shutdownHandler = async () => {
+            logger.info("Received shutdown signal, cleaning up resources");
+            try {
+                // Stop project watcher first to prevent new events
+                if (this.projectWatcher) {
+                    this.projectWatcher.stop();
+                    this.projectWatcher = null;
+                }
+                // Close semantic cache (stops cleanup interval)
+                if (this.semanticCache) {
+                    this.semanticCache.close();
+                    this.semanticCache = null;
+                }
+                // Close knowledge database
+                if (this.db) {
+                    this.db.close();
+                    this.db = null;
+                }
+                // Clear context manager
+                if (this.contextManager) {
+                    this.contextManager = null;
+                }
+                // Clear pre-action interceptor
+                if (this.preActionInterceptor) {
+                    this.preActionInterceptor = null;
+                }
+                // Close MCP server
+                await this.server.close();
+                logger.info("Shutdown complete");
             }
-            if (this.semanticCache) {
-                this.semanticCache.close();
+            catch (error) {
+                logger.error({ err: error }, "Error during shutdown");
             }
-            await this.server.close();
             process.exit(0);
-        });
+        };
+        process.on("SIGINT", shutdownHandler);
+        process.on("SIGTERM", shutdownHandler);
     }
     /**
      * Initialize async resources (PROJECT_ROOT, hostname, knowledge DB)
@@ -480,13 +509,13 @@ class SecureLLMBridgeMCPServer {
                     name: "analyze_complexity",
                     description: "Analyze code complexity and file size statistics",
                     defer_loading: true,
-                    inputSchema: analyzeComplexitySchema,
+                    inputSchema: zodToMcpSchema(analyzeComplexitySchema),
                 },
                 {
                     name: "find_dead_code",
                     description: "Heuristic search for unused exports (potentially dead code)",
                     defer_loading: true,
-                    inputSchema: findDeadCodeSchema,
+                    inputSchema: zodToMcpSchema(findDeadCodeSchema),
                 },
                 // Add Secure Execution Tool
                 executeInSandboxTool,
@@ -527,6 +556,8 @@ class SecureLLMBridgeMCPServer {
                     defer_loading: true,
                     inputSchema: sshSessionSchema.inputSchema,
                 },
+                // Add DX Tools
+                ...devTools,
             ],
         }));
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -720,6 +751,19 @@ class SecureLLMBridgeMCPServer {
                         break;
                     case "ssh_session_manager":
                         result = await new SSHSessionTool().execute(args);
+                        break;
+                    // DX Tool handlers
+                    case "lint_code":
+                        result = await devToolHandlers.lint_code(args);
+                        break;
+                    case "format_code":
+                        result = await devToolHandlers.format_code(args);
+                        break;
+                    case "run_tests":
+                        result = await devToolHandlers.run_tests(args);
+                        break;
+                    case "github_actions":
+                        result = await devToolHandlers.github_actions(args);
                         break;
                     default:
                         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);

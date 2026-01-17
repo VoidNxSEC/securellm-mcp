@@ -70,6 +70,8 @@ import {
   findDeadCodeSchema,
   mapDependenciesSchema,
 } from "./tools/codebase-analysis.js";
+import { zodToMcpSchema } from "./utils/schema-converter.js";
+import { devTools, devToolHandlers } from "./tools/dev-tools.js";
 import {
   sshTools,
   sshExecuteSchema,
@@ -654,13 +656,13 @@ class SecureLLMBridgeMCPServer {
           name: "analyze_complexity",
           description: "Analyze code complexity and file size statistics",
           defer_loading: true,
-          inputSchema: analyzeComplexitySchema,
+          inputSchema: zodToMcpSchema(analyzeComplexitySchema),
         },
         {
           name: "find_dead_code",
           description: "Heuristic search for unused exports (potentially dead code)",
           defer_loading: true,
-          inputSchema: findDeadCodeSchema,
+          inputSchema: zodToMcpSchema(findDeadCodeSchema),
         },
         // Add Secure Execution Tool
         executeInSandboxTool,
@@ -701,6 +703,8 @@ class SecureLLMBridgeMCPServer {
           defer_loading: true,
           inputSchema: sshSessionSchema.inputSchema,
         },
+        // Add DX Tools
+        ...devTools,
       ] as ExtendedTool[],
     }));
 
@@ -909,6 +913,20 @@ class SecureLLMBridgeMCPServer {
             break;
           case "ssh_session_manager":
             result = await new SSHSessionTool().execute(args as any);
+            break;
+
+          // DX Tool handlers
+          case "lint_code":
+            result = await devToolHandlers.lint_code(args as any);
+            break;
+          case "format_code":
+            result = await devToolHandlers.format_code(args as any);
+            break;
+          case "run_tests":
+            result = await devToolHandlers.run_tests(args as any);
+            break;
+          case "github_actions":
+            result = await devToolHandlers.github_actions(args as any);
             break;
 
           default:

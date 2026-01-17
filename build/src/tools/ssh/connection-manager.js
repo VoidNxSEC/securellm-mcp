@@ -50,7 +50,9 @@ export class SSHConnectionManager {
             const client = new Client();
             const connectionId = `ssh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
             const connectPromise = new Promise((resolve, reject) => {
-                client.on('ready', () => {
+                const onReady = () => {
+                    // Clean up error listener
+                    client.removeListener('error', onError);
                     const conn = {
                         id: connectionId,
                         client,
@@ -80,10 +82,15 @@ export class SSHConnectionManager {
                         },
                         timestamp: new Date().toISOString(),
                     });
-                });
-                client.on('error', (err) => {
+                };
+                const onError = (err) => {
+                    // Clean up ready listener
+                    client.removeListener('ready', onReady);
+                    client.end();
                     reject(new Error(`SSH connection failed: ${err.message}`));
-                });
+                };
+                client.once('ready', onReady);
+                client.once('error', onError);
                 // Configure connection
                 const config = {
                     host,
@@ -95,17 +102,30 @@ export class SSHConnectionManager {
                     fs.readFile(key_path).then(privateKey => {
                         config.privateKey = privateKey;
                         client.connect(config);
-                    }).catch(reject);
+                    }).catch((err) => {
+                        client.removeListener('ready', onReady);
+                        client.removeListener('error', onError);
+                        reject(err);
+                    });
                 }
                 else if (auth_method === 'password' && password) {
                     config.password = password;
                     client.connect(config);
                 }
                 else {
+                    client.removeListener('ready', onReady);
+                    client.removeListener('error', onError);
                     reject(new Error('Invalid authentication method or missing credentials'));
                 }
             });
-            return await connectPromise;
+            // Add timeout wrapper to prevent hanging connections
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => {
+                    client.end();
+                    reject(new Error(`SSH connection timeout after 30s`));
+                }, 30000);
+            });
+            return await Promise.race([connectPromise, timeoutPromise]);
         }
         catch (error) {
             return {
@@ -127,10 +147,9 @@ export class SSHConnectionManager {
             const client = new Client();
             const connectionId = `ssh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
             const connectPromise = new Promise((resolve, reject) => {
-                client.on('keyboard-interactive', (name, instructions, lang, prompts, finish) => {
-                    finish([mfaCode]);
-                });
-                client.on('ready', () => {
+                const onReady = () => {
+                    // Clean up error listener
+                    client.removeListener('error', onError);
                     const conn = {
                         id: connectionId,
                         client,
@@ -158,17 +177,34 @@ export class SSHConnectionManager {
                         },
                         timestamp: new Date().toISOString()
                     });
+                };
+                const onError = (err) => {
+                    // Clean up ready listener
+                    client.removeListener('ready', onReady);
+                    client.end();
+                    reject(err);
+                };
+                client.on('keyboard-interactive', (name, instructions, lang, prompts, finish) => {
+                    finish([mfaCode]);
                 });
-                client.on('error', reject);
+                client.once('ready', onReady);
+                client.once('error', onError);
                 client.connect({
                     host: config.host,
                     port: config.port || 22,
                     username: config.username,
                     tryKeyboard: true,
-                    // other options...
+                    readyTimeout: 30000,
                 });
             });
-            return await connectPromise;
+            // Add timeout wrapper to prevent hanging connections
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => {
+                    client.end();
+                    reject(new Error(`SSH MFA connection timeout after 30s`));
+                }, 30000);
+            });
+            return await Promise.race([connectPromise, timeoutPromise]);
         }
         catch (error) {
             return {

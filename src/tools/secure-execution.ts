@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { sandboxManager } from '../security/sandbox-manager.js';
+import { zodToMcpSchema } from '../utils/schema-converter.js';
 import type { ExtendedTool } from '../types/mcp-tool-extensions.js';
 
 export const executeInSandboxSchema = z.object({
@@ -12,26 +13,7 @@ export const executeInSandboxSchema = z.object({
 export const executeInSandboxTool: ExtendedTool = {
   name: 'execute_in_sandbox',
   description: 'Execute a command in an isolated, ephemeral Nix sandbox. Protects the system from side effects.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      command: { type: 'string', description: 'The shell command to execute safely' },
-      packages: { 
-        type: 'array', 
-        items: { type: 'string' },
-        description: 'List of Nix packages to make available (e.g. ["nodejs", "jq"])'
-      },
-      use_project_flake: { 
-        type: 'boolean', 
-        description: 'If true, include dependencies from the current directory flake.nix' 
-      },
-      timeout_seconds: { 
-        type: 'number', 
-        description: 'Execution timeout in seconds' 
-      }
-    },
-    required: ['command']
-  },
+  inputSchema: zodToMcpSchema(executeInSandboxSchema),
   defer_loading: false
 };
 
