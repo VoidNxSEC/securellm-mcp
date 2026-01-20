@@ -1,6 +1,9 @@
 export declare class RequestDeduplicator {
+    private readonly staleTimeoutMs;
     private inFlight;
     private stats;
+    private cleanupInterval;
+    constructor(staleTimeoutMs?: number, cleanupEveryMs?: number);
     /**
      * Generate hash key from request parameters
      */
@@ -24,6 +27,7 @@ export declare class RequestDeduplicator {
      * Clear all in-flight requests (for cleanup/reset)
      */
     clear(): void;
+    close(): void;
     /**
      * Clean up stale in-flight requests (older than timeout)
      */

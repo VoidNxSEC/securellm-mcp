@@ -10,6 +10,7 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { getNixOSHosts } from "./flake-parser.js";
+import { logger } from "./logger.js";
 const execAsync = promisify(exec);
 /**
  * Get the system hostname
@@ -20,7 +21,7 @@ async function getSystemHostname() {
         return stdout.trim();
     }
     catch (error) {
-        console.warn("Failed to get system hostname:", error);
+        logger.warn({ err: error }, "Failed to get system hostname");
         return null;
     }
 }
@@ -122,15 +123,19 @@ export async function requireNixOSHost(projectRoot) {
     const result = await detectNixOSHost(projectRoot);
     // Log warnings
     if (result.warnings.length > 0) {
-        console.warn("NixOS Host Detection Warnings:");
-        result.warnings.forEach((warning) => console.warn(`  - ${warning}`));
+        logger.warn({ warnings: result.warnings, projectRoot }, "NixOS host detection warnings");
     }
     // Handle errors
     if (result.method === "error" || !result.hostname) {
         throw new Error(`Failed to detect NixOS host.\n${result.warnings.join("\n")}`);
     }
     // Log detection result
-    console.log(`Detected NixOS host: "${result.hostname}" (method: ${result.method}, confidence: ${result.confidence})`);
+    logger.info({
+        hostname: result.hostname,
+        method: result.method,
+        confidence: result.confidence,
+        projectRoot,
+    }, "Detected NixOS host");
     return result.hostname;
 }
 //# sourceMappingURL=host-detection.js.map

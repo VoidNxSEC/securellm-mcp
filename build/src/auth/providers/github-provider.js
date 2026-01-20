@@ -15,6 +15,7 @@
 import { OAuthManager } from '../oauth-manager.js';
 import { OAuthError, OAuthErrorType, } from '../../types/oauth.js';
 import { GITHUB_API_ENDPOINTS, } from '../../types/providers/github.js';
+import { logger } from '../../utils/logger.js';
 /**
  * GitHub OAuth Provider implementation
  */
@@ -49,7 +50,7 @@ export class GitHubOAuthProvider extends OAuthManager {
             return response.ok;
         }
         catch (error) {
-            console.error('GitHub token validation failed:', error);
+            logger.warn({ err: error }, 'GitHub token validation failed');
             return false;
         }
     }
@@ -87,7 +88,7 @@ export class GitHubOAuthProvider extends OAuthManager {
                     }
                 }
                 catch (error) {
-                    console.warn('Failed to fetch GitHub user emails:', error);
+                    logger.warn({ err: error }, 'Failed to fetch GitHub user emails');
                 }
             }
             return user;

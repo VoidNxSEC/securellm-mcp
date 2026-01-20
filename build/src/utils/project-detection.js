@@ -12,6 +12,7 @@
  */
 import * as fs from "fs/promises";
 import * as path from "path";
+import { logger } from "./logger.js";
 /**
  * Search upward from a directory to find flake.nix
  */
@@ -60,7 +61,7 @@ export async function detectProjectRoot() {
             };
         }
         catch {
-            console.warn(`MCP_WORKDIR set to "${mcpWorkDir}" but directory is not accessible. Falling back.`);
+            logger.warn({ mcpWorkDir }, 'MCP_WORKDIR set but directory is not accessible. Falling back.');
         }
     }
     // Priority 2: Explicit PROJECT_ROOT environment variable (Legacy)
@@ -80,7 +81,7 @@ export async function detectProjectRoot() {
             };
         }
         catch {
-            console.warn(`PROJECT_ROOT env var set to "${envProjectRoot}" but directory is not accessible. Falling back to auto-detection.`);
+            logger.warn({ envProjectRoot }, 'PROJECT_ROOT env var set but directory is not accessible. Falling back to auto-detection.');
         }
     }
     // Priority 3: Search for flake.nix upward
@@ -94,8 +95,8 @@ export async function detectProjectRoot() {
         };
     }
     // Priority 4: Fallback to current working directory
-    console.warn(`No flake.nix found in directory tree. Using cwd as project root: ${cwd}`);
-    console.warn("Consider setting MCP_WORKDIR environment variable for explicit configuration.");
+    logger.warn({ cwd }, 'No flake.nix found in directory tree. Using cwd as project root.');
+    logger.warn('Consider setting MCP_WORKDIR environment variable for explicit configuration.');
     return {
         projectRoot: cwd,
         method: "fallback",

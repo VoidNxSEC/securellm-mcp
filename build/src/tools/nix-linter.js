@@ -14,6 +14,7 @@
 import * as fs from 'fs/promises';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { logger } from '../utils/logger.js';
 const execAsync = promisify(exec);
 export class NixOSLinter {
     rules = new Map();
@@ -49,7 +50,7 @@ export class NixOSLinter {
                                 confidence: 90,
                                 auto: false, // Need manual review
                                 apply: async () => {
-                                    console.log(`Manual fix required for ${file}:${i + 1}`);
+                                    logger.info({ file, line: i + 1 }, 'Manual fix required');
                                 },
                             },
                         });
@@ -80,7 +81,7 @@ export class NixOSLinter {
                                 confidence: 60,
                                 auto: false,
                                 apply: async () => {
-                                    console.log('Suggest moving to modules/packages/');
+                                    logger.info('Suggest moving to modules/packages/');
                                 },
                             },
                         });
@@ -134,7 +135,7 @@ export class NixOSLinter {
                             confidence: 80,
                             auto: false,
                             apply: async () => {
-                                console.log('Generate systemd timer template');
+                                logger.info('Generate systemd timer template');
                             },
                         },
                     });
@@ -253,7 +254,7 @@ export class NixOSLinter {
                 issues.push(...ruleIssues);
             }
             catch (error) {
-                console.error(`[Linter] Rule ${name} failed:`, error);
+                logger.error({ err: error, rule: name }, 'Linter rule failed');
             }
         }
         // Calculate stats
@@ -282,12 +283,12 @@ export class NixOSLinter {
                     }
                 }
                 catch (error) {
-                    console.error(`[Linter] Failed to lint ${file}:`, error);
+                    logger.error({ err: error, file }, 'Failed to lint file');
                 }
             }
         }
         catch (error) {
-            console.error('[Linter] Directory scan failed:', error);
+            logger.error({ err: error, dirPath }, 'Directory scan failed');
         }
         return results;
     }
@@ -307,7 +308,7 @@ export class NixOSLinter {
                         success: true,
                         timestamp: Date.now(),
                     });
-                    console.log(`[Linter] Auto-fixed: ${issue.message} in ${issue.file}:${issue.line}`);
+                    logger.info({ file: issue.file, line: issue.line, message: issue.message }, 'Auto-fixed lint issue');
                 }
                 catch (error) {
                     failed++;
@@ -316,7 +317,7 @@ export class NixOSLinter {
                         success: false,
                         timestamp: Date.now(),
                     });
-                    console.error(`[Linter] Auto-fix failed: ${issue.message}`, error);
+                    logger.error({ err: error, file: issue.file, line: issue.line, message: issue.message }, 'Auto-fix failed');
                 }
             }
         }

@@ -8,6 +8,7 @@
  * - Source credibility indicators
  */
 import { PackageSearch } from "./nix/package-search.js";
+import { logger } from "../utils/logger.js";
 const packageSearch = new PackageSearch();
 export function getNixCacheStats() {
     return packageSearch.getCacheStats();
@@ -445,7 +446,7 @@ export async function handleTechNewsSearch(args) {
                 }
             }
             catch (e) {
-                console.error("HN search failed:", e);
+                logger.warn({ err: e }, "HN search failed");
             }
         }
         // Reddit
@@ -472,7 +473,7 @@ export async function handleTechNewsSearch(args) {
                 }
             }
             catch (e) {
-                console.error("Reddit search failed:", e);
+                logger.warn({ err: e }, "Reddit search failed");
             }
         }
         // Sort by engagement (points/score)

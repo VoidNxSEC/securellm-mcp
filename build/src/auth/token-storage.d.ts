@@ -17,6 +17,7 @@ export declare class TokenStorageManager {
     private tokensDir;
     private cache;
     private readonly SOPS_AVAILABLE;
+    private readonly ALLOW_PLAINTEXT;
     constructor(tokensDir?: string);
     /**
      * Check if SOPS is available in the system

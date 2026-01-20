@@ -8,6 +8,7 @@
  * - Actionable recommendations
  */
 import { deepResearch } from "../intelligence/deep-research.js";
+import { stringifyGeneric } from "../utils/json-schemas.js";
 /**
  * Research Agent tool definition for MCP
  */
@@ -75,7 +76,7 @@ export async function handleResearchAgent(args) {
             content: [
                 {
                     type: "text",
-                    text: JSON.stringify(response, null, 2),
+                    text: stringifyGeneric(response),
                 },
             ],
         };
@@ -85,11 +86,11 @@ export async function handleResearchAgent(args) {
             content: [
                 {
                     type: "text",
-                    text: JSON.stringify({
+                    text: stringifyGeneric({
                         success: false,
                         error: error.message,
                         query,
-                    }, null, 2),
+                    }),
                 },
             ],
             isError: true,

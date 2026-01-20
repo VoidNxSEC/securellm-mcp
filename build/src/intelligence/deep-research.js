@@ -9,6 +9,7 @@
  */
 import { exec } from "child_process";
 import { promisify } from "util";
+import { logger } from "../utils/logger.js";
 const execAsync = promisify(exec);
 // Source credibility weights
 const SOURCE_CREDIBILITY = {
@@ -261,7 +262,7 @@ export class DeepResearchEngine {
         }
         catch (error) {
             // Silently fail for individual sources - parallel search continues
-            console.error(`[DeepResearch] Source ${source} failed:`, error);
+            logger.warn({ err: error, source }, "[DeepResearch] Source failed");
         }
         return results;
     }

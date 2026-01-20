@@ -49,7 +49,9 @@ export declare class WildcardCommandSystem {
     /**
      * Execute wildcard command
      */
-    execute(wildcardCommand: string, context?: any): Promise<ExecutionResult>;
+    execute(wildcardCommand: string, context?: any, options?: {
+        confirm?: boolean;
+    }): Promise<ExecutionResult>;
     /**
      * List all available wildcard commands
      */

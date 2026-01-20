@@ -29,6 +29,11 @@
 
           src = ./.;
 
+          env = {
+            PUPPETEER_SKIP_DOWNLOAD = "1";
+            PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "1";
+          };
+
           npmDepsHash = "sha256-tguduQ+LInsaOHdjeSTTgahQLqgRCL1tsKY6uCPSPt0=";
 
           buildPhase = ''

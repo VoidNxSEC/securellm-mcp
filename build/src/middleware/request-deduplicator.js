@@ -1,16 +1,46 @@
 import crypto from 'crypto';
+import { logger } from '../utils/logger.js';
+function stableStringify(value) {
+    if (value === null || value === undefined)
+        return String(value);
+    if (typeof value !== 'object')
+        return JSON.stringify(value);
+    if (Array.isArray(value)) {
+        return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+    }
+    const obj = value;
+    const keys = Object.keys(obj).sort();
+    const parts = keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`);
+    return `{${parts.join(',')}}`;
+}
 export class RequestDeduplicator {
+    staleTimeoutMs;
     inFlight = new Map();
     stats = {
         total: 0,
         deduplicated: 0,
         unique: 0,
     };
+    cleanupInterval = null;
+    constructor(staleTimeoutMs = 60_000, cleanupEveryMs = 30_000) {
+        this.staleTimeoutMs = staleTimeoutMs;
+        if (cleanupEveryMs > 0) {
+            this.cleanupInterval = setInterval(() => {
+                try {
+                    this.cleanupStale(this.staleTimeoutMs);
+                }
+                catch (error) {
+                    logger.error({ err: error }, 'Request deduplicator stale cleanup failed');
+                }
+            }, cleanupEveryMs);
+            this.cleanupInterval.unref();
+        }
+    }
     /**
      * Generate hash key from request parameters
      */
     generateKey(provider, requestData) {
-        const content = JSON.stringify({
+        const content = stableStringify({
             provider,
             data: requestData,
         });
@@ -28,7 +58,12 @@ export class RequestDeduplicator {
         const existing = this.inFlight.get(key);
         if (existing) {
             this.stats.deduplicated++;
-            console.log(`[Dedup] Cache HIT for ${provider} (saved API call #${this.stats.deduplicated})`);
+            logger.debug({
+                provider,
+                deduplicated: this.stats.deduplicated,
+                total: this.stats.total,
+                inFlightCount: this.inFlight.size,
+            }, 'Request deduplicated (in-flight cache hit)');
             return existing.promise;
         }
         // Execute new request
@@ -64,6 +99,12 @@ export class RequestDeduplicator {
     clear() {
         this.inFlight.clear();
     }
+    close() {
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+        }
+    }
     /**
      * Clean up stale in-flight requests (older than timeout)
      */
@@ -77,7 +118,11 @@ export class RequestDeduplicator {
         }
         stale.forEach(key => this.inFlight.delete(key));
         if (stale.length > 0) {
-            console.log(`[Dedup] Cleaned up ${stale.length} stale requests`);
+            logger.info({
+                staleCount: stale.length,
+                timeoutMs,
+                inFlightCount: this.inFlight.size,
+            }, 'Cleaned up stale in-flight requests');
         }
     }
 }
