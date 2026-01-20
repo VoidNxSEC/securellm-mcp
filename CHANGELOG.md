@@ -1,4 +1,4 @@
-# 2.0.0 (2026-01-17)
+# 2.0.0 (2026-01-20)
 
 
 ### Bug Fixes
@@ -24,6 +24,7 @@
 * **ci/cd:** add CI/CD workflows and code formatting configurations ([a7adbb5](https://github.com/marcosfpina/securellm-mcp/commit/a7adbb5257a68864895cdb71c019beae3f11401b))
 * **ci/cd:** add enterprise-grade CI/CD pipelines and portfolio enhancements ([089e3f7](https://github.com/marcosfpina/securellm-mcp/commit/089e3f7b3a90a8057088e8b060535aee1b556a68))
 * **logging:** [MCP-1] implement async logger with pino ([3ebfcb9](https://github.com/marcosfpina/securellm-mcp/commit/3ebfcb9f91623fcba1c5efa152d2edb256acc141))
+* **nix:** add packages output to flake with buildNpmPackage ([7bff370](https://github.com/marcosfpina/securellm-mcp/commit/7bff37093ca41e543b80a31bd8ea295d3bf0df91))
 * **tests:** add new test files for proactive logic and advanced SSH functionalities ([019f09c](https://github.com/marcosfpina/securellm-mcp/commit/019f09c9c2ce3176503876e354350fbceee2e867))
 * **tools/nix utils:** add cache manager utility ([1c120cb](https://github.com/marcosfpina/securellm-mcp/commit/1c120cb5b1ea83d043cda2a63c487f5fcd936e8e))
 
