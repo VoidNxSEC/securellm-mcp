@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { logger } from '../utils/logger.js';
-function stableStringify(value) {
+export function stableStringify(value) {
     if (value === null || value === undefined)
         return String(value);
     if (typeof value !== 'object')

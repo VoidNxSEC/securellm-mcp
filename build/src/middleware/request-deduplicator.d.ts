@@ -1,3 +1,4 @@
+export declare function stableStringify(value: unknown): string;
 export declare class RequestDeduplicator {
     private readonly staleTimeoutMs;
     private inFlight;
