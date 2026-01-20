@@ -99,6 +99,10 @@ import {
   stringifyKnowledgeEntries,
   stringifyGeneric,
 } from './utils/json-schemas.js';
+import { ToolMetricsCollector } from "./middleware/tool-metrics.js";
+import { ToolExecutionLimiter } from "./middleware/tool-limiter.js";
+import { RequestDeduplicator, stableStringify } from "./middleware/request-deduplicator.js";
+import crypto from "crypto";
 
 const shouldPrettyPrint = process.env.NODE_ENV === 'development';
 
@@ -172,6 +176,9 @@ class SecureLLMBridgeMCPServer {
   private semanticCache: SemanticCache | null = null;
   private contextManager: ContextManager | null = null;
   private preActionInterceptor: PreActionInterceptor | null = null;
+  private toolMetricsCollector: ToolMetricsCollector;
+  private toolLimiter: ToolExecutionLimiter;
+  private requestDeduplicator: RequestDeduplicator;
 
   constructor() {
     // Initialize smart rate limiter for API protection
@@ -179,6 +186,20 @@ class SecureLLMBridgeMCPServer {
     const configMap = new Map(Object.entries(RATE_LIMIT_CONFIGS));
     this.rateLimiter = new SmartRateLimiter(configMap);
     this.guideManager = new GuideManager();
+    
+    // Initialize performance optimization components
+    this.toolMetricsCollector = new ToolMetricsCollector();
+    this.toolLimiter = new ToolExecutionLimiter({
+      globalMaxConcurrency: parseInt(process.env.TOOL_LIMITER_GLOBAL_MAX_CONCURRENCY || '50', 10),
+      defaultToolTimeout: parseInt(process.env.TOOL_LIMITER_DEFAULT_TIMEOUT || '30000', 10),
+      maxQueueSize: parseInt(process.env.TOOL_LIMITER_MAX_QUEUE_SIZE || '100', 10),
+      toolTimeouts: this.parseToolConfig(process.env.TOOL_LIMITER_TIMEOUTS),
+      toolConcurrency: this.parseToolConfig(process.env.TOOL_LIMITER_CONCURRENCY),
+    });
+    this.requestDeduplicator = new RequestDeduplicator(
+      parseInt(process.env.REQUEST_DEDUPE_STALE_TIMEOUT || '60000', 10),
+      parseInt(process.env.REQUEST_DEDUPE_CLEANUP_INTERVAL || '30000', 10)
+    );
 
     this.server = new Server(
       {
@@ -231,6 +252,11 @@ class SecureLLMBridgeMCPServer {
           this.preActionInterceptor = null;
         }
 
+        // Close request deduplicator
+        if (this.requestDeduplicator) {
+          this.requestDeduplicator.close();
+        }
+
         // Close MCP server
         await this.server.close();
 
@@ -244,6 +270,26 @@ class SecureLLMBridgeMCPServer {
 
     process.on("SIGINT", shutdownHandler);
     process.on("SIGTERM", shutdownHandler);
+  }
+
+  /**
+   * Parse tool configuration from environment variable
+   * Format: "tool1:value1,tool2:value2"
+   */
+  private parseToolConfig(envValue?: string): Record<string, number> {
+    if (!envValue) return {};
+    const config: Record<string, number> = {};
+    const pairs = envValue.split(',');
+    for (const pair of pairs) {
+      const [tool, value] = pair.split(':').map(s => s.trim());
+      if (tool && value) {
+        const numValue = parseInt(value, 10);
+        if (!isNaN(numValue)) {
+          config[tool] = numValue;
+        }
+      }
+    }
+    return config;
   }
 
   /**
@@ -371,16 +417,7 @@ class SecureLLMBridgeMCPServer {
       });
 
       logger.info({ dbPath: cacheDbPath }, "Semantic cache initialized");
-
-      // Start periodic cleanup (every 10 minutes)
-      setInterval(() => {
-        if (this.semanticCache) {
-          const deleted = this.semanticCache.cleanExpired();
-          if (deleted > 0) {
-            logger.info({ deleted }, "Cleaned expired semantic cache entries");
-          }
-        }
-      }, 10 * 60 * 1000);
+      // Note: SemanticCache handles its own cleanup interval internally
 
     } catch (error) {
       logger.error({ err: error }, "Failed to initialize semantic cache");
@@ -709,63 +746,111 @@ class SecureLLMBridgeMCPServer {
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      try {
-        const { name, arguments: args } = request.params;
+      const requestId = crypto.randomUUID();
+      const startTime = Date.now();
+      const { name, arguments: args } = request.params;
+      
+      // Generate stable cache key
+      const cacheKey = stableStringify({ name, args });
+      const requestSize = Buffer.byteLength(cacheKey, 'utf8');
+      
+      const snapshot: any = {
+        requestId,
+        toolName: name,
+        startTime,
+        requestSize,
+      };
 
+      let permit: any = null;
+
+      try {
         // SEMANTIC CACHE: Check cache before executing tool
+        let cached: any = null;
         if (this.semanticCache) {
-          const cacheKey = JSON.stringify({ name, args });
-          const cached = await this.semanticCache.lookup({
+          const cacheLookupStart = Date.now();
+          cached = await this.semanticCache.lookup({
             toolName: name,
             queryText: cacheKey,
             toolArgs: args,
           });
+          snapshot.cacheLookupTime = Date.now() - cacheLookupStart;
+          snapshot.cacheHit = cached !== null;
 
           if (cached) {
             // Return cached response
+            // Estimate size without full serialization
+            try {
+              snapshot.responseSize = Buffer.byteLength(stringify(cached), 'utf8');
+            } catch {
+              snapshot.responseSize = JSON.stringify(cached).length;
+            }
+            snapshot.totalTime = Date.now() - startTime;
+            snapshot.cacheHit = true;
+            this.toolMetricsCollector.recordSnapshot(snapshot);
             return cached;
           }
         }
 
+        // ACQUIRE PERMIT: Backpressure control
+        const queueWaitStart = Date.now();
+        try {
+          permit = await this.toolLimiter.acquire(name, requestId);
+          snapshot.queueWaitTime = Date.now() - queueWaitStart;
+        } catch (queueError) {
+          snapshot.queueWaitTime = Date.now() - queueWaitStart;
+          snapshot.error = queueError instanceof Error ? queueError.message : String(queueError);
+          snapshot.errorCategory = 'queue_full';
+          snapshot.totalTime = Date.now() - startTime;
+          this.toolMetricsCollector.recordSnapshot(snapshot);
+          throw queueError;
+        }
+
         // PROACTIVE LOGIC: Pre-action checks
         if (this.preActionInterceptor) {
+          const preActionStart = Date.now();
           const interception = await this.preActionInterceptor.intercept(name, args);
+          snapshot.preActionTime = Date.now() - preActionStart;
+          
           if (!interception.shouldProceed) {
             throw new McpError(
               ErrorCode.InvalidParams,
               interception.reason || "Tool execution blocked by proactive checks"
             );
           }
-          // If enrichedArgs were returned, we could use them here, but for now we stick to original args
-          // or we could merge: args = interception.enrichedArgs || args;
         }
 
-        // Execute tool
-        let result;
-        switch (name) {
-          case "provider_test":
-            result = await this.handleProviderTest(args as unknown as ProviderTestArgs);
-            break;
-          case "security_audit":
-            result = await this.handleSecurityAudit(args as unknown as SecurityAuditArgs);
-            break;
-          case "rate_limit_check":
-            result = await this.handleRateLimitCheck(args as unknown as RateLimitCheckArgs);
-            break;
-          case "build_and_test":
-            result = await this.handleBuildAndTest(args as unknown as BuildAndTestArgs);
-            break;
-          case "provider_config_validate":
-            result = await this.handleProviderConfigValidate(args as unknown as ProviderConfigValidateArgs);
-            break;
-          case "crypto_key_generate":
-            result = await this.handleCryptoKeyGenerate(args as unknown as CryptoKeyGenerateArgs);
-            break;
-          case "rate_limiter_status":
-            result = await this.handleRateLimiterStatus();
-            break;
-          case "cache_stats":
-            result = {
+        // DEDUPLICATE: Check for in-flight duplicate requests
+        const executionStart = Date.now();
+        const result = await this.requestDeduplicator.deduplicate(
+          name,
+          { toolName: name, args },
+          async () => {
+            // Execute tool
+            let toolResult;
+            switch (name) {
+                case "provider_test":
+                  toolResult = await this.handleProviderTest(args as unknown as ProviderTestArgs);
+                  break;
+                case "security_audit":
+                  toolResult = await this.handleSecurityAudit(args as unknown as SecurityAuditArgs);
+                  break;
+                case "rate_limit_check":
+                  toolResult = await this.handleRateLimitCheck(args as unknown as RateLimitCheckArgs);
+                  break;
+                case "build_and_test":
+                  toolResult = await this.handleBuildAndTest(args as unknown as BuildAndTestArgs);
+                  break;
+                case "provider_config_validate":
+                  toolResult = await this.handleProviderConfigValidate(args as unknown as ProviderConfigValidateArgs);
+                  break;
+                case "crypto_key_generate":
+                  toolResult = await this.handleCryptoKeyGenerate(args as unknown as CryptoKeyGenerateArgs);
+                  break;
+                case "rate_limiter_status":
+                  toolResult = await this.handleRateLimiterStatus();
+                  break;
+                case "cache_stats":
+                  toolResult = {
               content: [
                 {
                   type: "text",
@@ -777,184 +862,229 @@ class SecureLLMBridgeMCPServer {
               ],
             };
             break;
-          case "package_diagnose":
-            result = await this.handlePackageDiagnose(args);
-            break;
-          case "package_download":
-            result = await this.handlePackageDownload(args);
-            break;
-          case "package_configure":
-            result = await this.handlePackageConfigure(args);
-            break;
-          case "create_session":
-            result = await this.handleCreateSession(args);
-            break;
-          case "save_knowledge":
-            result = await this.handleSaveKnowledge(args);
-            break;
-          case "search_knowledge":
-            result = await this.handleSearchKnowledge(args);
-            break;
-          case "load_session":
-            result = await this.handleLoadSession(args);
-            break;
-          case "list_sessions":
-            result = await this.handleListSessions(args);
-            break;
-          case "get_recent_knowledge":
-            result = await this.handleGetRecentKnowledge(args);
-            break;
-          case "knowledge_maintenance":
-            result = await this.handleKnowledgeMaintenance();
-            break;
+                case "package_diagnose":
+                  toolResult = await this.handlePackageDiagnose(args);
+                  break;
+                case "package_download":
+                  toolResult = await this.handlePackageDownload(args);
+                  break;
+                case "package_configure":
+                  toolResult = await this.handlePackageConfigure(args);
+                  break;
+                case "create_session":
+                  toolResult = await this.handleCreateSession(args);
+                  break;
+                case "save_knowledge":
+                  toolResult = await this.handleSaveKnowledge(args);
+                  break;
+                case "search_knowledge":
+                  toolResult = await this.handleSearchKnowledge(args);
+                  break;
+                case "load_session":
+                  toolResult = await this.handleLoadSession(args);
+                  break;
+                case "list_sessions":
+                  toolResult = await this.handleListSessions(args);
+                  break;
+                case "get_recent_knowledge":
+                  toolResult = await this.handleGetRecentKnowledge(args);
+                  break;
+                case "knowledge_maintenance":
+                  toolResult = await this.handleKnowledgeMaintenance();
+                  break;
 
-          // Emergency Framework handlers
-          case "emergency_status":
-            result = await this.handleEmergencyStatus();
-            break;
-          case "emergency_abort":
-            result = await this.handleEmergencyAbort(args);
-            break;
-          case "emergency_cooldown":
-            result = await this.handleEmergencyCooldown();
-            break;
-          case "emergency_nuke":
-            result = await this.handleEmergencyNuke(args);
-            break;
-          case "emergency_swap":
-            result = await this.handleEmergencySwap();
-            break;
-          case "system_health_check":
-            result = await this.handleSystemHealthCheck(args);
-            break;
-          case "safe_rebuild_check":
-            result = await this.handleSafeRebuildCheck();
-            break;
+                // Emergency Framework handlers
+                case "emergency_status":
+                  toolResult = await this.handleEmergencyStatus();
+                  break;
+                case "emergency_abort":
+                  toolResult = await this.handleEmergencyAbort(args);
+                  break;
+                case "emergency_cooldown":
+                  toolResult = await this.handleEmergencyCooldown();
+                  break;
+                case "emergency_nuke":
+                  toolResult = await this.handleEmergencyNuke(args);
+                  break;
+                case "emergency_swap":
+                  toolResult = await this.handleEmergencySwap();
+                  break;
+                case "system_health_check":
+                  toolResult = await this.handleSystemHealthCheck(args);
+                  break;
+                case "safe_rebuild_check":
+                  toolResult = await this.handleSafeRebuildCheck();
+                  break;
 
-          // Laptop Defense handlers
-          case "thermal_check":
-            result = await this.handleThermalCheck(args);
-            break;
-          case "rebuild_safety_check":
-            result = await this.handleRebuildSafetyCheck();
-            break;
-          case "thermal_forensics":
-            result = await this.handleThermalForensics(args);
-            break;
-          case "thermal_warroom":
-            result = await this.handleThermalWarroom(args);
-            break;
-          case "laptop_verdict":
-            result = await this.handleLaptopVerdict(args);
-            break;
-          case "full_investigation":
-            result = await this.handleFullInvestigation();
-            break;
-          case "force_cooldown":
-            result = await this.handleForceCooldown();
-            break;
-          case "reset_performance":
-            result = await this.handleResetPerformance();
-            break;
+                // Laptop Defense handlers
+                case "thermal_check":
+                  toolResult = await this.handleThermalCheck(args);
+                  break;
+                case "rebuild_safety_check":
+                  toolResult = await this.handleRebuildSafetyCheck();
+                  break;
+                case "thermal_forensics":
+                  toolResult = await this.handleThermalForensics(args);
+                  break;
+                case "thermal_warroom":
+                  toolResult = await this.handleThermalWarroom(args);
+                  break;
+                case "laptop_verdict":
+                  toolResult = await this.handleLaptopVerdict(args);
+                  break;
+                case "full_investigation":
+                  toolResult = await this.handleFullInvestigation();
+                  break;
+                case "force_cooldown":
+                  toolResult = await this.handleForceCooldown();
+                  break;
+                case "reset_performance":
+                  toolResult = await this.handleResetPerformance();
+                  break;
 
-          // Web Search handlers
-          case "web_search":
-            result = await this.handleWebSearch(args);
-            break;
-          case "nix_search":
-            result = await this.handleNixSearch(args);
-            break;
-          case "github_search":
-            result = await this.handleGithubSearch(args);
-            break;
-          case "tech_news_search":
-            result = await this.handleTechNewsSearch(args);
-            break;
-          case "nixos_discourse_search":
-            result = await this.handleDiscourseSearch(args);
-            break;
-          case "stackoverflow_search":
-            result = await this.handleStackOverflowSearch(args);
-            break;
+                // Web Search handlers
+                case "web_search":
+                  toolResult = await this.handleWebSearch(args);
+                  break;
+                case "nix_search":
+                  toolResult = await this.handleNixSearch(args);
+                  break;
+                case "github_search":
+                  toolResult = await this.handleGithubSearch(args);
+                  break;
+                case "tech_news_search":
+                  toolResult = await this.handleTechNewsSearch(args);
+                  break;
+                case "nixos_discourse_search":
+                  toolResult = await this.handleDiscourseSearch(args);
+                  break;
+                case "stackoverflow_search":
+                  toolResult = await this.handleStackOverflowSearch(args);
+                  break;
 
-          // Research Agent handler
-          case "research_agent":
-            result = await handleResearchAgent(args as any);
-            break;
+                // Research Agent handler
+                case "research_agent":
+                  toolResult = await handleResearchAgent(args as any);
+                  break;
 
-          // Codebase Analysis handlers
-          case "analyze_complexity":
-            result = await analyzeComplexity(args as any);
-            break;
-          case "find_dead_code":
-            result = await findDeadCode(args as any);
-            break;
+                // Codebase Analysis handlers
+                case "analyze_complexity":
+                  toolResult = await analyzeComplexity(args as any);
+                  break;
+                case "find_dead_code":
+                  toolResult = await findDeadCode(args as any);
+                  break;
 
-          // Secure Execution handler
-          case "execute_in_sandbox":
-            result = await handleExecuteInSandbox(args as any);
-            break;
+                // Secure Execution handler
+                case "execute_in_sandbox":
+                  toolResult = await handleExecuteInSandbox(args as any);
+                  break;
 
-          // SSH Tool handlers
-          case "ssh_execute":
-            result = await new SSHExecuteTool().execute(args as any);
-            break;
-          case "ssh_file_transfer":
-            result = await new SSHFileTransferTool().execute(args as any);
-            break;
-          case "ssh_maintenance_check":
-            result = await new SSHMaintenanceCheckTool().execute(args as any);
-            break;
-          case "ssh_tunnel":
-            result = await new SSHTunnelTool().execute(args as any);
-            break;
-          case "ssh_jump_host":
-            result = await new SSHJumpHostTool().execute(args as any);
-            break;
-          case "ssh_session_manager":
-            result = await new SSHSessionTool().execute(args as any);
-            break;
+                // SSH Tool handlers
+                case "ssh_execute":
+                  toolResult = await new SSHExecuteTool().execute(args as any);
+                  break;
+                case "ssh_file_transfer":
+                  toolResult = await new SSHFileTransferTool().execute(args as any);
+                  break;
+                case "ssh_maintenance_check":
+                  toolResult = await new SSHMaintenanceCheckTool().execute(args as any);
+                  break;
+                case "ssh_tunnel":
+                  toolResult = await new SSHTunnelTool().execute(args as any);
+                  break;
+                case "ssh_jump_host":
+                  toolResult = await new SSHJumpHostTool().execute(args as any);
+                  break;
+                case "ssh_session_manager":
+                  toolResult = await new SSHSessionTool().execute(args as any);
+                  break;
 
-          // DX Tool handlers
-          case "lint_code":
-            result = await devToolHandlers.lint_code(args as any);
-            break;
-          case "format_code":
-            result = await devToolHandlers.format_code(args as any);
-            break;
-          case "run_tests":
-            result = await devToolHandlers.run_tests(args as any);
-            break;
-          case "github_actions":
-            result = await devToolHandlers.github_actions(args as any);
-            break;
+                // DX Tool handlers
+                case "lint_code":
+                  toolResult = await devToolHandlers.lint_code(args as any);
+                  break;
+                case "format_code":
+                  toolResult = await devToolHandlers.format_code(args as any);
+                  break;
+                case "run_tests":
+                  toolResult = await devToolHandlers.run_tests(args as any);
+                  break;
+                case "github_actions":
+                  toolResult = await devToolHandlers.github_actions(args as any);
+                  break;
 
-          default:
-            throw new McpError(
-              ErrorCode.MethodNotFound,
-              `Unknown tool: ${name}`
-            );
+              default:
+                throw new McpError(
+                  ErrorCode.MethodNotFound,
+                  `Unknown tool: ${name}`
+                );
+            }
+
+            return toolResult;
+          }
+        );
+
+        snapshot.executionTime = Date.now() - executionStart;
+        
+        // Measure response size (lazy: only if needed for metrics)
+        // Use fast-json-stringify if available, otherwise estimate
+        try {
+          const responseStr = stringify(result);
+          snapshot.responseSize = Buffer.byteLength(responseStr, 'utf8');
+        } catch (err) {
+          // Fallback: estimate size from result object
+          snapshot.responseSize = JSON.stringify(result).length;
         }
 
         // SEMANTIC CACHE: Store result for future lookups
         if (this.semanticCache && result) {
-          const cacheKey = JSON.stringify({ name, args });
-          await this.semanticCache.store({
+          // Use async fire-and-forget to avoid blocking response
+          this.semanticCache.store({
             toolName: name,
             queryText: cacheKey,
             toolArgs: args,
             response: result,
+          }).catch(err => {
+            logger.warn({ err, toolName: name }, 'Failed to store in semantic cache');
           });
         }
 
-        return result;
+        snapshot.totalTime = Date.now() - startTime;
+        this.toolMetricsCollector.recordSnapshot(snapshot);
 
+        return result;
       } catch (error) {
+        snapshot.totalTime = Date.now() - startTime;
+        snapshot.error = error instanceof Error ? error.message : String(error);
+        
+        // Classify error
+        if (error instanceof McpError) {
+          snapshot.errorCategory = error.code === ErrorCode.InvalidParams ? 'invalid_params' : 'mcp_error';
+        } else if (error instanceof Error) {
+          if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+            snapshot.errorCategory = 'timeout';
+          } else if (error.message.includes('queue full')) {
+            snapshot.errorCategory = 'queue_full';
+          } else {
+            snapshot.errorCategory = 'unknown';
+          }
+        } else {
+          snapshot.errorCategory = 'unknown';
+        }
+
+        this.toolMetricsCollector.recordSnapshot(snapshot);
+
         if (error instanceof McpError) throw error;
         throw new McpError(
           ErrorCode.InternalError,
           `Tool execution failed: ${error}`
         );
+      } finally {
+        // Release permit if it was acquired
+        if (permit) {
+          permit.release();
+        }
       }
     });
   }
@@ -2247,16 +2377,27 @@ Generate server and client TLS certificates for secure communication.
     if (metricsPort) {
       try {
         const http = await import('http');
+        const metricsHost = process.env.METRICS_HOST || '0.0.0.0'; // Use 0.0.0.0 for K8s
         http.createServer((req, res) => {
           if (req.url === '/metrics') {
             res.writeHead(200, { 'Content-Type': 'text/plain' });
-            res.end(this.rateLimiter.getAggregatePrometheusMetrics());
+            // Combine rate limiter metrics and tool metrics
+            const rateLimiterMetrics = this.rateLimiter.getAggregatePrometheusMetrics();
+            const toolMetrics = this.toolMetricsCollector.getPrometheusMetrics();
+            res.end([rateLimiterMetrics, toolMetrics].filter(Boolean).join('\n\n'));
+          } else if (req.url === '/health') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              status: 'ok',
+              timestamp: new Date().toISOString(),
+              limiter: this.toolLimiter.getStatus(),
+            }));
           } else {
             res.writeHead(404);
             res.end();
           }
-        }).listen(parseInt(metricsPort, 10), '127.0.0.1', () => {
-          logger.info({ port: metricsPort }, "Prometheus metrics server running");
+        }).listen(parseInt(metricsPort, 10), metricsHost, () => {
+          logger.info({ port: metricsPort, host: metricsHost }, "Prometheus metrics server running");
         });
       } catch (err) {
         logger.error({ err }, "Failed to start metrics server");

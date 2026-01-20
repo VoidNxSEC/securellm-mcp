@@ -277,8 +277,11 @@ export class SemanticCache {
       // Generate embedding for query
       const queryEmbedding = await this.generateEmbedding(options.queryText);
 
-      // Find similar cached entries
+      // Find similar cached entries (optimized: limit candidates by recency)
       const now = Date.now();
+      const maxCandidates = parseInt(process.env.SEMANTIC_CACHE_MAX_CANDIDATES || '50', 10);
+      const highSimilarityThreshold = parseFloat(process.env.SEMANTIC_CACHE_HIGH_SIMILARITY_THRESHOLD || '0.95');
+      
       const stmt = this.db.prepare(`
         SELECT id, query_text, query_embedding, tool_name, tool_args, response,
                provider, model, metadata, created_at, expires_at, hit_count, last_accessed_at
@@ -287,15 +290,18 @@ export class SemanticCache {
           AND expires_at > ?
           ${options.provider ? 'AND provider = ?' : ''}
           ${options.model ? 'AND model = ?' : ''}
+        ORDER BY last_accessed_at DESC
+        LIMIT ?
       `);
 
       const params: any[] = [options.toolName, now];
       if (options.provider) params.push(options.provider);
       if (options.model) params.push(options.model);
+      params.push(maxCandidates);
 
       const candidates = stmt.all(...params) as any[];
 
-      // Calculate similarities
+      // Calculate similarities with short-circuit optimization
       let bestMatch: SemanticSearchResult | null = null;
       let bestSimilarity = 0;
 
@@ -313,6 +319,19 @@ export class SemanticCache {
             },
             similarity,
           };
+
+          // Short-circuit: if we found a very high similarity match, stop searching
+          if (similarity >= highSimilarityThreshold) {
+            logger.debug(
+              {
+                toolName: options.toolName,
+                similarity: bestSimilarity.toFixed(3),
+                candidatesChecked: candidates.indexOf(candidate) + 1,
+              },
+              'Semantic cache short-circuit: high similarity match found'
+            );
+            break;
+          }
         }
       }
 
