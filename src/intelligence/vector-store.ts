@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import * as path from 'path';
 
 import { LRUCache } from 'lru-cache';
+import { logger } from '../utils/logger.js';
 
 /**
  * Vector Store with Intelligent Summarization
@@ -117,7 +118,7 @@ export class VectorStore {
       
       return embedding;
     } catch (error) {
-      console.error('[VectorStore] Local embedding failed:', error);
+      logger.warn({ err: error }, '[VectorStore] Local embedding failed');
       // Fallback: use simple hash-based embedding
       return this.fallbackEmbedding(text);
     }
@@ -179,7 +180,7 @@ export class VectorStore {
       
       return summary;
     } catch (error) {
-      console.error('[VectorStore] Local summarization failed:', error);
+      logger.warn({ err: error }, '[VectorStore] Local summarization failed');
       // Fallback: simple truncation
       return content.substring(0, maxTokens * 4) + '...';
     }

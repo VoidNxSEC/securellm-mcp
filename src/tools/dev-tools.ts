@@ -5,6 +5,7 @@ import type { ExtendedTool } from '../types/mcp-tool-extensions.js';
 import { zodToMcpSchema } from '../utils/schema-converter.js';
 import * as path from 'path';
 import * as fs from 'fs';
+import { stringifyGeneric } from '../utils/json-schemas.js';
 
 const execAsync = promisify(exec);
 
@@ -77,7 +78,7 @@ async function handleLintCode(args: z.infer<typeof lintCodeSchema>) {
   return {
     content: [{
       type: 'text',
-      text: JSON.stringify(result, null, 2)
+      text: stringifyGeneric(result)
     }],
     isError: !result.success
   };
@@ -104,7 +105,7 @@ async function handleFormatCode(args: z.infer<typeof formatCodeSchema>) {
   return {
     content: [{
       type: 'text',
-      text: JSON.stringify(result, null, 2)
+      text: stringifyGeneric(result)
     }],
     isError: !result.success
   };
@@ -127,10 +128,10 @@ async function handleRunTests(args: z.infer<typeof runTestsSchema>) {
   return {
     content: [{
       type: 'text',
-      text: JSON.stringify({
+      text: stringifyGeneric({
         ...result,
         summary: result.success ? "Tests passed" : "Tests failed"
-      }, null, 2)
+      })
     }],
     isError: !result.success
   };
@@ -163,7 +164,7 @@ async function handleGithubActions(args: z.infer<typeof manageGithubActionsSchem
 
   const result = await detectAndRun(cmd, cmdArgs);
   return {
-    content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    content: [{ type: 'text', text: stringifyGeneric(result) }],
     isError: !result.success
   };
 }

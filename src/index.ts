@@ -1129,12 +1129,12 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
+            text: stringify({
               provider,
               status: "error",
               error: error.message,
               errorType: error.constructor.name,
-            }, null, 2),
+            }),
           },
         ],
         isError: true,
@@ -1191,7 +1191,7 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: stringify(result),
           },
         ],
       };
@@ -1200,10 +1200,10 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
+            text: stringify({
               status: "error",
               error: error.message,
-            }, null, 2),
+            }),
           },
         ],
         isError: true,
@@ -1253,7 +1253,7 @@ class SecureLLMBridgeMCPServer {
       content: [
         {
           type: "text",
-          text: JSON.stringify(result, null, 2),
+          text: stringify(result),
         },
       ],
     };
@@ -1296,12 +1296,12 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
+            text: stringify({
               test_type,
               status: "success",
               output: result.stdout,
               stderr: result.stderr || null,
-            }, null, 2),
+            }),
           },
         ],
       };
@@ -1310,12 +1310,12 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
+            text: stringify({
               test_type,
               status: "error",
               error: error.message,
               errorType: error.constructor.name,
-            }, null, 2),
+            }),
           },
         ],
         isError: true,
@@ -1358,7 +1358,7 @@ class SecureLLMBridgeMCPServer {
       content: [
         {
           type: "text",
-          text: JSON.stringify(result, null, 2),
+          text: stringify(result),
         },
       ],
     };
@@ -1397,7 +1397,7 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
+            text: stringify({
               key_type,
               output_path: outputDir,
               files: {
@@ -1406,7 +1406,7 @@ class SecureLLMBridgeMCPServer {
               },
               status: "success",
               message: `Generated ${key_type} TLS certificate and key`,
-            }, null, 2),
+            }),
           },
         ],
       };
@@ -1415,11 +1415,11 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
+            text: stringify({
               status: "error",
               error: error.message,
               errorType: error.constructor.name,
-            }, null, 2),
+            }),
           },
         ],
         isError: true,
@@ -1473,7 +1473,7 @@ class SecureLLMBridgeMCPServer {
         {
           uri: "logs://audit",
           mimeType: "application/json",
-          text: JSON.stringify(mockLogs, null, 2),
+          text: stringify(mockLogs),
         },
       ],
     };
@@ -1498,7 +1498,7 @@ class SecureLLMBridgeMCPServer {
         {
           uri: "metrics://usage",
           mimeType: "application/json",
-          text: JSON.stringify(mockMetrics, null, 2),
+          text: stringify(mockMetrics),
         },
       ],
     };
@@ -1519,12 +1519,12 @@ class SecureLLMBridgeMCPServer {
       return {
         content: [{
           type: "text",
-          text: JSON.stringify({ session, message: "Session created successfully" }, null, 2)
+          text: stringify({ session, message: "Session created successfully" })
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1543,12 +1543,12 @@ class SecureLLMBridgeMCPServer {
       return {
         content: [{
           type: "text",
-          text: JSON.stringify({ entry, message: "Knowledge saved successfully" }, null, 2)
+          text: stringify({ entry, message: "Knowledge saved successfully" })
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1572,7 +1572,7 @@ class SecureLLMBridgeMCPServer {
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1604,7 +1604,7 @@ class SecureLLMBridgeMCPServer {
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1623,12 +1623,12 @@ class SecureLLMBridgeMCPServer {
       return {
         content: [{
           type: "text",
-          text: JSON.stringify({ sessions, count: sessions.length }, null, 2)
+          text: stringify({ sessions, count: sessions.length })
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1647,12 +1647,12 @@ class SecureLLMBridgeMCPServer {
       return {
         content: [{
           type: "text",
-          text: JSON.stringify({ entries, count: entries.length }, null, 2)
+          text: stringify({ entries, count: entries.length })
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1672,12 +1672,12 @@ class SecureLLMBridgeMCPServer {
       return {
         content: [{
           type: "text",
-          text: JSON.stringify({ message: "Maintenance completed successfully", stats }, null, 2)
+          text: stringify({ message: "Maintenance completed successfully", stats })
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1733,11 +1733,11 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
+            text: stringify({
               success: true,
               timestamp: new Date().toISOString(),
               providers: status,
-            }, null, 2),
+            }),
           },
         ],
       };
@@ -1746,10 +1746,10 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
+            text: stringify({
               success: false,
               error: error.message,
-            }, null, 2),
+            }),
           },
         ],
         isError: true,
@@ -1767,7 +1767,7 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: stringify(result),
           },
         ],
       };
@@ -1776,10 +1776,10 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
+            text: stringify({
               success: false,
               error: error.message,
-            }, null, 2),
+            }),
           },
         ],
         isError: true,
@@ -1795,7 +1795,7 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: stringify(result),
           },
         ],
       };
@@ -1804,10 +1804,10 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
+            text: stringify({
               success: false,
               error: error.message,
-            }, null, 2),
+            }),
           },
         ],
         isError: true,
@@ -1823,7 +1823,7 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: stringify(result),
           },
         ],
       };
@@ -1832,10 +1832,10 @@ class SecureLLMBridgeMCPServer {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
+            text: stringify({
               success: false,
               error: error.message,
-            }, null, 2),
+            }),
           },
         ],
         isError: true,
@@ -1884,12 +1884,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1901,12 +1901,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1918,12 +1918,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1935,12 +1935,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1952,12 +1952,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1969,12 +1969,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -1986,12 +1986,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2005,12 +2005,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2022,12 +2022,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2039,12 +2039,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2056,12 +2056,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2073,12 +2073,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2090,12 +2090,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2107,12 +2107,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2124,12 +2124,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2143,12 +2143,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2160,12 +2160,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2177,12 +2177,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2194,12 +2194,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2211,12 +2211,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }
@@ -2228,12 +2228,12 @@ Generate server and client TLS certificates for secure communication.
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(result, null, 2)
+          text: stringify(result)
         }]
       };
     } catch (error: any) {
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: error.message }, null, 2) }],
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
         isError: true
       };
     }

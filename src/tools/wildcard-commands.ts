@@ -10,10 +10,28 @@
  * And get executable, context-aware commands instantly.
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { execaCommand } from 'execa';
+import { logger } from '../utils/logger.js';
 
-const execAsync = promisify(exec);
+function hasShellMeta(value: string): boolean {
+  return /[;&|`$<>\n\r]/.test(value) || value.includes('"') || value.includes("'");
+}
+
+function isSafeServiceName(value: string): boolean {
+  return /^[a-zA-Z0-9_.@-]+$/.test(value);
+}
+
+function commandLooksDestructive(cmd: string): boolean {
+  return (
+    /\brm\s+-rf\b/.test(cmd) ||
+    /\bpkill\b/.test(cmd) ||
+    /\bdocker\s+system\s+prune\b/.test(cmd) ||
+    /\bnix-collect-garbage\b/.test(cmd) ||
+    /\bnixos-rebuild\s+switch\b/.test(cmd) ||
+    /\bsystemctl\s+restart\b/.test(cmd) ||
+    /\bjournalctl\s+--vacuum-/.test(cmd)
+  );
+}
 
 interface CommandTemplate {
   pattern: RegExp;
@@ -277,10 +295,14 @@ export class WildcardCommandSystem {
   /**
    * Execute wildcard command
    */
-  async execute(wildcardCommand: string, context: any = {}): Promise<ExecutionResult> {
-    const generated = this.generate(wildcardCommand, context);
+  async execute(
+    wildcardCommand: string,
+    context: any = {},
+    options: { confirm?: boolean } = {}
+  ): Promise<ExecutionResult> {
+    const matched = this.matchTemplate(wildcardCommand);
 
-    if (!generated) {
+    if (!matched) {
       return {
         success: false,
         output: '',
@@ -290,9 +312,53 @@ export class WildcardCommandSystem {
       };
     }
 
-    const { commands, description, riskLevel } = generated;
+    const { name, template, match } = matched;
+
+    // Input validation for templates that interpolate user-provided tokens into shell commands
+    if (name === 'debug-service' || name === 'restart-service' || name === 'analyze-logs') {
+      const service = match[1];
+      if (!service || !isSafeServiceName(service)) {
+        return {
+          success: false,
+          output: '',
+          error: 'Invalid service name. Allowed: letters, numbers, underscore, dot, dash, @',
+          commands: [],
+          riskLevel: 'safe',
+        };
+      }
+    }
+
+    if (name === 'kill-pattern' || name === 'safe-build') {
+      const value = match[1];
+      if (value && hasShellMeta(value)) {
+        return {
+          success: false,
+          output: '',
+          error: 'Input contains potentially unsafe shell metacharacters',
+          commands: [],
+          riskLevel: 'safe',
+        };
+      }
+    }
+
+    const commands = template.generator(match, context);
+    const { description, riskLevel } = template;
+
+    const needsConfirm =
+      riskLevel === 'dangerous' || commands.some((cmd) => commandLooksDestructive(cmd));
+
+    if (needsConfirm && options.confirm !== true) {
+      return {
+        success: false,
+        output: '',
+        error:
+          'Confirmation required before executing potentially destructive commands. Re-run with confirm=true to proceed.',
+        commands,
+        riskLevel,
+      };
+    }
     
-    console.log(`[WildcardCmd] Executing: ${description} (${riskLevel})`);
+    logger.info({ description, riskLevel }, '[WildcardCmd] Executing');
     
     let output = '';
     let hasError = false;
@@ -301,10 +367,12 @@ export class WildcardCommandSystem {
       if (!cmd) continue;
       
       try {
-        console.log(`[WildcardCmd] Running: ${cmd}`);
-        const result = await execAsync(cmd, {
+        logger.info({ cmd }, '[WildcardCmd] Running');
+        const result = await execaCommand(cmd, {
           timeout: 30000,
           maxBuffer: 10 * 1024 * 1024, // 10MB
+          shell: true,
+          reject: false,
         });
         
         output += `$ ${cmd}\n${result.stdout}\n`;
@@ -312,10 +380,14 @@ export class WildcardCommandSystem {
         if (result.stderr) {
           output += `STDERR: ${result.stderr}\n`;
         }
+
+        if (result.failed) {
+          hasError = true;
+        }
       } catch (error: any) {
         hasError = true;
         output += `$ ${cmd}\nERROR: ${error.message}\n`;
-        console.error(`[WildcardCmd] Command failed: ${cmd}`, error.message);
+        logger.warn({ cmd, err: error }, '[WildcardCmd] Command failed');
       }
       
       output += '\n---\n\n';
@@ -364,7 +436,7 @@ export class WildcardCommandSystem {
     // Future enhancement: Consider storing in vector database for semantic search
     // Would enable better pattern matching and intelligent command recommendations
     // For now, log successful patterns for audit trail
-    console.log(`[WildcardCmd] Learned solution for: ${problem}`);
+    logger.info({ problem, commandsCount: commands.length }, '[WildcardCmd] Learned solution');
   }
 }
 

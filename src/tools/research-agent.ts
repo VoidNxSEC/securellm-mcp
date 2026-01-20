@@ -10,6 +10,7 @@
 
 import { deepResearch, type ResearchResult } from "../intelligence/deep-research.js";
 import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
+import { stringifyGeneric } from "../utils/json-schemas.js";
 
 export interface ResearchAgentArgs {
     query: string;
@@ -92,7 +93,7 @@ export async function handleResearchAgent(args: ResearchAgentArgs): Promise<{
             content: [
                 {
                     type: "text",
-                    text: JSON.stringify(response, null, 2),
+                    text: stringifyGeneric(response),
                 },
             ],
         };
@@ -101,11 +102,11 @@ export async function handleResearchAgent(args: ResearchAgentArgs): Promise<{
             content: [
                 {
                     type: "text",
-                    text: JSON.stringify({
+                    text: stringifyGeneric({
                         success: false,
                         error: error.message,
                         query,
-                    }, null, 2),
+                    }),
                 },
             ],
             isError: true,

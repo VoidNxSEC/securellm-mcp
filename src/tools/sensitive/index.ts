@@ -9,6 +9,7 @@ import * as crypto from 'crypto';
 import { faker } from 'faker';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { stringifyGeneric } from '../../utils/json-schemas.js';
 import type {
   DataScanSensitiveArgs,
   DataPseudonymizeArgs,
@@ -160,7 +161,7 @@ export class DataPseudonymizeTool {
           ? data.map(item => this.pseudonymizeObject(item, fields, method, preserve_format))
           : this.pseudonymizeObject(data, fields, method, preserve_format);
         
-        pseudonymized = JSON.stringify(processed, null, 2);
+        pseudonymized = stringifyGeneric(processed);
       } catch {
         // Not JSON, try line-by-line pseudonymization
         const lines = content.split('\n');

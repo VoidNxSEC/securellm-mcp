@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { sandboxManager } from '../security/sandbox-manager.js';
 import { zodToMcpSchema } from '../utils/schema-converter.js';
 import type { ExtendedTool } from '../types/mcp-tool-extensions.js';
+import { stringifyGeneric } from '../utils/json-schemas.js';
 
 export const executeInSandboxSchema = z.object({
   command: z.string().describe('The shell command to execute safely'),
@@ -35,14 +36,14 @@ export async function handleExecuteInSandbox(args: z.infer<typeof executeInSandb
     content: [
       {
         type: 'text',
-        text: JSON.stringify({
+        text: stringifyGeneric({
           status: result.failed ? 'failed' : 'success',
           exitCode: result.exitCode,
           stdout: result.stdout,
           stderr: result.stderr,
           command_executed: result.command,
           isolation: 'pure-nix-shell'
-        }, null, 2)
+        })
       }
     ],
     isError: result.failed

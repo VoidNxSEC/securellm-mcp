@@ -10,6 +10,7 @@
 
 import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 import { PackageSearch } from "./nix/package-search.js";
+import { logger } from "../utils/logger.js";
 
 const packageSearch = new PackageSearch();
 
@@ -509,7 +510,7 @@ export async function handleTechNewsSearch(args: TechNewsArgs) {
           sources.push({ name: "Hacker News", count: hnResults.length });
         }
       } catch (e) {
-        console.error("HN search failed:", e);
+        logger.warn({ err: e }, "HN search failed");
       }
     }
 
@@ -538,7 +539,7 @@ export async function handleTechNewsSearch(args: TechNewsArgs) {
           sources.push({ name: "Reddit r/NixOS", count: redditResults.length });
         }
       } catch (e) {
-        console.error("Reddit search failed:", e);
+        logger.warn({ err: e }, "Reddit search failed");
       }
     }
 

@@ -11,6 +11,7 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { getNixOSHosts, hasNixOSHost } from "./flake-parser.js";
+import { logger } from "./logger.js";
 
 const execAsync = promisify(exec);
 
@@ -35,7 +36,7 @@ async function getSystemHostname(): Promise<string | null> {
     const { stdout } = await execAsync("hostname");
     return stdout.trim();
   } catch (error) {
-    console.warn("Failed to get system hostname:", error);
+    logger.warn({ err: error }, "Failed to get system hostname");
     return null;
   }
 }
@@ -159,8 +160,10 @@ export async function requireNixOSHost(projectRoot: string): Promise<string> {
 
   // Log warnings
   if (result.warnings.length > 0) {
-    console.warn("NixOS Host Detection Warnings:");
-    result.warnings.forEach((warning) => console.warn(`  - ${warning}`));
+    logger.warn(
+      { warnings: result.warnings, projectRoot },
+      "NixOS host detection warnings"
+    );
   }
 
   // Handle errors
@@ -171,8 +174,14 @@ export async function requireNixOSHost(projectRoot: string): Promise<string> {
   }
 
   // Log detection result
-  console.log(
-    `Detected NixOS host: "${result.hostname}" (method: ${result.method}, confidence: ${result.confidence})`
+  logger.info(
+    {
+      hostname: result.hostname,
+      method: result.method,
+      confidence: result.confidence,
+      projectRoot,
+    },
+    "Detected NixOS host"
   );
 
   return result.hostname;

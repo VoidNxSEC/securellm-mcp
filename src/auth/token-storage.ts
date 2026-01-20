@@ -11,7 +11,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { exec } from 'node:child_process';
+import { exec, execSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
   OAuthToken,
@@ -24,6 +24,8 @@ import {
   TokenStorageMetadata,
   TokenStorageResult,
 } from '../types/token-storage.js';
+import { logger } from '../utils/logger.js';
+import { stringifyGeneric } from '../utils/json-schemas.js';
 
 const execAsync = promisify(exec);
 
@@ -34,9 +36,11 @@ export class TokenStorageManager {
   private tokensDir: string;
   private cache: Map<OAuthProvider, OAuthToken> = new Map();
   private readonly SOPS_AVAILABLE: boolean;
+  private readonly ALLOW_PLAINTEXT: boolean;
 
   constructor(tokensDir: string = './secrets/oauth') {
     this.tokensDir = tokensDir;
+    this.ALLOW_PLAINTEXT = process.env.ALLOW_PLAINTEXT_TOKENS === 'true';
     this.SOPS_AVAILABLE = this.checkSOPSAvailability();
   }
 
@@ -45,10 +49,14 @@ export class TokenStorageManager {
    */
   private checkSOPSAvailability(): boolean {
     try {
-      execAsync('which sops');
+      execSync('which sops', { stdio: 'ignore' });
       return true;
     } catch {
-      console.warn('SOPS not available - tokens will be stored unencrypted (DEV ONLY)');
+      if (this.ALLOW_PLAINTEXT) {
+        logger.warn('SOPS not available - tokens will be stored unencrypted (ALLOW_PLAINTEXT_TOKENS=true)');
+      } else {
+        logger.warn('SOPS not available - plaintext token storage disabled (set ALLOW_PLAINTEXT_TOKENS=true to enable)');
+      }
       return false;
     }
   }
@@ -88,7 +96,15 @@ export class TokenStorageManager {
    */
   private async encryptWithSOPS(data: string, filePath: string): Promise<void> {
     if (!this.SOPS_AVAILABLE) {
-      // DEV MODE: Store unencrypted with warning
+      if (!this.ALLOW_PLAINTEXT) {
+        throw new OAuthError(
+          OAuthErrorType.INVALID_CONFIG,
+          'SOPS not available and plaintext token storage is disabled. Set ALLOW_PLAINTEXT_TOKENS=true to allow unencrypted storage.',
+          undefined
+        );
+      }
+
+      // DEV MODE: Store unencrypted (explicit opt-in)
       await fs.writeFile(filePath.replace('.enc.json', '.dev.json'), data, 'utf-8');
       return;
     }
@@ -118,6 +134,14 @@ export class TokenStorageManager {
    */
   private async decryptWithSOPS(filePath: string): Promise<string> {
     if (!this.SOPS_AVAILABLE) {
+      if (!this.ALLOW_PLAINTEXT) {
+        throw new OAuthError(
+          OAuthErrorType.INVALID_CONFIG,
+          'SOPS not available and plaintext token storage is disabled. Set ALLOW_PLAINTEXT_TOKENS=true to allow reading unencrypted tokens.',
+          undefined
+        );
+      }
+
       // DEV MODE: Read unencrypted file
       const devPath = filePath.replace('.enc.json', '.dev.json');
       try {
@@ -159,7 +183,7 @@ export class TokenStorageManager {
       };
 
       const filePath = this.getEncryptedTokenPath(token.provider);
-      await this.encryptWithSOPS(JSON.stringify(storage, null, 2), filePath);
+      await this.encryptWithSOPS(stringifyGeneric(storage), filePath);
 
       // Update cache
       this.cache.set(token.provider, token);
@@ -215,7 +239,7 @@ export class TokenStorageManager {
 
       return token;
     } catch (error) {
-      console.error(`Failed to load token for ${provider}:`, error);
+      logger.error({ err: error, provider }, 'Failed to load token');
       return null;
     }
   }
@@ -279,14 +303,14 @@ export class TokenStorageManager {
               hasRefreshToken: !!token.refreshToken,
             });
           } catch (error) {
-            console.error(`Failed to read token metadata for ${provider}:`, error);
+            logger.warn({ err: error, provider }, 'Failed to read token metadata');
           }
         }
       }
 
       return metadata;
     } catch (error) {
-      console.error('Failed to list tokens:', error);
+      logger.error({ err: error }, 'Failed to list tokens');
       return [];
     }
   }

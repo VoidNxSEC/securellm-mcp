@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { readFileSync, statSync, readdirSync } from 'fs';
 import { join, extname } from 'path';
+import { stringifyGeneric } from '../utils/json-schemas.js';
 
 /**
  * Codebase Analysis Tools
@@ -57,12 +58,12 @@ export async function analyzeComplexity(args: { path: string }) {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
+            text: stringifyGeneric({
               file: path,
               complexity,
               lines,
               rating: complexity > 20 ? 'HIGH' : complexity > 10 ? 'MEDIUM' : 'LOW'
-            }, null, 2)
+            })
           }
         ]
       };
@@ -83,10 +84,10 @@ export async function analyzeComplexity(args: { path: string }) {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({
+          text: stringifyGeneric({
             totalFiles: files.length,
             mostComplex: results
-          }, null, 2)
+          })
         }
       ]
     };

@@ -13,6 +13,7 @@
 
 import * as fs from "fs/promises";
 import * as path from "path";
+import { logger } from "./logger.js";
 
 export interface ProjectDetectionResult {
   projectRoot: string;
@@ -70,8 +71,9 @@ export async function detectProjectRoot(): Promise<ProjectDetectionResult> {
         flakeFound,
       };
     } catch {
-      console.warn(
-        `MCP_WORKDIR set to "${mcpWorkDir}" but directory is not accessible. Falling back.`
+      logger.warn(
+        { mcpWorkDir },
+        'MCP_WORKDIR set but directory is not accessible. Falling back.'
       );
     }
   }
@@ -93,8 +95,9 @@ export async function detectProjectRoot(): Promise<ProjectDetectionResult> {
         flakeFound,
       };
     } catch {
-      console.warn(
-        `PROJECT_ROOT env var set to "${envProjectRoot}" but directory is not accessible. Falling back to auto-detection.`
+      logger.warn(
+        { envProjectRoot },
+        'PROJECT_ROOT env var set but directory is not accessible. Falling back to auto-detection.'
       );
     }
   }
@@ -112,11 +115,12 @@ export async function detectProjectRoot(): Promise<ProjectDetectionResult> {
   }
 
   // Priority 4: Fallback to current working directory
-  console.warn(
-    `No flake.nix found in directory tree. Using cwd as project root: ${cwd}`
+  logger.warn(
+    { cwd },
+    'No flake.nix found in directory tree. Using cwd as project root.'
   );
-  console.warn(
-    "Consider setting MCP_WORKDIR environment variable for explicit configuration."
+  logger.warn(
+    'Consider setting MCP_WORKDIR environment variable for explicit configuration.'
   );
 
   return {
