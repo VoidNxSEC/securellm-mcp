@@ -237,7 +237,7 @@ mcpServer = pkgs.buildNpmPackage {
   npmDepsHash = "sha256-ce57xZB+0QcQr1QLn1V8AA/y4Vxa+kehijTh1xwfV+M=";
 
   # Native module compilation (better-sqlite3)
-  buildInputs = [ sqlite python3 pkg-config ];
+  buildInputs = [ sqlite python313 pkg-config ];
 
   # Deterministic builds - same input = same output
 };

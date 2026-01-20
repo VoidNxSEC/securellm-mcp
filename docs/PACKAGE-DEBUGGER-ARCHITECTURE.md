@@ -233,7 +233,7 @@ in
         # Auto-detected dependencies
         nativeBuildInputs = with pkgs; [
           pkg-config
-          python3
+          python313
         ];
         
         buildInputs = with pkgs; [
@@ -355,7 +355,7 @@ If successful:
 1. Parse error for dependency hints:
    - "pkg-config: command not found" → add `pkg-config`
    - "libsecret-1" in error → add `libsecret`
-   - "gyp" errors → add `python3`
+   - "gyp" errors → add `python313`
    - ".so not found" → identify library package
 2. Query nixpkgs for package names
 3. Generate nativeBuildInputs/buildInputs lists
@@ -366,14 +366,14 @@ If successful:
 {
   "status": "dependencies_identified",
   "missing_dependencies": {
-    "nativeBuildInputs": ["pkg-config", "python3"],
+    "nativeBuildInputs": ["pkg-config", "python313"],
     "buildInputs": ["libsecret"]
   },
   "patch": {
     "file": "modules/packages/js-packages/gemini-cli.nix",
     "location": "line 33",
     "add_after": "npmDepsHash = \"...\";",
-    "content": "nativeBuildInputs = with pkgs; [\n  pkg-config\n  python3\n];\n\nbuildInputs = with pkgs; [\n  libsecret\n];"
+    "content": "nativeBuildInputs = with pkgs; [\n  pkg-config\n  python313\n];\n\nbuildInputs = with pkgs; [\n  libsecret\n];"
   }
 }
 ```
@@ -481,7 +481,7 @@ const ERROR_PATTERNS = {
   NPM_GYP_ERROR: {
     regex: /gyp ERR!/,
     fix: "ADD_BUILD_TOOLS",
-    dependencies: { type: "nativeBuildInputs", packages: ["python3", "pkg-config"] }
+    dependencies: { type: "nativeBuildInputs", packages: ["python313", "pkg-config"] }
   }
 };
 ```
