@@ -67,9 +67,9 @@ export class ErrorClassifier {
                 severity: "critical",
                 extractor: () => ({
                     dependency_type: "nativeBuildInputs",
-                    packages: ["python3", "pkg-config"],
+                    packages: ["python313", "pkg-config"],
                 }),
-                suggestion: "Add build tools (python3, pkg-config) to nativeBuildInputs for native module compilation",
+                suggestion: "Add build tools (python313, pkg-config) to nativeBuildInputs for native module compilation",
             },
             {
                 name: "python_not_found",
@@ -78,9 +78,9 @@ export class ErrorClassifier {
                 severity: "critical",
                 extractor: () => ({
                     dependency_type: "nativeBuildInputs",
-                    packages: ["python3"],
+                    packages: ["python313"],
                 }),
-                suggestion: "Add python3 to nativeBuildInputs",
+                suggestion: "Add python313 to nativeBuildInputs",
             },
             {
                 name: "missing_libsecret",
@@ -122,7 +122,9 @@ export class ErrorClassifier {
     classifyAllErrors(errorLog) {
         const issues = [];
         for (const pattern of this.patterns) {
-            const matches = [...errorLog.matchAll(new RegExp(pattern.regex.source, pattern.regex.flags + 'g'))];
+            const matches = [
+                ...errorLog.matchAll(new RegExp(pattern.regex.source, pattern.regex.flags + "g")),
+            ];
             for (const match of matches) {
                 const extracted = pattern.extractor ? pattern.extractor(match) : {};
                 issues.push({
@@ -195,9 +197,9 @@ export class ErrorClassifier {
             case "broken_symlinks":
                 return "Remove broken symlinks in postInstall phase";
             case "npm_gyp_error":
-                return "Add python3 and pkg-config to nativeBuildInputs";
+                return "Add python313 and pkg-config to nativeBuildInputs";
             case "python_not_found":
-                return "Add python3 to nativeBuildInputs";
+                return "Add python313 to nativeBuildInputs";
             case "missing_libsecret":
                 return "Add libsecret to buildInputs";
             default:
@@ -211,7 +213,7 @@ export class ErrorClassifier {
             case "CHECK_EXECUTABLE_PATH":
                 return "apply_diff to update executable path to correct file location";
             case "ADD_DEPENDENCY":
-                return `apply_diff to add ${extracted.packages?.join(', ')} to ${extracted.dependency_type}`;
+                return `apply_diff to add ${extracted.packages?.join(", ")} to ${extracted.dependency_type}`;
             case "CLEAN_SYMLINK":
                 return `apply_diff to add 'rm -f ${extracted.symlink_path}' to postInstall`;
             case "ADD_BUILD_TOOLS":

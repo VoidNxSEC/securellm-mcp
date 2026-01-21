@@ -400,7 +400,7 @@ pkgs.buildNpmPackage {
   npmDepsHash = ""; # Run build once to get this hash
 
   # Add native dependencies if needed
-  # nativeBuildInputs = with pkgs; [ pkg-config python3 ];
+  # nativeBuildInputs = with pkgs; [ pkg-config python313 ];
   # buildInputs = with pkgs; [ libsecret ];
 
   meta = with pkgs.lib; {

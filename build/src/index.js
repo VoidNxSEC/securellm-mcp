@@ -23,6 +23,8 @@ import { laptopDefenseTools, handleThermalCheck, handleRebuildSafetyCheck, handl
 import { webSearchTools, handleWebSearch, handleNixSearch, handleGithubSearch, handleTechNewsSearch, handleDiscourseSearch, handleStackOverflowSearch, getNixCacheStats, } from "./tools/web-search.js";
 import { researchAgentTool, handleResearchAgent, } from "./tools/research-agent.js";
 import { analyzeComplexity, findDeadCode, analyzeComplexitySchema, findDeadCodeSchema, } from "./tools/codebase-analysis.js";
+import { advancedCodeAnalysisTool, handleAdvancedCodeAnalysis, } from "./tools/advanced-code-analysis.js";
+import { socketDebugReportTool, handleSocketDebugReport, } from "./tools/socket-debug-report.js";
 import { zodToMcpSchema } from "./utils/schema-converter.js";
 import { devTools, devToolHandlers } from "./tools/dev-tools.js";
 import { sshExecuteSchema, sshFileTransferSchema, sshMaintenanceCheckSchema, sshTunnelSchema, sshJumpHostSchema, sshSessionSchema, SSHExecuteTool, SSHFileTransferTool, SSHMaintenanceCheckTool, SSHTunnelTool, SSHJumpHostTool, SSHSessionTool, } from "./tools/ssh/index.js";
@@ -550,6 +552,10 @@ class SecureLLMBridgeMCPServer {
                     defer_loading: true,
                     inputSchema: zodToMcpSchema(findDeadCodeSchema),
                 },
+                // Advanced Code Analysis Tool (low-friction debugging)
+                advancedCodeAnalysisTool,
+                // Read-only socket debugging report (for human decision-making)
+                socketDebugReportTool,
                 // Add Secure Execution Tool
                 executeInSandboxTool,
                 // Add SSH Tools
@@ -803,6 +809,12 @@ class SecureLLMBridgeMCPServer {
                             break;
                         case "find_dead_code":
                             toolResult = await findDeadCode(args);
+                            break;
+                        case "advanced_code_analysis":
+                            toolResult = await handleAdvancedCodeAnalysis(args);
+                            break;
+                        case "socket_debug_report":
+                            toolResult = await handleSocketDebugReport(args);
                             break;
                         // Secure Execution handler
                         case "execute_in_sandbox":

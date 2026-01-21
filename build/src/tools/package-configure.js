@@ -141,7 +141,7 @@ export class PackageConfigureTool {
         const dependencies = [];
         // Check for common native dependencies
         if (inspection.hasNativeModules) {
-            dependencies.push("python3", "pkg-config");
+            dependencies.push("python313", "pkg-config");
         }
         if (inspection.needsLibsecret) {
             dependencies.push("libsecret");
@@ -169,12 +169,12 @@ pkgs.buildNpmPackage {
 
   ${dependencies.length > 0 ? `# Native build dependencies
   nativeBuildInputs = with pkgs; [
-    ${dependencies.filter(d => ["python3", "pkg-config"].includes(d)).join("\n    ")}
+    ${dependencies.filter(d => ["python313", "pkg-config"].includes(d)).join("\n    ")}
   ];
 
   # Runtime dependencies
   buildInputs = with pkgs; [
-    ${dependencies.filter(d => !["python3", "pkg-config"].includes(d)).join("\n    ")}
+    ${dependencies.filter(d => !["python313", "pkg-config"].includes(d)).join("\n    ")}
   ];` : ""}
 
   ${inspection.hasBrokenSymlinks ? `# Clean up broken symlinks from monorepo structure

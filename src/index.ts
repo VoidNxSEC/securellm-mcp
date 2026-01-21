@@ -70,6 +70,14 @@ import {
   findDeadCodeSchema,
   mapDependenciesSchema,
 } from "./tools/codebase-analysis.js";
+import {
+  advancedCodeAnalysisTool,
+  handleAdvancedCodeAnalysis,
+} from "./tools/advanced-code-analysis.js";
+import {
+  socketDebugReportTool,
+  handleSocketDebugReport,
+} from "./tools/socket-debug-report.js";
 import { zodToMcpSchema } from "./utils/schema-converter.js";
 import { devTools, devToolHandlers } from "./tools/dev-tools.js";
 import {
@@ -701,6 +709,10 @@ class SecureLLMBridgeMCPServer {
           defer_loading: true,
           inputSchema: zodToMcpSchema(findDeadCodeSchema),
         },
+        // Advanced Code Analysis Tool (low-friction debugging)
+        advancedCodeAnalysisTool,
+        // Read-only socket debugging report (for human decision-making)
+        socketDebugReportTool,
         // Add Secure Execution Tool
         executeInSandboxTool,
         // Add SSH Tools
@@ -973,6 +985,12 @@ class SecureLLMBridgeMCPServer {
                   break;
                 case "find_dead_code":
                   toolResult = await findDeadCode(args as any);
+                  break;
+                case "advanced_code_analysis":
+                  toolResult = await handleAdvancedCodeAnalysis(args as any);
+                  break;
+                case "socket_debug_report":
+                  toolResult = await handleSocketDebugReport(args as any);
                   break;
 
                 // Secure Execution handler
