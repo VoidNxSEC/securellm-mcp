@@ -1,6 +1,6 @@
 /**
  * Token Storage Manager - Handles SOPS-encrypted OAuth token persistence
- * 
+ *
  * Features:
  * - SOPS encryption/decryption for tokens at rest
  * - Automatic token refresh on load
@@ -9,23 +9,18 @@
  * - Metadata tracking
  */
 
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { exec, execSync } from 'node:child_process';
-import { promisify } from 'node:util';
-import {
-  OAuthToken,
-  OAuthProvider,
-  OAuthError,
-  OAuthErrorType,
-} from '../types/oauth.js';
+import fs from "node:fs/promises";
+import path from "node:path";
+import { exec, execSync } from "node:child_process";
+import { promisify } from "node:util";
+import { OAuthToken, OAuthProvider, OAuthError, OAuthErrorType } from "../types/oauth.js";
 import {
   EncryptedTokenStorage,
   TokenStorageMetadata,
   TokenStorageResult,
-} from '../types/token-storage.js';
-import { logger } from '../utils/logger.js';
-import { stringifyGeneric } from '../utils/json-schemas.js';
+} from "../types/token-storage.js";
+import { logger } from "../utils/logger.js";
+import { stringifyGeneric } from "../utils/json-schemas.js";
 
 const execAsync = promisify(exec);
 
@@ -38,9 +33,9 @@ export class TokenStorageManager {
   private readonly SOPS_AVAILABLE: boolean;
   private readonly ALLOW_PLAINTEXT: boolean;
 
-  constructor(tokensDir: string = './secrets/oauth') {
+  constructor(tokensDir: string = "./secrets/oauth") {
     this.tokensDir = tokensDir;
-    this.ALLOW_PLAINTEXT = process.env.ALLOW_PLAINTEXT_TOKENS === 'true';
+    this.ALLOW_PLAINTEXT = process.env.ALLOW_PLAINTEXT_TOKENS === "true";
     this.SOPS_AVAILABLE = this.checkSOPSAvailability();
   }
 
@@ -49,13 +44,17 @@ export class TokenStorageManager {
    */
   private checkSOPSAvailability(): boolean {
     try {
-      execSync('which sops', { stdio: 'ignore' });
+      execSync("which sops", { stdio: "ignore" });
       return true;
     } catch {
       if (this.ALLOW_PLAINTEXT) {
-        logger.warn('SOPS not available - tokens will be stored unencrypted (ALLOW_PLAINTEXT_TOKENS=true)');
+        logger.warn(
+          "SOPS not available - tokens will be stored unencrypted (ALLOW_PLAINTEXT_TOKENS=true)"
+        );
       } else {
-        logger.warn('SOPS not available - plaintext token storage disabled (set ALLOW_PLAINTEXT_TOKENS=true to enable)');
+        logger.warn(
+          "SOPS not available - plaintext token storage disabled (set ALLOW_PLAINTEXT_TOKENS=true to enable)"
+        );
       }
       return false;
     }
@@ -70,9 +69,9 @@ export class TokenStorageManager {
     } catch (error) {
       throw new OAuthError(
         OAuthErrorType.NETWORK_ERROR,
-        `Failed to create tokens directory: ${error}`,
+        `Failed to create tokens directory: ${error instanceof Error ? error.message : String(error)}`,
         undefined,
-        error as Error
+        error instanceof Error ? error : undefined
       );
     }
   }
@@ -99,32 +98,34 @@ export class TokenStorageManager {
       if (!this.ALLOW_PLAINTEXT) {
         throw new OAuthError(
           OAuthErrorType.INVALID_CONFIG,
-          'SOPS not available and plaintext token storage is disabled. Set ALLOW_PLAINTEXT_TOKENS=true to allow unencrypted storage.',
+          "SOPS not available and plaintext token storage is disabled. Set ALLOW_PLAINTEXT_TOKENS=true to allow unencrypted storage.",
           undefined
         );
       }
 
       // DEV MODE: Store unencrypted (explicit opt-in)
-      await fs.writeFile(filePath.replace('.enc.json', '.dev.json'), data, 'utf-8');
+      await fs.writeFile(filePath.replace(".enc.json", ".dev.json"), data, "utf-8");
       return;
     }
 
     try {
       // Write plaintext temporarily
       const tempPath = `${filePath}.tmp`;
-      await fs.writeFile(tempPath, data, 'utf-8');
+      await fs.writeFile(tempPath, data, "utf-8");
 
       // Encrypt with SOPS
-      await execAsync(`sops --encrypt --input-type json --output-type json ${tempPath} > ${filePath}`);
+      await execAsync(
+        `sops --encrypt --input-type json --output-type json ${tempPath} > ${filePath}`
+      );
 
       // Remove plaintext
       await fs.unlink(tempPath);
     } catch (error) {
       throw new OAuthError(
         OAuthErrorType.NETWORK_ERROR,
-        `SOPS encryption failed: ${error}`,
+        `SOPS encryption failed: ${error instanceof Error ? error.message : String(error)}`,
         undefined,
-        error as Error
+        error instanceof Error ? error : undefined
       );
     }
   }
@@ -137,19 +138,19 @@ export class TokenStorageManager {
       if (!this.ALLOW_PLAINTEXT) {
         throw new OAuthError(
           OAuthErrorType.INVALID_CONFIG,
-          'SOPS not available and plaintext token storage is disabled. Set ALLOW_PLAINTEXT_TOKENS=true to allow reading unencrypted tokens.',
+          "SOPS not available and plaintext token storage is disabled. Set ALLOW_PLAINTEXT_TOKENS=true to allow reading unencrypted tokens.",
           undefined
         );
       }
 
       // DEV MODE: Read unencrypted file
-      const devPath = filePath.replace('.enc.json', '.dev.json');
+      const devPath = filePath.replace(".enc.json", ".dev.json");
       try {
-        return await fs.readFile(devPath, 'utf-8');
+        return await fs.readFile(devPath, "utf-8");
       } catch {
         throw new OAuthError(
           OAuthErrorType.NETWORK_ERROR,
-          'Token file not found (DEV mode)',
+          "Token file not found (DEV mode)",
           undefined
         );
       }
@@ -161,9 +162,9 @@ export class TokenStorageManager {
     } catch (error) {
       throw new OAuthError(
         OAuthErrorType.NETWORK_ERROR,
-        `SOPS decryption failed: ${error}`,
+        `SOPS decryption failed: ${error instanceof Error ? error.message : String(error)}`,
         undefined,
-        error as Error
+        error instanceof Error ? error : undefined
       );
     }
   }
@@ -179,7 +180,7 @@ export class TokenStorageManager {
         encrypted: JSON.stringify(token),
         provider: token.provider,
         storedAt: Date.now(),
-        sopsVersion: this.SOPS_AVAILABLE ? 'sops-encrypted' : 'dev-unencrypted',
+        sopsVersion: this.SOPS_AVAILABLE ? "sops-encrypted" : "dev-unencrypted",
       };
 
       const filePath = this.getEncryptedTokenPath(token.provider);
@@ -200,7 +201,7 @@ export class TokenStorageManager {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -222,7 +223,7 @@ export class TokenStorageManager {
         await fs.access(filePath);
       } catch {
         // Try dev file if encrypted doesn't exist
-        const devPath = filePath.replace('.enc.json', '.dev.json');
+        const devPath = filePath.replace(".enc.json", ".dev.json");
         try {
           await fs.access(devPath);
         } catch {
@@ -231,15 +232,15 @@ export class TokenStorageManager {
       }
 
       const decrypted = await this.decryptWithSOPS(filePath);
-      const storage: EncryptedTokenStorage = JSON.parse(decrypted);
-      const token: OAuthToken = JSON.parse(storage.encrypted);
+      const storage = JSON.parse(decrypted) as EncryptedTokenStorage;
+      const token = JSON.parse(storage.encrypted) as OAuthToken;
 
       // Update cache
       this.cache.set(provider, token);
 
       return token;
     } catch (error) {
-      logger.error({ err: error, provider }, 'Failed to load token');
+      logger.error({ err: error, provider }, "Failed to load token");
       return null;
     }
   }
@@ -250,7 +251,7 @@ export class TokenStorageManager {
   public async deleteToken(provider: OAuthProvider): Promise<TokenStorageResult> {
     try {
       const filePath = this.getEncryptedTokenPath(provider);
-      const devPath = filePath.replace('.enc.json', '.dev.json');
+      const devPath = filePath.replace(".enc.json", ".dev.json");
 
       // Try to delete both encrypted and dev files
       try {
@@ -272,7 +273,7 @@ export class TokenStorageManager {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -287,14 +288,14 @@ export class TokenStorageManager {
       const metadata: TokenStorageMetadata[] = [];
 
       for (const file of files) {
-        if (file.endsWith('.enc.json') || file.endsWith('.dev.json')) {
-          const provider = file.split('.')[0] as OAuthProvider;
+        if (file.endsWith(".enc.json") || file.endsWith(".dev.json")) {
+          const provider = file.split(".")[0] as OAuthProvider;
           const filePath = path.join(this.tokensDir, file);
 
           try {
             const decrypted = await this.decryptWithSOPS(filePath);
-            const storage: EncryptedTokenStorage = JSON.parse(decrypted);
-            const token: OAuthToken = JSON.parse(storage.encrypted);
+            const storage = JSON.parse(decrypted) as EncryptedTokenStorage;
+            const token = JSON.parse(storage.encrypted) as OAuthToken;
 
             metadata.push({
               provider: token.provider,
@@ -303,14 +304,14 @@ export class TokenStorageManager {
               hasRefreshToken: !!token.refreshToken,
             });
           } catch (error) {
-            logger.warn({ err: error, provider }, 'Failed to read token metadata');
+            logger.warn({ err: error, provider }, "Failed to read token metadata");
           }
         }
       }
 
       return metadata;
     } catch (error) {
-      logger.error({ err: error }, 'Failed to list tokens');
+      logger.error({ err: error }, "Failed to list tokens");
       return [];
     }
   }
@@ -325,7 +326,7 @@ export class TokenStorageManager {
 
     try {
       const filePath = this.getEncryptedTokenPath(provider);
-      const devPath = filePath.replace('.enc.json', '.dev.json');
+      const devPath = filePath.replace(".enc.json", ".dev.json");
 
       try {
         await fs.access(filePath);

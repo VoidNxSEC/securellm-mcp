@@ -8,8 +8,8 @@
  * - In-memory caching for performance
  * - Metadata tracking
  */
-import { OAuthToken, OAuthProvider } from '../types/oauth.js';
-import { TokenStorageMetadata, TokenStorageResult } from '../types/token-storage.js';
+import { OAuthToken, OAuthProvider } from "../types/oauth.js";
+import { TokenStorageMetadata, TokenStorageResult } from "../types/token-storage.js";
 /**
  * Token Storage Manager with SOPS encryption
  */

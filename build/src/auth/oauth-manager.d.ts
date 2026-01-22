@@ -8,7 +8,7 @@
  * - State management for CSRF protection
  * - Token validation and expiration checks
  */
-import { OAuthConfig, OAuthToken, OAuthState, OAuthTokenRequest, OAuthProvider } from '../types/oauth.js';
+import { OAuthConfig, OAuthToken, OAuthState, OAuthTokenRequest, OAuthProvider, OAuthTokenResponse } from "../types/oauth.js";
 /**
  * Base OAuth Manager for handling OAuth 2.0 flows
  */
@@ -52,7 +52,7 @@ export declare abstract class OAuthManager {
     /**
      * Parse token response from provider
      */
-    protected parseTokenResponse(data: any): OAuthToken;
+    protected parseTokenResponse(data: OAuthTokenResponse): OAuthToken;
     /**
      * Refresh an access token using refresh token
      */

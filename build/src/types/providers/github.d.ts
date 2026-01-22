@@ -27,7 +27,58 @@ export interface GitHubUser {
 /**
  * GitHub OAuth scopes
  */
-export type GitHubScope = 'repo' | 'repo:status' | 'public_repo' | 'user' | 'user:email' | 'read:user' | 'gist' | 'workflow';
+export type GitHubScope = "repo" | "repo:status" | "public_repo" | "user" | "user:email" | "read:user" | "gist" | "workflow";
+/**
+ * GitHub user email information
+ */
+export interface GitHubUserEmail {
+    /** Email address */
+    email: string;
+    /** Whether this is the primary email */
+    primary: boolean;
+    /** Whether this email is verified */
+    verified: boolean;
+    /** Email visibility */
+    visibility: string | null;
+}
+/**
+ * GitHub repository information (simplified)
+ */
+export interface GitHubRepository {
+    id: number;
+    name: string;
+    full_name: string;
+    owner: {
+        login: string;
+        id: number;
+        avatar_url: string;
+    };
+    private: boolean;
+    html_url: string;
+    description: string | null;
+    fork: boolean;
+    created_at: string;
+    updated_at: string;
+    pushed_at: string;
+}
+/**
+ * GitHub gist information (simplified)
+ */
+export interface GitHubGist {
+    id: string;
+    html_url: string;
+    public: boolean;
+    created_at: string;
+    updated_at: string;
+    description: string | null;
+    files: Record<string, {
+        filename: string;
+        type: string;
+        language: string | null;
+        raw_url: string;
+        size: number;
+    }>;
+}
 /**
  * GitHub API endpoints
  */

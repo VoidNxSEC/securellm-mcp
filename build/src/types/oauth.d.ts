@@ -4,7 +4,7 @@
 /**
  * Supported OAuth providers
  */
-export type OAuthProvider = 'github' | 'gitlab' | 'google';
+export type OAuthProvider = "github" | "gitlab" | "google";
 /**
  * OAuth 2.0 configuration for a provider
  */
@@ -75,6 +75,21 @@ export declare enum OAuthErrorType {
     REFRESH_FAILED = "refresh_failed",
     PROVIDER_ERROR = "provider_error",
     NETWORK_ERROR = "network_error"
+}
+/**
+ * Raw OAuth token response from provider
+ */
+export interface OAuthTokenResponse {
+    /** Access token */
+    access_token: string;
+    /** Refresh token (optional) */
+    refresh_token?: string;
+    /** Token type (usually "Bearer") */
+    token_type?: string;
+    /** Token lifetime in seconds */
+    expires_in?: number;
+    /** Granted scopes */
+    scope?: string;
 }
 /**
  * OAuth error with context

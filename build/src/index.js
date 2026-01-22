@@ -21,23 +21,24 @@ import { ProjectWatcher } from "./system/watcher.js";
 import { emergencyTools, handleEmergencyStatus, handleEmergencyAbort, handleEmergencyCooldown, handleEmergencyNuke, handleEmergencySwap, handleSystemHealthCheck, handleSafeRebuildCheck, } from "./tools/emergency/index.js";
 import { laptopDefenseTools, handleThermalCheck, handleRebuildSafetyCheck, handleThermalForensics, handleThermalWarroom, handleLaptopVerdict, handleFullInvestigation, handleForceCooldown, handleResetPerformance, } from "./tools/laptop-defense/index.js";
 import { webSearchTools, handleWebSearch, handleNixSearch, handleGithubSearch, handleTechNewsSearch, handleDiscourseSearch, handleStackOverflowSearch, getNixCacheStats, } from "./tools/web-search.js";
-import { researchAgentTool, handleResearchAgent, } from "./tools/research-agent.js";
+import { researchAgentTool, handleResearchAgent } from "./tools/research-agent.js";
 import { analyzeComplexity, findDeadCode, analyzeComplexitySchema, findDeadCodeSchema, } from "./tools/codebase-analysis.js";
 import { advancedCodeAnalysisTool, handleAdvancedCodeAnalysis, } from "./tools/advanced-code-analysis.js";
-import { socketDebugReportTool, handleSocketDebugReport, } from "./tools/socket-debug-report.js";
+import { socketDebugReportTool, handleSocketDebugReport } from "./tools/socket-debug-report.js";
 import { zodToMcpSchema } from "./utils/schema-converter.js";
 import { devTools, devToolHandlers } from "./tools/dev-tools.js";
 import { sshExecuteSchema, sshFileTransferSchema, sshMaintenanceCheckSchema, sshTunnelSchema, sshJumpHostSchema, sshSessionSchema, SSHExecuteTool, SSHFileTransferTool, SSHMaintenanceCheckTool, SSHTunnelTool, SSHJumpHostTool, SSHSessionTool, } from "./tools/ssh/index.js";
-import { executeInSandboxTool, handleExecuteInSandbox, } from "./tools/secure-execution.js";
+import { executeInSandboxTool, handleExecuteInSandbox } from "./tools/secure-execution.js";
+import { BrowserLaunchAdvancedTool, BrowserExtractDataTool, BrowserInteractFormTool, BrowserMonitorChangesTool, BrowserSearchAggregateTool, browserLaunchAdvancedSchema, browserExtractDataSchema, browserInteractFormSchema, browserMonitorChangesSchema, browserSearchAggregateSchema, } from "./tools/browser/index.js";
 import { SemanticCache } from "./middleware/semantic-cache.js";
 import { ContextManager } from "./reasoning/context-manager.js";
 import { PreActionInterceptor } from "./reasoning/proactive/pre-action-interceptor.js";
-import { stringifyGeneric, } from './utils/json-schemas.js';
+import { stringifyGeneric } from "./utils/json-schemas.js";
 import { ToolMetricsCollector } from "./middleware/tool-metrics.js";
 import { ToolExecutionLimiter } from "./middleware/tool-limiter.js";
 import { RequestDeduplicator, stableStringify } from "./middleware/request-deduplicator.js";
 import crypto from "crypto";
-const shouldPrettyPrint = process.env.NODE_ENV === 'development';
+const shouldPrettyPrint = process.env.NODE_ENV === "development";
 function stringify(obj) {
     if (shouldPrettyPrint) {
         return JSON.stringify(obj, null, 2);
@@ -49,7 +50,7 @@ const execAsync = promisify(exec);
 const PROJECT_ROOT = process.env.PROJECT_ROOT || process.cwd();
 const KNOWLEDGE_DB_PATH = process.env.KNOWLEDGE_DB_PATH ||
     path.join(process.env.HOME || process.env.USERPROFILE || ".", ".local/share/securellm/knowledge.db");
-const ENABLE_KNOWLEDGE = process.env.ENABLE_KNOWLEDGE !== 'false';
+const ENABLE_KNOWLEDGE = process.env.ENABLE_KNOWLEDGE !== "false";
 // Provider API keys from environment (loaded from SOPS-decrypted secrets)
 const API_KEYS = {
     anthropic: process.env.ANTHROPIC_API_KEY || "",
@@ -79,6 +80,26 @@ class SecureLLMBridgeMCPServer {
     toolMetricsCollector;
     toolLimiter;
     requestDeduplicator;
+    /**
+     * Parse tool configuration from environment variable
+     * Format: "tool1:value1,tool2:value2"
+     */
+    parseToolConfig(envValue) {
+        if (!envValue)
+            return {};
+        const config = {};
+        const pairs = envValue.split(",");
+        for (const pair of pairs) {
+            const [tool, value] = pair.split(":").map((s) => s.trim());
+            if (tool && value) {
+                const numValue = parseInt(value, 10);
+                if (!isNaN(numValue)) {
+                    config[tool] = numValue;
+                }
+            }
+        }
+        return config;
+    }
     constructor() {
         // Initialize smart rate limiter for API protection
         // Convert Record to Map for SmartRateLimiter
@@ -88,13 +109,13 @@ class SecureLLMBridgeMCPServer {
         // Initialize performance optimization components
         this.toolMetricsCollector = new ToolMetricsCollector();
         this.toolLimiter = new ToolExecutionLimiter({
-            globalMaxConcurrency: parseInt(process.env.TOOL_LIMITER_GLOBAL_MAX_CONCURRENCY || '50', 10),
-            defaultToolTimeout: parseInt(process.env.TOOL_LIMITER_DEFAULT_TIMEOUT || '30000', 10),
-            maxQueueSize: parseInt(process.env.TOOL_LIMITER_MAX_QUEUE_SIZE || '100', 10),
+            globalMaxConcurrency: parseInt(process.env.TOOL_LIMITER_GLOBAL_MAX_CONCURRENCY || "50", 10),
+            defaultToolTimeout: parseInt(process.env.TOOL_LIMITER_DEFAULT_TIMEOUT || "30000", 10),
+            maxQueueSize: parseInt(process.env.TOOL_LIMITER_MAX_QUEUE_SIZE || "100", 10),
             toolTimeouts: this.parseToolConfig(process.env.TOOL_LIMITER_TIMEOUTS),
             toolConcurrency: this.parseToolConfig(process.env.TOOL_LIMITER_CONCURRENCY),
         });
-        this.requestDeduplicator = new RequestDeduplicator(parseInt(process.env.REQUEST_DEDUPE_STALE_TIMEOUT || '60000', 10), parseInt(process.env.REQUEST_DEDUPE_CLEANUP_INTERVAL || '30000', 10));
+        this.requestDeduplicator = new RequestDeduplicator(parseInt(process.env.REQUEST_DEDUPE_STALE_TIMEOUT || "60000", 10), parseInt(process.env.REQUEST_DEDUPE_CLEANUP_INTERVAL || "30000", 10));
         this.server = new Server({
             name: "securellm-mcp",
             version: "2.0.0",
@@ -108,67 +129,50 @@ class SecureLLMBridgeMCPServer {
         this.setupResourceHandlers();
         this.server.onerror = (error) => logger.error({ err: error }, "MCP server error");
         // Register shutdown handlers for graceful cleanup
-        const shutdownHandler = async () => {
+        const shutdownHandler = () => {
             logger.info("Received shutdown signal, cleaning up resources");
-            try {
-                // Stop project watcher first to prevent new events
-                if (this.projectWatcher) {
-                    this.projectWatcher.stop();
-                    this.projectWatcher = null;
+            // Fire and forget async cleanup
+            (async () => {
+                try {
+                    // Stop project watcher first to prevent new events
+                    if (this.projectWatcher) {
+                        this.projectWatcher.stop();
+                        this.projectWatcher = null;
+                    }
+                    // Close semantic cache (stops cleanup interval)
+                    if (this.semanticCache) {
+                        this.semanticCache.close();
+                        this.semanticCache = null;
+                    }
+                    // Close knowledge database
+                    if (this.db) {
+                        this.db.close();
+                        this.db = null;
+                    }
+                    // Clear context manager
+                    if (this.contextManager) {
+                        this.contextManager = null;
+                    }
+                    // Clear pre-action interceptor
+                    if (this.preActionInterceptor) {
+                        this.preActionInterceptor = null;
+                    }
+                    // Close request deduplicator
+                    if (this.requestDeduplicator) {
+                        this.requestDeduplicator.close();
+                    }
+                    // Close MCP server
+                    await this.server.close();
+                    logger.info("Shutdown complete");
                 }
-                // Close semantic cache (stops cleanup interval)
-                if (this.semanticCache) {
-                    this.semanticCache.close();
-                    this.semanticCache = null;
+                catch (error) {
+                    logger.error({ err: error }, "Error during shutdown");
                 }
-                // Close knowledge database
-                if (this.db) {
-                    this.db.close();
-                    this.db = null;
-                }
-                // Clear context manager
-                if (this.contextManager) {
-                    this.contextManager = null;
-                }
-                // Clear pre-action interceptor
-                if (this.preActionInterceptor) {
-                    this.preActionInterceptor = null;
-                }
-                // Close request deduplicator
-                if (this.requestDeduplicator) {
-                    this.requestDeduplicator.close();
-                }
-                // Close MCP server
-                await this.server.close();
-                logger.info("Shutdown complete");
-            }
-            catch (error) {
-                logger.error({ err: error }, "Error during shutdown");
-            }
-            process.exit(0);
+                process.exit(0);
+            })();
         };
         process.on("SIGINT", shutdownHandler);
         process.on("SIGTERM", shutdownHandler);
-    }
-    /**
-     * Parse tool configuration from environment variable
-     * Format: "tool1:value1,tool2:value2"
-     */
-    parseToolConfig(envValue) {
-        if (!envValue)
-            return {};
-        const config = {};
-        const pairs = envValue.split(',');
-        for (const pair of pairs) {
-            const [tool, value] = pair.split(':').map(s => s.trim());
-            if (tool && value) {
-                const numValue = parseInt(value, 10);
-                if (!isNaN(numValue)) {
-                    config[tool] = numValue;
-                }
-            }
-        }
-        return config;
     }
     /**
      * Initialize async resources (PROJECT_ROOT, hostname, knowledge DB)
@@ -182,7 +186,7 @@ class SecureLLMBridgeMCPServer {
             logger.info({
                 projectRoot: this.projectRoot,
                 method: rootDetection.method,
-                flakeFound: rootDetection.flakeFound
+                flakeFound: rootDetection.flakeFound,
             }, "Project root detected");
             // Log available API keys (masked)
             const availableKeys = Object.entries(API_KEYS)
@@ -235,12 +239,12 @@ class SecureLLMBridgeMCPServer {
             logger.info({ dbPath: KNOWLEDGE_DB_PATH }, "Knowledge database initialized");
             // Initialize Project Watcher if we have a project root
             // IMPORTANT: Skip system directories like /etc/nixos - too large and inappropriate for watching
-            const isSystemDir = this.projectRoot.startsWith('/etc') ||
-                this.projectRoot.startsWith('/usr') ||
-                this.projectRoot.startsWith('/sys') ||
-                this.projectRoot.startsWith('/proc') ||
-                this.projectRoot === '/nix/store';
-            if (this.projectRoot && !isSystemDir && process.env.ENABLE_PROJECT_WATCHER !== 'false') {
+            const isSystemDir = this.projectRoot.startsWith("/etc") ||
+                this.projectRoot.startsWith("/usr") ||
+                this.projectRoot.startsWith("/sys") ||
+                this.projectRoot.startsWith("/proc") ||
+                this.projectRoot === "/nix/store";
+            if (this.projectRoot && !isSystemDir && process.env.ENABLE_PROJECT_WATCHER !== "false") {
                 this.projectWatcher = new ProjectWatcher(this.projectRoot);
                 this.projectWatcher.setDatabase(this.db);
                 this.projectWatcher.start();
@@ -263,10 +267,10 @@ class SecureLLMBridgeMCPServer {
             const cacheDbPath = process.env.SEMANTIC_CACHE_DB_PATH ||
                 path.join(process.env.HOME || process.env.USERPROFILE || ".", ".local/share/securellm/semantic_cache.db");
             this.semanticCache = new SemanticCache(cacheDbPath, {
-                enabled: process.env.ENABLE_SEMANTIC_CACHE !== 'false',
-                similarityThreshold: parseFloat(process.env.SEMANTIC_CACHE_THRESHOLD || '0.85'),
-                ttlSeconds: parseInt(process.env.SEMANTIC_CACHE_TTL || '3600', 10),
-                llamaCppUrl: process.env.LLAMA_CPP_URL || 'http://localhost:8080',
+                enabled: process.env.ENABLE_SEMANTIC_CACHE !== "false",
+                similarityThreshold: parseFloat(process.env.SEMANTIC_CACHE_THRESHOLD || "0.85"),
+                ttlSeconds: parseInt(process.env.SEMANTIC_CACHE_TTL || "3600", 10),
+                llamaCppUrl: process.env.LLAMA_CPP_URL || "http://localhost:8080",
             });
             logger.info({ dbPath: cacheDbPath }, "Semantic cache initialized");
             // Note: SemanticCache handles its own cleanup interval internally
@@ -597,6 +601,12 @@ class SecureLLMBridgeMCPServer {
                 },
                 // Add DX Tools
                 ...devTools,
+                // Add Browser Tools
+                browserLaunchAdvancedSchema,
+                browserExtractDataSchema,
+                browserInteractFormSchema,
+                browserMonitorChangesSchema,
+                browserSearchAggregateSchema,
             ],
         }));
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -605,7 +615,7 @@ class SecureLLMBridgeMCPServer {
             const { name, arguments: args } = request.params;
             // Generate stable cache key
             const cacheKey = stableStringify({ name, args });
-            const requestSize = Buffer.byteLength(cacheKey, 'utf8');
+            const requestSize = Buffer.byteLength(cacheKey, "utf8");
             const snapshot = {
                 requestId,
                 toolName: name,
@@ -629,7 +639,7 @@ class SecureLLMBridgeMCPServer {
                         // Return cached response
                         // Estimate size without full serialization
                         try {
-                            snapshot.responseSize = Buffer.byteLength(stringify(cached), 'utf8');
+                            snapshot.responseSize = Buffer.byteLength(stringify(cached), "utf8");
                         }
                         catch {
                             snapshot.responseSize = JSON.stringify(cached).length;
@@ -649,7 +659,7 @@ class SecureLLMBridgeMCPServer {
                 catch (queueError) {
                     snapshot.queueWaitTime = Date.now() - queueWaitStart;
                     snapshot.error = queueError instanceof Error ? queueError.message : String(queueError);
-                    snapshot.errorCategory = 'queue_full';
+                    snapshot.errorCategory = "queue_full";
                     snapshot.totalTime = Date.now() - startTime;
                     this.toolMetricsCollector.recordSnapshot(snapshot);
                     throw queueError;
@@ -852,6 +862,22 @@ class SecureLLMBridgeMCPServer {
                         case "github_actions":
                             toolResult = await devToolHandlers.github_actions(args);
                             break;
+                        // Browser Tool handlers
+                        case "browser_launch_advanced":
+                            toolResult = await new BrowserLaunchAdvancedTool().execute(args);
+                            break;
+                        case "browser_extract_data":
+                            toolResult = await new BrowserExtractDataTool().execute(args);
+                            break;
+                        case "browser_interact_form":
+                            toolResult = await new BrowserInteractFormTool().execute(args);
+                            break;
+                        case "browser_monitor_changes":
+                            toolResult = await new BrowserMonitorChangesTool().execute(args);
+                            break;
+                        case "browser_search_aggregate":
+                            toolResult = await new BrowserSearchAggregateTool().execute(args);
+                            break;
                         default:
                             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
                     }
@@ -862,7 +888,7 @@ class SecureLLMBridgeMCPServer {
                 // Use fast-json-stringify if available, otherwise estimate
                 try {
                     const responseStr = stringify(result);
-                    snapshot.responseSize = Buffer.byteLength(responseStr, 'utf8');
+                    snapshot.responseSize = Buffer.byteLength(responseStr, "utf8");
                 }
                 catch (err) {
                     // Fallback: estimate size from result object
@@ -871,13 +897,15 @@ class SecureLLMBridgeMCPServer {
                 // SEMANTIC CACHE: Store result for future lookups
                 if (this.semanticCache && result) {
                     // Use async fire-and-forget to avoid blocking response
-                    this.semanticCache.store({
+                    this.semanticCache
+                        .store({
                         toolName: name,
                         queryText: cacheKey,
                         toolArgs: args,
                         response: result,
-                    }).catch(err => {
-                        logger.warn({ err, toolName: name }, 'Failed to store in semantic cache');
+                    })
+                        .catch((err) => {
+                        logger.warn({ err, toolName: name }, "Failed to store in semantic cache");
                     });
                 }
                 snapshot.totalTime = Date.now() - startTime;
@@ -889,21 +917,22 @@ class SecureLLMBridgeMCPServer {
                 snapshot.error = error instanceof Error ? error.message : String(error);
                 // Classify error
                 if (error instanceof McpError) {
-                    snapshot.errorCategory = error.code === ErrorCode.InvalidParams ? 'invalid_params' : 'mcp_error';
+                    snapshot.errorCategory =
+                        error.code === ErrorCode.InvalidParams ? "invalid_params" : "mcp_error";
                 }
                 else if (error instanceof Error) {
-                    if (error.message.includes('timeout') || error.message.includes('Timeout')) {
-                        snapshot.errorCategory = 'timeout';
+                    if (error.message.includes("timeout") || error.message.includes("Timeout")) {
+                        snapshot.errorCategory = "timeout";
                     }
-                    else if (error.message.includes('queue full')) {
-                        snapshot.errorCategory = 'queue_full';
+                    else if (error.message.includes("queue full")) {
+                        snapshot.errorCategory = "queue_full";
                     }
                     else {
-                        snapshot.errorCategory = 'unknown';
+                        snapshot.errorCategory = "unknown";
                     }
                 }
                 else {
-                    snapshot.errorCategory = 'unknown';
+                    snapshot.errorCategory = "unknown";
                 }
                 this.toolMetricsCollector.recordSnapshot(snapshot);
                 if (error instanceof McpError)
@@ -963,37 +992,43 @@ class SecureLLMBridgeMCPServer {
             const { uri } = request.params;
             try {
                 // Handle guide/skill/prompt resources
-                if (uri.startsWith('guide://')) {
-                    const name = uri.replace('guide://', '');
+                if (uri.startsWith("guide://")) {
+                    const name = uri.replace("guide://", "");
                     const content = await this.guideManager.loadGuide(name);
                     return {
-                        contents: [{
+                        contents: [
+                            {
                                 uri,
                                 mimeType: "text/markdown",
                                 text: content,
-                            }],
+                            },
+                        ],
                     };
                 }
-                if (uri.startsWith('skill://')) {
-                    const name = uri.replace('skill://', '');
+                if (uri.startsWith("skill://")) {
+                    const name = uri.replace("skill://", "");
                     const content = await this.guideManager.loadSkill(name);
                     return {
-                        contents: [{
+                        contents: [
+                            {
                                 uri,
                                 mimeType: "text/markdown",
                                 text: content,
-                            }],
+                            },
+                        ],
                     };
                 }
-                if (uri.startsWith('prompt://')) {
-                    const name = uri.replace('prompt://', '');
+                if (uri.startsWith("prompt://")) {
+                    const name = uri.replace("prompt://", "");
                     const content = await this.guideManager.loadPrompt(name);
                     return {
-                        contents: [{
+                        contents: [
+                            {
                                 uri,
                                 mimeType: "text/markdown",
                                 text: content,
-                            }],
+                            },
+                        ],
                     };
                 }
                 // Handle existing resources
@@ -1044,7 +1079,7 @@ class SecureLLMBridgeMCPServer {
             const result = await this.rateLimiter.execute(provider, async () => {
                 const testScript = `
           cd "${PROJECT_ROOT}" && \
-          cargo run --bin securellm -- test ${provider} --prompt "${prompt.replace(/"/g, '\\"')}"${model ? ` --model ${model}` : ''}
+          cargo run --bin securellm -- test ${provider} --prompt "${prompt.replace(/"/g, '\\"')}"${model ? ` --model ${model}` : ""}
         `;
                 const { stdout, stderr } = await execAsync(testScript, {
                     cwd: PROJECT_ROOT,
@@ -1098,19 +1133,19 @@ class SecureLLMBridgeMCPServer {
                 issues.push("⚠️ CRITICAL: Hardcoded API keys detected in configuration");
             }
             // Check TLS configuration
-            if (configContent.includes('enabled = false') && configContent.includes('[security.tls]')) {
+            if (configContent.includes("enabled = false") && configContent.includes("[security.tls]")) {
                 warnings.push("TLS is disabled - only use for development");
             }
             // Check rate limiting
-            if (!configContent.includes('[security.rate_limit]')) {
+            if (!configContent.includes("[security.rate_limit]")) {
                 warnings.push("Rate limiting not configured");
             }
             // Check audit logging
-            if (!configContent.includes('[security.audit]')) {
+            if (!configContent.includes("[security.audit]")) {
                 recommendations.push("Consider enabling audit logging for production");
             }
             // Check for environment variable usage
-            if (!configContent.includes('${') && configContent.includes('api_key')) {
+            if (!configContent.includes("${") && configContent.includes("api_key")) {
                 recommendations.push("Use environment variables for API keys instead of hardcoding");
             }
             const result = {
@@ -1205,7 +1240,7 @@ class SecureLLMBridgeMCPServer {
         }
         try {
             // Wrap build operations with rate limiter to prevent spam
-            const result = await this.rateLimiter.execute('build', async () => {
+            const result = await this.rateLimiter.execute("build", async () => {
                 const buildScript = `
           cd "${PROJECT_ROOT}" && \
           cargo build && \
@@ -1287,7 +1322,7 @@ class SecureLLMBridgeMCPServer {
         const outputDir = path.resolve(PROJECT_ROOT, output_path);
         try {
             // Wrap crypto operations with rate limiter (expensive operations)
-            const result = await this.rateLimiter.execute('crypto', async () => {
+            const result = await this.rateLimiter.execute("crypto", async () => {
                 await fs.mkdir(outputDir, { recursive: true });
                 let certCommand = "";
                 if (key_type === "server") {
@@ -1418,22 +1453,24 @@ class SecureLLMBridgeMCPServer {
         if (!this.db) {
             return {
                 content: [{ type: "text", text: "Knowledge database not available" }],
-                isError: true
+                isError: true,
             };
         }
         try {
             const session = await this.db.createSession(args);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify({ session, message: "Session created successfully" })
-                    }]
+                        text: stringify({ session, message: "Session created successfully" }),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1441,22 +1478,24 @@ class SecureLLMBridgeMCPServer {
         if (!this.db) {
             return {
                 content: [{ type: "text", text: "Knowledge database not available" }],
-                isError: true
+                isError: true,
             };
         }
         try {
             const entry = await this.db.saveKnowledge(args);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify({ entry, message: "Knowledge saved successfully" })
-                    }]
+                        text: stringify({ entry, message: "Knowledge saved successfully" }),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1464,22 +1503,24 @@ class SecureLLMBridgeMCPServer {
         if (!this.db) {
             return {
                 content: [{ type: "text", text: "Knowledge database not available" }],
-                isError: true
+                isError: true,
             };
         }
         try {
             const results = await this.db.searchKnowledge(args);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify({ results, count: results.length })
-                    }]
+                        text: stringify({ results, count: results.length }),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1487,7 +1528,7 @@ class SecureLLMBridgeMCPServer {
         if (!this.db) {
             return {
                 content: [{ type: "text", text: "Knowledge database not available" }],
-                isError: true
+                isError: true,
             };
         }
         try {
@@ -1495,21 +1536,23 @@ class SecureLLMBridgeMCPServer {
             if (!session) {
                 return {
                     content: [{ type: "text", text: "Session not found" }],
-                    isError: true
+                    isError: true,
                 };
             }
             const entries = await this.db.getRecentKnowledge(args.session_id, 100);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify({ session, entries, count: entries.length })
-                    }]
+                        text: stringify({ session, entries, count: entries.length }),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1517,22 +1560,24 @@ class SecureLLMBridgeMCPServer {
         if (!this.db) {
             return {
                 content: [{ type: "text", text: "Knowledge database not available" }],
-                isError: true
+                isError: true,
             };
         }
         try {
             const sessions = await this.db.listSessions(args.limit || 20, args.offset || 0);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify({ sessions, count: sessions.length })
-                    }]
+                        text: stringify({ sessions, count: sessions.length }),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1540,22 +1585,24 @@ class SecureLLMBridgeMCPServer {
         if (!this.db) {
             return {
                 content: [{ type: "text", text: "Knowledge database not available" }],
-                isError: true
+                isError: true,
             };
         }
         try {
             const entries = await this.db.getRecentKnowledge(args.session_id, args.limit || 20);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify({ entries, count: entries.length })
-                    }]
+                        text: stringify({ entries, count: entries.length }),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1563,23 +1610,25 @@ class SecureLLMBridgeMCPServer {
         if (!this.db) {
             return {
                 content: [{ type: "text", text: "Knowledge database not available" }],
-                isError: true
+                isError: true,
             };
         }
         try {
             await this.db.maintenance();
             const stats = await this.db.getStats();
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify({ message: "Maintenance completed successfully", stats })
-                    }]
+                        text: stringify({ message: "Maintenance completed successfully", stats }),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1594,12 +1643,12 @@ class SecureLLMBridgeMCPServer {
                         totalRequests: metrics.totalRequests,
                         successRate: metrics.totalRequests > 0
                             ? `${((metrics.successfulRequests / metrics.totalRequests) * 100).toFixed(2)}%`
-                            : '0%',
+                            : "0%",
                         requestsPerMinute: metrics.requestsPerMinute.toFixed(1),
                         retriedRequests: metrics.retriedRequests,
                         averageRetries: metrics.retriedRequests > 0
                             ? (metrics.totalRetries / metrics.retriedRequests).toFixed(1)
-                            : '0',
+                            : "0",
                     },
                     latency: {
                         average: `${metrics.averageLatency.toFixed(0)}ms`,
@@ -1619,7 +1668,7 @@ class SecureLLMBridgeMCPServer {
                         maxLength: metrics.queueMetrics.maxQueueLength,
                         averageWaitTime: metrics.totalRequests > 0
                             ? `${(metrics.queueMetrics.totalTimeInQueue / metrics.totalRequests).toFixed(0)}ms`
-                            : '0ms',
+                            : "0ms",
                     },
                     timeWindow: {
                         duration: `${(metrics.timeWindow.durationMs / 1000).toFixed(0)}s`,
@@ -1773,16 +1822,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleEmergencyStatus();
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1790,16 +1841,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleEmergencyAbort(args.force || false);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1807,16 +1860,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleEmergencyCooldown();
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1824,16 +1879,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleEmergencyNuke(args.confirm || false);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1841,16 +1898,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleEmergencySwap();
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1858,16 +1917,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleSystemHealthCheck(args.detailed || false);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1875,16 +1936,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleSafeRebuildCheck();
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1893,16 +1956,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleThermalCheck(args.max_temp || 75);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1910,16 +1975,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleRebuildSafetyCheck();
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1927,16 +1994,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleThermalForensics(args.duration || 180, args.skip_rebuild || false);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1944,16 +2013,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleThermalWarroom(args.duration || 60);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1961,16 +2032,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleLaptopVerdict(args.evidence_dir);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1978,16 +2051,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleFullInvestigation();
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -1995,16 +2070,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleForceCooldown();
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -2012,16 +2089,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleResetPerformance();
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -2030,16 +2109,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleWebSearch(args);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -2047,16 +2128,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleNixSearch(args);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -2064,16 +2147,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleGithubSearch(args);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -2081,16 +2166,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleTechNewsSearch(args);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -2098,16 +2185,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleDiscourseSearch(args);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -2115,16 +2204,18 @@ Generate server and client TLS certificates for secure communication.
         try {
             const result = await handleStackOverflowSearch(args);
             return {
-                content: [{
+                content: [
+                    {
                         type: "text",
-                        text: stringify(result)
-                    }]
+                        text: stringify(result),
+                    },
+                ],
             };
         }
         catch (error) {
             return {
                 content: [{ type: "text", text: stringify({ error: error.message }) }],
-                isError: true
+                isError: true,
             };
         }
     }
@@ -2134,20 +2225,21 @@ Generate server and client TLS certificates for secure communication.
         const metricsPort = process.env.METRICS_PORT;
         if (metricsPort) {
             try {
-                const http = await import('http');
-                const metricsHost = process.env.METRICS_HOST || '0.0.0.0'; // Use 0.0.0.0 for K8s
-                http.createServer((req, res) => {
-                    if (req.url === '/metrics') {
-                        res.writeHead(200, { 'Content-Type': 'text/plain' });
+                const http = await import("http");
+                const metricsHost = process.env.METRICS_HOST || "0.0.0.0"; // Use 0.0.0.0 for K8s
+                http
+                    .createServer((req, res) => {
+                    if (req.url === "/metrics") {
+                        res.writeHead(200, { "Content-Type": "text/plain" });
                         // Combine rate limiter metrics and tool metrics
                         const rateLimiterMetrics = this.rateLimiter.getAggregatePrometheusMetrics();
                         const toolMetrics = this.toolMetricsCollector.getPrometheusMetrics();
-                        res.end([rateLimiterMetrics, toolMetrics].filter(Boolean).join('\n\n'));
+                        res.end([rateLimiterMetrics, toolMetrics].filter(Boolean).join("\n\n"));
                     }
-                    else if (req.url === '/health') {
-                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                    else if (req.url === "/health") {
+                        res.writeHead(200, { "Content-Type": "application/json" });
                         res.end(JSON.stringify({
-                            status: 'ok',
+                            status: "ok",
                             timestamp: new Date().toISOString(),
                             limiter: this.toolLimiter.getStatus(),
                         }));
@@ -2156,7 +2248,8 @@ Generate server and client TLS certificates for secure communication.
                         res.writeHead(404);
                         res.end();
                     }
-                }).listen(parseInt(metricsPort, 10), metricsHost, () => {
+                })
+                    .listen(parseInt(metricsPort, 10), metricsHost, () => {
                     logger.info({ port: metricsPort, host: metricsHost }, "Prometheus metrics server running");
                 });
             }

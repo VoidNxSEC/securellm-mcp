@@ -15,15 +15,20 @@ import { promisify } from "util";
 import * as fs from "fs/promises";
 import { createKnowledgeDatabase } from "./knowledge/database.js";
 import { knowledgeTools } from "./tools/knowledge.js";
-import type { KnowledgeDatabase, CreateSessionInput, SaveKnowledgeInput, SearchKnowledgeInput } from "./types/knowledge.js";
+import type {
+  KnowledgeDatabase,
+  CreateSessionInput,
+  SaveKnowledgeInput,
+  SearchKnowledgeInput,
+} from "./types/knowledge.js";
 import type { ExtendedTool } from "./types/mcp-tool-extensions.js";
 import { GuideManager } from "./resources/guides.js";
 import * as path from "path";
 import { SmartRateLimiter } from "./middleware/rate-limiter.js";
 import { RATE_LIMIT_CONFIGS } from "./config/index.js";
-import { PackageDiagnoseTool, packageDiagnoseSchema } from "./tools/package-diagnose.js";
-import { PackageDownloadTool, packageDownloadSchema } from "./tools/package-download.js";
-import { PackageConfigureTool, packageConfigureSchema } from "./tools/package-configure.js";
+import { PackageDiagnoseTool } from "./tools/package-diagnose.js";
+import { PackageDownloadTool } from "./tools/package-download.js";
+import { PackageConfigureTool } from "./tools/package-configure.js";
 import { detectProjectRoot } from "./utils/project-detection.js";
 import { detectNixOSHost } from "./utils/host-detection.js";
 import { logger, logStartupError } from "./utils/logger.js";
@@ -59,29 +64,21 @@ import {
   handleStackOverflowSearch,
   getNixCacheStats,
 } from "./tools/web-search.js";
-import {
-  researchAgentTool,
-  handleResearchAgent,
-} from "./tools/research-agent.js";
+import { researchAgentTool, handleResearchAgent } from "./tools/research-agent.js";
 import {
   analyzeComplexity,
   findDeadCode,
   analyzeComplexitySchema,
   findDeadCodeSchema,
-  mapDependenciesSchema,
 } from "./tools/codebase-analysis.js";
 import {
   advancedCodeAnalysisTool,
   handleAdvancedCodeAnalysis,
 } from "./tools/advanced-code-analysis.js";
-import {
-  socketDebugReportTool,
-  handleSocketDebugReport,
-} from "./tools/socket-debug-report.js";
+import { socketDebugReportTool, handleSocketDebugReport } from "./tools/socket-debug-report.js";
 import { zodToMcpSchema } from "./utils/schema-converter.js";
 import { devTools, devToolHandlers } from "./tools/dev-tools.js";
 import {
-  sshTools,
   sshExecuteSchema,
   sshFileTransferSchema,
   sshMaintenanceCheckSchema,
@@ -95,39 +92,48 @@ import {
   SSHJumpHostTool,
   SSHSessionTool,
 } from "./tools/ssh/index.js";
+import { executeInSandboxTool, handleExecuteInSandbox } from "./tools/secure-execution.js";
 import {
-  executeInSandboxTool,
-  handleExecuteInSandbox,
-} from "./tools/secure-execution.js";
+  BrowserLaunchAdvancedTool,
+  BrowserExtractDataTool,
+  BrowserInteractFormTool,
+  BrowserMonitorChangesTool,
+  BrowserSearchAggregateTool,
+  browserLaunchAdvancedSchema,
+  browserExtractDataSchema,
+  browserInteractFormSchema,
+  browserMonitorChangesSchema,
+  browserSearchAggregateSchema,
+} from "./tools/browser/index.js";
 import { SemanticCache } from "./middleware/semantic-cache.js";
 import { ContextManager } from "./reasoning/context-manager.js";
 import { PreActionInterceptor } from "./reasoning/proactive/pre-action-interceptor.js";
-import {
-  stringifyToolResponse,
-  stringifyKnowledgeEntries,
-  stringifyGeneric,
-} from './utils/json-schemas.js';
+import { stringifyGeneric } from "./utils/json-schemas.js";
 import { ToolMetricsCollector } from "./middleware/tool-metrics.js";
 import { ToolExecutionLimiter } from "./middleware/tool-limiter.js";
 import { RequestDeduplicator, stableStringify } from "./middleware/request-deduplicator.js";
 import crypto from "crypto";
 
-const shouldPrettyPrint = process.env.NODE_ENV === 'development';
+const shouldPrettyPrint = process.env.NODE_ENV === "development";
 
-function stringify(obj: any): string {
+function stringify(obj: unknown): string {
   if (shouldPrettyPrint) {
     return JSON.stringify(obj, null, 2);
   }
-  return stringifyGeneric(obj);
+  return stringifyGeneric(obj as Record<string, unknown>);
 }
 
 const execAsync = promisify(exec);
 
 // Legacy constants for backward compatibility - will be overridden by auto-detection
 const PROJECT_ROOT = process.env.PROJECT_ROOT || process.cwd();
-const KNOWLEDGE_DB_PATH = process.env.KNOWLEDGE_DB_PATH ||
-  path.join(process.env.HOME || process.env.USERPROFILE || ".", ".local/share/securellm/knowledge.db");
-const ENABLE_KNOWLEDGE = process.env.ENABLE_KNOWLEDGE !== 'false';
+const KNOWLEDGE_DB_PATH =
+  process.env.KNOWLEDGE_DB_PATH ||
+  path.join(
+    process.env.HOME || process.env.USERPROFILE || ".",
+    ".local/share/securellm/knowledge.db"
+  );
+const ENABLE_KNOWLEDGE = process.env.ENABLE_KNOWLEDGE !== "false";
 
 // Provider API keys from environment (loaded from SOPS-decrypted secrets)
 const API_KEYS = {
@@ -188,25 +194,45 @@ class SecureLLMBridgeMCPServer {
   private toolLimiter: ToolExecutionLimiter;
   private requestDeduplicator: RequestDeduplicator;
 
+  /**
+   * Parse tool configuration from environment variable
+   * Format: "tool1:value1,tool2:value2"
+   */
+  private parseToolConfig(envValue?: string): Record<string, number> {
+    if (!envValue) return {};
+    const config: Record<string, number> = {};
+    const pairs = envValue.split(",");
+    for (const pair of pairs) {
+      const [tool, value] = pair.split(":").map((s) => s.trim());
+      if (tool && value) {
+        const numValue = parseInt(value, 10);
+        if (!isNaN(numValue)) {
+          config[tool] = numValue;
+        }
+      }
+    }
+    return config;
+  }
+
   constructor() {
     // Initialize smart rate limiter for API protection
     // Convert Record to Map for SmartRateLimiter
     const configMap = new Map(Object.entries(RATE_LIMIT_CONFIGS));
     this.rateLimiter = new SmartRateLimiter(configMap);
     this.guideManager = new GuideManager();
-    
+
     // Initialize performance optimization components
     this.toolMetricsCollector = new ToolMetricsCollector();
     this.toolLimiter = new ToolExecutionLimiter({
-      globalMaxConcurrency: parseInt(process.env.TOOL_LIMITER_GLOBAL_MAX_CONCURRENCY || '50', 10),
-      defaultToolTimeout: parseInt(process.env.TOOL_LIMITER_DEFAULT_TIMEOUT || '30000', 10),
-      maxQueueSize: parseInt(process.env.TOOL_LIMITER_MAX_QUEUE_SIZE || '100', 10),
+      globalMaxConcurrency: parseInt(process.env.TOOL_LIMITER_GLOBAL_MAX_CONCURRENCY || "50", 10),
+      defaultToolTimeout: parseInt(process.env.TOOL_LIMITER_DEFAULT_TIMEOUT || "30000", 10),
+      maxQueueSize: parseInt(process.env.TOOL_LIMITER_MAX_QUEUE_SIZE || "100", 10),
       toolTimeouts: this.parseToolConfig(process.env.TOOL_LIMITER_TIMEOUTS),
       toolConcurrency: this.parseToolConfig(process.env.TOOL_LIMITER_CONCURRENCY),
     });
     this.requestDeduplicator = new RequestDeduplicator(
-      parseInt(process.env.REQUEST_DEDUPE_STALE_TIMEOUT || '60000', 10),
-      parseInt(process.env.REQUEST_DEDUPE_CLEANUP_INTERVAL || '30000', 10)
+      parseInt(process.env.REQUEST_DEDUPE_STALE_TIMEOUT || "60000", 10),
+      parseInt(process.env.REQUEST_DEDUPE_CLEANUP_INTERVAL || "30000", 10)
     );
 
     this.server = new Server(
@@ -228,77 +254,62 @@ class SecureLLMBridgeMCPServer {
     this.server.onerror = (error) => logger.error({ err: error }, "MCP server error");
 
     // Register shutdown handlers for graceful cleanup
-    const shutdownHandler = async () => {
+    const shutdownHandler = () => {
       logger.info("Received shutdown signal, cleaning up resources");
 
-      try {
-        // Stop project watcher first to prevent new events
-        if (this.projectWatcher) {
-          this.projectWatcher.stop();
-          this.projectWatcher = null;
+      // Fire and forget async cleanup
+      (async () => {
+        try {
+          // Stop project watcher first to prevent new events
+          if (this.projectWatcher) {
+            this.projectWatcher.stop();
+            this.projectWatcher = null;
+          }
+
+          // Close semantic cache (stops cleanup interval)
+          if (this.semanticCache) {
+            this.semanticCache.close();
+            this.semanticCache = null;
+          }
+
+          // Close knowledge database
+          if (this.db) {
+            this.db.close();
+            this.db = null;
+          }
+
+          // Clear context manager
+          if (this.contextManager) {
+            this.contextManager = null;
+          }
+
+          // Clear pre-action interceptor
+          if (this.preActionInterceptor) {
+            this.preActionInterceptor = null;
+          }
+
+          // Close request deduplicator
+          if (this.requestDeduplicator) {
+            this.requestDeduplicator.close();
+          }
+
+          // Close MCP server
+          await this.server.close();
+
+          logger.info("Shutdown complete");
+        } catch (error) {
+          logger.error({ err: error }, "Error during shutdown");
         }
 
-        // Close semantic cache (stops cleanup interval)
-        if (this.semanticCache) {
-          this.semanticCache.close();
-          this.semanticCache = null;
-        }
-
-        // Close knowledge database
-        if (this.db) {
-          this.db.close();
-          this.db = null;
-        }
-
-        // Clear context manager
-        if (this.contextManager) {
-          this.contextManager = null;
-        }
-
-        // Clear pre-action interceptor
-        if (this.preActionInterceptor) {
-          this.preActionInterceptor = null;
-        }
-
-        // Close request deduplicator
-        if (this.requestDeduplicator) {
-          this.requestDeduplicator.close();
-        }
-
-        // Close MCP server
-        await this.server.close();
-
-        logger.info("Shutdown complete");
-      } catch (error) {
-        logger.error({ err: error }, "Error during shutdown");
-      }
-
-      process.exit(0);
+        process.exit(0);
+      })();
     };
 
     process.on("SIGINT", shutdownHandler);
     process.on("SIGTERM", shutdownHandler);
   }
 
-  /**
-   * Parse tool configuration from environment variable
-   * Format: "tool1:value1,tool2:value2"
-   */
-  private parseToolConfig(envValue?: string): Record<string, number> {
-    if (!envValue) return {};
-    const config: Record<string, number> = {};
-    const pairs = envValue.split(',');
-    for (const pair of pairs) {
-      const [tool, value] = pair.split(':').map(s => s.trim());
-      if (tool && value) {
-        const numValue = parseInt(value, 10);
-        if (!isNaN(numValue)) {
-          config[tool] = numValue;
-        }
-      }
-    }
-    return config;
-  }
+
 
   /**
    * Initialize async resources (PROJECT_ROOT, hostname, knowledge DB)
@@ -313,7 +324,7 @@ class SecureLLMBridgeMCPServer {
         {
           projectRoot: this.projectRoot,
           method: rootDetection.method,
-          flakeFound: rootDetection.flakeFound
+          flakeFound: rootDetection.flakeFound,
         },
         "Project root detected"
       );
@@ -352,10 +363,7 @@ class SecureLLMBridgeMCPServer {
       }
 
       // Initialize package tools with detected values
-      this.packageDiagnose = new PackageDiagnoseTool(
-        this.projectRoot,
-        this.hostname
-      );
+      this.packageDiagnose = new PackageDiagnoseTool(this.projectRoot, this.hostname);
       this.packageDownload = new PackageDownloadTool(this.projectRoot);
       this.packageConfigure = new PackageConfigureTool(this.projectRoot);
 
@@ -381,13 +389,14 @@ class SecureLLMBridgeMCPServer {
 
       // Initialize Project Watcher if we have a project root
       // IMPORTANT: Skip system directories like /etc/nixos - too large and inappropriate for watching
-      const isSystemDir = this.projectRoot.startsWith('/etc') ||
-                          this.projectRoot.startsWith('/usr') ||
-                          this.projectRoot.startsWith('/sys') ||
-                          this.projectRoot.startsWith('/proc') ||
-                          this.projectRoot === '/nix/store';
+      const isSystemDir =
+        this.projectRoot.startsWith("/etc") ||
+        this.projectRoot.startsWith("/usr") ||
+        this.projectRoot.startsWith("/sys") ||
+        this.projectRoot.startsWith("/proc") ||
+        this.projectRoot === "/nix/store";
 
-      if (this.projectRoot && !isSystemDir && process.env.ENABLE_PROJECT_WATCHER !== 'false') {
+      if (this.projectRoot && !isSystemDir && process.env.ENABLE_PROJECT_WATCHER !== "false") {
         this.projectWatcher = new ProjectWatcher(this.projectRoot);
         this.projectWatcher.setDatabase(this.db);
         this.projectWatcher.start();
@@ -402,31 +411,33 @@ class SecureLLMBridgeMCPServer {
           "Skipping ProjectWatcher for system directory - use ENABLE_PROJECT_WATCHER=true to override"
         );
       }
-
     } catch (error) {
-      logger.error({ err: error, dbPath: KNOWLEDGE_DB_PATH }, "Failed to initialize knowledge database");
+      logger.error(
+        { err: error, dbPath: KNOWLEDGE_DB_PATH },
+        "Failed to initialize knowledge database"
+      );
       this.db = null;
     }
   }
 
   private initSemanticCache() {
     try {
-      const cacheDbPath = process.env.SEMANTIC_CACHE_DB_PATH ||
+      const cacheDbPath =
+        process.env.SEMANTIC_CACHE_DB_PATH ||
         path.join(
           process.env.HOME || process.env.USERPROFILE || ".",
           ".local/share/securellm/semantic_cache.db"
         );
 
       this.semanticCache = new SemanticCache(cacheDbPath, {
-        enabled: process.env.ENABLE_SEMANTIC_CACHE !== 'false',
-        similarityThreshold: parseFloat(process.env.SEMANTIC_CACHE_THRESHOLD || '0.85'),
-        ttlSeconds: parseInt(process.env.SEMANTIC_CACHE_TTL || '3600', 10),
-        llamaCppUrl: process.env.LLAMA_CPP_URL || 'http://localhost:8080',
+        enabled: process.env.ENABLE_SEMANTIC_CACHE !== "false",
+        similarityThreshold: parseFloat(process.env.SEMANTIC_CACHE_THRESHOLD || "0.85"),
+        ttlSeconds: parseInt(process.env.SEMANTIC_CACHE_TTL || "3600", 10),
+        llamaCppUrl: process.env.LLAMA_CPP_URL || "http://localhost:8080",
       });
 
       logger.info({ dbPath: cacheDbPath }, "Semantic cache initialized");
       // Note: SemanticCache handles its own cleanup interval internally
-
     } catch (error) {
       logger.error({ err: error }, "Failed to initialize semantic cache");
       this.semanticCache = null;
@@ -754,6 +765,12 @@ class SecureLLMBridgeMCPServer {
         },
         // Add DX Tools
         ...devTools,
+        // Add Browser Tools
+        browserLaunchAdvancedSchema,
+        browserExtractDataSchema,
+        browserInteractFormSchema,
+        browserMonitorChangesSchema,
+        browserSearchAggregateSchema,
       ] as ExtendedTool[],
     }));
 
@@ -761,11 +778,11 @@ class SecureLLMBridgeMCPServer {
       const requestId = crypto.randomUUID();
       const startTime = Date.now();
       const { name, arguments: args } = request.params;
-      
+
       // Generate stable cache key
       const cacheKey = stableStringify({ name, args });
-      const requestSize = Buffer.byteLength(cacheKey, 'utf8');
-      
+      const requestSize = Buffer.byteLength(cacheKey, "utf8");
+
       const snapshot: any = {
         requestId,
         toolName: name,
@@ -792,7 +809,7 @@ class SecureLLMBridgeMCPServer {
             // Return cached response
             // Estimate size without full serialization
             try {
-              snapshot.responseSize = Buffer.byteLength(stringify(cached), 'utf8');
+              snapshot.responseSize = Buffer.byteLength(stringify(cached), "utf8");
             } catch {
               snapshot.responseSize = JSON.stringify(cached).length;
             }
@@ -811,7 +828,7 @@ class SecureLLMBridgeMCPServer {
         } catch (queueError) {
           snapshot.queueWaitTime = Date.now() - queueWaitStart;
           snapshot.error = queueError instanceof Error ? queueError.message : String(queueError);
-          snapshot.errorCategory = 'queue_full';
+          snapshot.errorCategory = "queue_full";
           snapshot.totalTime = Date.now() - startTime;
           this.toolMetricsCollector.recordSnapshot(snapshot);
           throw queueError;
@@ -822,7 +839,7 @@ class SecureLLMBridgeMCPServer {
           const preActionStart = Date.now();
           const interception = await this.preActionInterceptor.intercept(name, args);
           snapshot.preActionTime = Date.now() - preActionStart;
-          
+
           if (!interception.shouldProceed) {
             throw new McpError(
               ErrorCode.InvalidParams,
@@ -840,203 +857,221 @@ class SecureLLMBridgeMCPServer {
             // Execute tool
             let toolResult;
             switch (name) {
-                case "provider_test":
-                  toolResult = await this.handleProviderTest(args as unknown as ProviderTestArgs);
-                  break;
-                case "security_audit":
-                  toolResult = await this.handleSecurityAudit(args as unknown as SecurityAuditArgs);
-                  break;
-                case "rate_limit_check":
-                  toolResult = await this.handleRateLimitCheck(args as unknown as RateLimitCheckArgs);
-                  break;
-                case "build_and_test":
-                  toolResult = await this.handleBuildAndTest(args as unknown as BuildAndTestArgs);
-                  break;
-                case "provider_config_validate":
-                  toolResult = await this.handleProviderConfigValidate(args as unknown as ProviderConfigValidateArgs);
-                  break;
-                case "crypto_key_generate":
-                  toolResult = await this.handleCryptoKeyGenerate(args as unknown as CryptoKeyGenerateArgs);
-                  break;
-                case "rate_limiter_status":
-                  toolResult = await this.handleRateLimiterStatus();
-                  break;
-                case "cache_stats":
-                  toolResult = {
-              content: [
-                {
-                  type: "text",
-                  text: stringify({
-                    semantic_cache: this.semanticCache?.getStats() || null,
-                    nix_cache: getNixCacheStats(),
-                  }),
-                },
-              ],
-            };
-            break;
-                case "package_diagnose":
-                  toolResult = await this.handlePackageDiagnose(args);
-                  break;
-                case "package_download":
-                  toolResult = await this.handlePackageDownload(args);
-                  break;
-                case "package_configure":
-                  toolResult = await this.handlePackageConfigure(args);
-                  break;
-                case "create_session":
-                  toolResult = await this.handleCreateSession(args);
-                  break;
-                case "save_knowledge":
-                  toolResult = await this.handleSaveKnowledge(args);
-                  break;
-                case "search_knowledge":
-                  toolResult = await this.handleSearchKnowledge(args);
-                  break;
-                case "load_session":
-                  toolResult = await this.handleLoadSession(args);
-                  break;
-                case "list_sessions":
-                  toolResult = await this.handleListSessions(args);
-                  break;
-                case "get_recent_knowledge":
-                  toolResult = await this.handleGetRecentKnowledge(args);
-                  break;
-                case "knowledge_maintenance":
-                  toolResult = await this.handleKnowledgeMaintenance();
-                  break;
+              case "provider_test":
+                toolResult = await this.handleProviderTest(args as unknown as ProviderTestArgs);
+                break;
+              case "security_audit":
+                toolResult = await this.handleSecurityAudit(args as unknown as SecurityAuditArgs);
+                break;
+              case "rate_limit_check":
+                toolResult = await this.handleRateLimitCheck(args as unknown as RateLimitCheckArgs);
+                break;
+              case "build_and_test":
+                toolResult = await this.handleBuildAndTest(args as unknown as BuildAndTestArgs);
+                break;
+              case "provider_config_validate":
+                toolResult = await this.handleProviderConfigValidate(
+                  args as unknown as ProviderConfigValidateArgs
+                );
+                break;
+              case "crypto_key_generate":
+                toolResult = await this.handleCryptoKeyGenerate(
+                  args as unknown as CryptoKeyGenerateArgs
+                );
+                break;
+              case "rate_limiter_status":
+                toolResult = await this.handleRateLimiterStatus();
+                break;
+              case "cache_stats":
+                toolResult = {
+                  content: [
+                    {
+                      type: "text",
+                      text: stringify({
+                        semantic_cache: this.semanticCache?.getStats() || null,
+                        nix_cache: getNixCacheStats(),
+                      }),
+                    },
+                  ],
+                };
+                break;
+              case "package_diagnose":
+                toolResult = await this.handlePackageDiagnose(args);
+                break;
+              case "package_download":
+                toolResult = await this.handlePackageDownload(args);
+                break;
+              case "package_configure":
+                toolResult = await this.handlePackageConfigure(args);
+                break;
+              case "create_session":
+                toolResult = await this.handleCreateSession(args);
+                break;
+              case "save_knowledge":
+                toolResult = await this.handleSaveKnowledge(args);
+                break;
+              case "search_knowledge":
+                toolResult = await this.handleSearchKnowledge(args);
+                break;
+              case "load_session":
+                toolResult = await this.handleLoadSession(args);
+                break;
+              case "list_sessions":
+                toolResult = await this.handleListSessions(args);
+                break;
+              case "get_recent_knowledge":
+                toolResult = await this.handleGetRecentKnowledge(args);
+                break;
+              case "knowledge_maintenance":
+                toolResult = await this.handleKnowledgeMaintenance();
+                break;
 
-                // Emergency Framework handlers
-                case "emergency_status":
-                  toolResult = await this.handleEmergencyStatus();
-                  break;
-                case "emergency_abort":
-                  toolResult = await this.handleEmergencyAbort(args);
-                  break;
-                case "emergency_cooldown":
-                  toolResult = await this.handleEmergencyCooldown();
-                  break;
-                case "emergency_nuke":
-                  toolResult = await this.handleEmergencyNuke(args);
-                  break;
-                case "emergency_swap":
-                  toolResult = await this.handleEmergencySwap();
-                  break;
-                case "system_health_check":
-                  toolResult = await this.handleSystemHealthCheck(args);
-                  break;
-                case "safe_rebuild_check":
-                  toolResult = await this.handleSafeRebuildCheck();
-                  break;
+              // Emergency Framework handlers
+              case "emergency_status":
+                toolResult = await this.handleEmergencyStatus();
+                break;
+              case "emergency_abort":
+                toolResult = await this.handleEmergencyAbort(args);
+                break;
+              case "emergency_cooldown":
+                toolResult = await this.handleEmergencyCooldown();
+                break;
+              case "emergency_nuke":
+                toolResult = await this.handleEmergencyNuke(args);
+                break;
+              case "emergency_swap":
+                toolResult = await this.handleEmergencySwap();
+                break;
+              case "system_health_check":
+                toolResult = await this.handleSystemHealthCheck(args);
+                break;
+              case "safe_rebuild_check":
+                toolResult = await this.handleSafeRebuildCheck();
+                break;
 
-                // Laptop Defense handlers
-                case "thermal_check":
-                  toolResult = await this.handleThermalCheck(args);
-                  break;
-                case "rebuild_safety_check":
-                  toolResult = await this.handleRebuildSafetyCheck();
-                  break;
-                case "thermal_forensics":
-                  toolResult = await this.handleThermalForensics(args);
-                  break;
-                case "thermal_warroom":
-                  toolResult = await this.handleThermalWarroom(args);
-                  break;
-                case "laptop_verdict":
-                  toolResult = await this.handleLaptopVerdict(args);
-                  break;
-                case "full_investigation":
-                  toolResult = await this.handleFullInvestigation();
-                  break;
-                case "force_cooldown":
-                  toolResult = await this.handleForceCooldown();
-                  break;
-                case "reset_performance":
-                  toolResult = await this.handleResetPerformance();
-                  break;
+              // Laptop Defense handlers
+              case "thermal_check":
+                toolResult = await this.handleThermalCheck(args);
+                break;
+              case "rebuild_safety_check":
+                toolResult = await this.handleRebuildSafetyCheck();
+                break;
+              case "thermal_forensics":
+                toolResult = await this.handleThermalForensics(args);
+                break;
+              case "thermal_warroom":
+                toolResult = await this.handleThermalWarroom(args);
+                break;
+              case "laptop_verdict":
+                toolResult = await this.handleLaptopVerdict(args);
+                break;
+              case "full_investigation":
+                toolResult = await this.handleFullInvestigation();
+                break;
+              case "force_cooldown":
+                toolResult = await this.handleForceCooldown();
+                break;
+              case "reset_performance":
+                toolResult = await this.handleResetPerformance();
+                break;
 
-                // Web Search handlers
-                case "web_search":
-                  toolResult = await this.handleWebSearch(args);
-                  break;
-                case "nix_search":
-                  toolResult = await this.handleNixSearch(args);
-                  break;
-                case "github_search":
-                  toolResult = await this.handleGithubSearch(args);
-                  break;
-                case "tech_news_search":
-                  toolResult = await this.handleTechNewsSearch(args);
-                  break;
-                case "nixos_discourse_search":
-                  toolResult = await this.handleDiscourseSearch(args);
-                  break;
-                case "stackoverflow_search":
-                  toolResult = await this.handleStackOverflowSearch(args);
-                  break;
+              // Web Search handlers
+              case "web_search":
+                toolResult = await this.handleWebSearch(args);
+                break;
+              case "nix_search":
+                toolResult = await this.handleNixSearch(args);
+                break;
+              case "github_search":
+                toolResult = await this.handleGithubSearch(args);
+                break;
+              case "tech_news_search":
+                toolResult = await this.handleTechNewsSearch(args);
+                break;
+              case "nixos_discourse_search":
+                toolResult = await this.handleDiscourseSearch(args);
+                break;
+              case "stackoverflow_search":
+                toolResult = await this.handleStackOverflowSearch(args);
+                break;
 
-                // Research Agent handler
-                case "research_agent":
-                  toolResult = await handleResearchAgent(args as any);
-                  break;
+              // Research Agent handler
+              case "research_agent":
+                toolResult = await handleResearchAgent(args as any);
+                break;
 
-                // Codebase Analysis handlers
-                case "analyze_complexity":
-                  toolResult = await analyzeComplexity(args as any);
-                  break;
-                case "find_dead_code":
-                  toolResult = await findDeadCode(args as any);
-                  break;
-                case "advanced_code_analysis":
-                  toolResult = await handleAdvancedCodeAnalysis(args as any);
-                  break;
-                case "socket_debug_report":
-                  toolResult = await handleSocketDebugReport(args as any);
-                  break;
+              // Codebase Analysis handlers
+              case "analyze_complexity":
+                toolResult = await analyzeComplexity(args as any);
+                break;
+              case "find_dead_code":
+                toolResult = await findDeadCode(args as any);
+                break;
+              case "advanced_code_analysis":
+                toolResult = await handleAdvancedCodeAnalysis(args as any);
+                break;
+              case "socket_debug_report":
+                toolResult = await handleSocketDebugReport(args as any);
+                break;
 
-                // Secure Execution handler
-                case "execute_in_sandbox":
-                  toolResult = await handleExecuteInSandbox(args as any);
-                  break;
+              // Secure Execution handler
+              case "execute_in_sandbox":
+                toolResult = await handleExecuteInSandbox(args as any);
+                break;
 
-                // SSH Tool handlers
-                case "ssh_execute":
-                  toolResult = await new SSHExecuteTool().execute(args as any);
-                  break;
-                case "ssh_file_transfer":
-                  toolResult = await new SSHFileTransferTool().execute(args as any);
-                  break;
-                case "ssh_maintenance_check":
-                  toolResult = await new SSHMaintenanceCheckTool().execute(args as any);
-                  break;
-                case "ssh_tunnel":
-                  toolResult = await new SSHTunnelTool().execute(args as any);
-                  break;
-                case "ssh_jump_host":
-                  toolResult = await new SSHJumpHostTool().execute(args as any);
-                  break;
-                case "ssh_session_manager":
-                  toolResult = await new SSHSessionTool().execute(args as any);
-                  break;
+              // SSH Tool handlers
+              case "ssh_execute":
+                toolResult = await new SSHExecuteTool().execute(args as any);
+                break;
+              case "ssh_file_transfer":
+                toolResult = await new SSHFileTransferTool().execute(args as any);
+                break;
+              case "ssh_maintenance_check":
+                toolResult = await new SSHMaintenanceCheckTool().execute(args as any);
+                break;
+              case "ssh_tunnel":
+                toolResult = await new SSHTunnelTool().execute(args as any);
+                break;
+              case "ssh_jump_host":
+                toolResult = await new SSHJumpHostTool().execute(args as any);
+                break;
+              case "ssh_session_manager":
+                toolResult = await new SSHSessionTool().execute(args as any);
+                break;
 
-                // DX Tool handlers
-                case "lint_code":
-                  toolResult = await devToolHandlers.lint_code(args as any);
-                  break;
-                case "format_code":
-                  toolResult = await devToolHandlers.format_code(args as any);
-                  break;
-                case "run_tests":
-                  toolResult = await devToolHandlers.run_tests(args as any);
-                  break;
-                case "github_actions":
-                  toolResult = await devToolHandlers.github_actions(args as any);
-                  break;
+              // DX Tool handlers
+              case "lint_code":
+                toolResult = await devToolHandlers.lint_code(args as any);
+                break;
+              case "format_code":
+                toolResult = await devToolHandlers.format_code(args as any);
+                break;
+              case "run_tests":
+                toolResult = await devToolHandlers.run_tests(args as any);
+                break;
+              case "github_actions":
+                toolResult = await devToolHandlers.github_actions(args as any);
+                break;
+
+              // Browser Tool handlers
+              case "browser_launch_advanced":
+                toolResult = await new BrowserLaunchAdvancedTool().execute(args as any);
+                break;
+              case "browser_extract_data":
+                toolResult = await new BrowserExtractDataTool().execute(args as any);
+                break;
+              case "browser_interact_form":
+                toolResult = await new BrowserInteractFormTool().execute(args as any);
+                break;
+              case "browser_monitor_changes":
+                toolResult = await new BrowserMonitorChangesTool().execute(args as any);
+                break;
+              case "browser_search_aggregate":
+                toolResult = await new BrowserSearchAggregateTool().execute(args as any);
+                break;
 
               default:
-                throw new McpError(
-                  ErrorCode.MethodNotFound,
-                  `Unknown tool: ${name}`
-                );
+                throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
             }
 
             return toolResult;
@@ -1044,12 +1079,12 @@ class SecureLLMBridgeMCPServer {
         );
 
         snapshot.executionTime = Date.now() - executionStart;
-        
+
         // Measure response size (lazy: only if needed for metrics)
         // Use fast-json-stringify if available, otherwise estimate
         try {
           const responseStr = stringify(result);
-          snapshot.responseSize = Buffer.byteLength(responseStr, 'utf8');
+          snapshot.responseSize = Buffer.byteLength(responseStr, "utf8");
         } catch (err) {
           // Fallback: estimate size from result object
           snapshot.responseSize = JSON.stringify(result).length;
@@ -1058,14 +1093,16 @@ class SecureLLMBridgeMCPServer {
         // SEMANTIC CACHE: Store result for future lookups
         if (this.semanticCache && result) {
           // Use async fire-and-forget to avoid blocking response
-          this.semanticCache.store({
-            toolName: name,
-            queryText: cacheKey,
-            toolArgs: args,
-            response: result,
-          }).catch(err => {
-            logger.warn({ err, toolName: name }, 'Failed to store in semantic cache');
-          });
+          this.semanticCache
+            .store({
+              toolName: name,
+              queryText: cacheKey,
+              toolArgs: args,
+              response: result,
+            })
+            .catch((err) => {
+              logger.warn({ err, toolName: name }, "Failed to store in semantic cache");
+            });
         }
 
         snapshot.totalTime = Date.now() - startTime;
@@ -1075,29 +1112,27 @@ class SecureLLMBridgeMCPServer {
       } catch (error) {
         snapshot.totalTime = Date.now() - startTime;
         snapshot.error = error instanceof Error ? error.message : String(error);
-        
+
         // Classify error
         if (error instanceof McpError) {
-          snapshot.errorCategory = error.code === ErrorCode.InvalidParams ? 'invalid_params' : 'mcp_error';
+          snapshot.errorCategory =
+            error.code === ErrorCode.InvalidParams ? "invalid_params" : "mcp_error";
         } else if (error instanceof Error) {
-          if (error.message.includes('timeout') || error.message.includes('Timeout')) {
-            snapshot.errorCategory = 'timeout';
-          } else if (error.message.includes('queue full')) {
-            snapshot.errorCategory = 'queue_full';
+          if (error.message.includes("timeout") || error.message.includes("Timeout")) {
+            snapshot.errorCategory = "timeout";
+          } else if (error.message.includes("queue full")) {
+            snapshot.errorCategory = "queue_full";
           } else {
-            snapshot.errorCategory = 'unknown';
+            snapshot.errorCategory = "unknown";
           }
         } else {
-          snapshot.errorCategory = 'unknown';
+          snapshot.errorCategory = "unknown";
         }
 
         this.toolMetricsCollector.recordSnapshot(snapshot);
 
         if (error instanceof McpError) throw error;
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Tool execution failed: ${error}`
-        );
+        throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${error}`);
       } finally {
         // Release permit if it was acquired
         if (permit) {
@@ -1154,39 +1189,45 @@ class SecureLLMBridgeMCPServer {
 
       try {
         // Handle guide/skill/prompt resources
-        if (uri.startsWith('guide://')) {
-          const name = uri.replace('guide://', '');
+        if (uri.startsWith("guide://")) {
+          const name = uri.replace("guide://", "");
           const content = await this.guideManager.loadGuide(name);
           return {
-            contents: [{
-              uri,
-              mimeType: "text/markdown",
-              text: content,
-            }],
+            contents: [
+              {
+                uri,
+                mimeType: "text/markdown",
+                text: content,
+              },
+            ],
           };
         }
 
-        if (uri.startsWith('skill://')) {
-          const name = uri.replace('skill://', '');
+        if (uri.startsWith("skill://")) {
+          const name = uri.replace("skill://", "");
           const content = await this.guideManager.loadSkill(name);
           return {
-            contents: [{
-              uri,
-              mimeType: "text/markdown",
-              text: content,
-            }],
+            contents: [
+              {
+                uri,
+                mimeType: "text/markdown",
+                text: content,
+              },
+            ],
           };
         }
 
-        if (uri.startsWith('prompt://')) {
-          const name = uri.replace('prompt://', '');
+        if (uri.startsWith("prompt://")) {
+          const name = uri.replace("prompt://", "");
           const content = await this.guideManager.loadPrompt(name);
           return {
-            contents: [{
-              uri,
-              mimeType: "text/markdown",
-              text: content,
-            }],
+            contents: [
+              {
+                uri,
+                mimeType: "text/markdown",
+                text: content,
+              },
+            ],
           };
         }
 
@@ -1223,17 +1264,11 @@ class SecureLLMBridgeMCPServer {
           case "docs://api":
             return await this.readApiDocs();
           default:
-            throw new McpError(
-              ErrorCode.InvalidRequest,
-              `Unknown resource: ${uri}`
-            );
+            throw new McpError(ErrorCode.InvalidRequest, `Unknown resource: ${uri}`);
         }
       } catch (error) {
         if (error instanceof McpError) throw error;
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Failed to read resource: ${error}`
-        );
+        throw new McpError(ErrorCode.InternalError, `Failed to read resource: ${error}`);
       }
     });
   }
@@ -1246,7 +1281,7 @@ class SecureLLMBridgeMCPServer {
       const result = await this.rateLimiter.execute(provider, async () => {
         const testScript = `
           cd "${PROJECT_ROOT}" && \
-          cargo run --bin securellm -- test ${provider} --prompt "${prompt.replace(/"/g, '\\"')}"${model ? ` --model ${model}` : ''}
+          cargo run --bin securellm -- test ${provider} --prompt "${prompt.replace(/"/g, '\\"')}"${model ? ` --model ${model}` : ""}
         `;
 
         const { stdout, stderr } = await execAsync(testScript, {
@@ -1307,22 +1342,22 @@ class SecureLLMBridgeMCPServer {
       }
 
       // Check TLS configuration
-      if (configContent.includes('enabled = false') && configContent.includes('[security.tls]')) {
+      if (configContent.includes("enabled = false") && configContent.includes("[security.tls]")) {
         warnings.push("TLS is disabled - only use for development");
       }
 
       // Check rate limiting
-      if (!configContent.includes('[security.rate_limit]')) {
+      if (!configContent.includes("[security.rate_limit]")) {
         warnings.push("Rate limiting not configured");
       }
 
       // Check audit logging
-      if (!configContent.includes('[security.audit]')) {
+      if (!configContent.includes("[security.audit]")) {
         recommendations.push("Consider enabling audit logging for production");
       }
 
       // Check for environment variable usage
-      if (!configContent.includes('${') && configContent.includes('api_key')) {
+      if (!configContent.includes("${") && configContent.includes("api_key")) {
         recommendations.push("Use environment variables for API keys instead of hardcoding");
       }
 
@@ -1425,7 +1460,7 @@ class SecureLLMBridgeMCPServer {
 
     try {
       // Wrap build operations with rate limiter to prevent spam
-      const result = await this.rateLimiter.execute('build', async () => {
+      const result = await this.rateLimiter.execute("build", async () => {
         const buildScript = `
           cd "${PROJECT_ROOT}" && \
           cargo build && \
@@ -1519,7 +1554,7 @@ class SecureLLMBridgeMCPServer {
 
     try {
       // Wrap crypto operations with rate limiter (expensive operations)
-      const result = await this.rateLimiter.execute('crypto', async () => {
+      const result = await this.rateLimiter.execute("crypto", async () => {
         await fs.mkdir(outputDir, { recursive: true });
 
         let certCommand = "";
@@ -1658,22 +1693,24 @@ class SecureLLMBridgeMCPServer {
     if (!this.db) {
       return {
         content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true
+        isError: true,
       };
     }
 
     try {
       const session = await this.db.createSession(args as CreateSessionInput);
       return {
-        content: [{
-          type: "text",
-          text: stringify({ session, message: "Session created successfully" })
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify({ session, message: "Session created successfully" }),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -1682,22 +1719,24 @@ class SecureLLMBridgeMCPServer {
     if (!this.db) {
       return {
         content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true
+        isError: true,
       };
     }
 
     try {
       const entry = await this.db.saveKnowledge(args as SaveKnowledgeInput);
       return {
-        content: [{
-          type: "text",
-          text: stringify({ entry, message: "Knowledge saved successfully" })
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify({ entry, message: "Knowledge saved successfully" }),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -1706,22 +1745,24 @@ class SecureLLMBridgeMCPServer {
     if (!this.db) {
       return {
         content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true
+        isError: true,
       };
     }
 
     try {
       const results = await this.db.searchKnowledge(args as SearchKnowledgeInput);
       return {
-        content: [{
-          type: "text",
-          text: stringify({ results, count: results.length })
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify({ results, count: results.length }),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -1730,7 +1771,7 @@ class SecureLLMBridgeMCPServer {
     if (!this.db) {
       return {
         content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true
+        isError: true,
       };
     }
 
@@ -1739,21 +1780,23 @@ class SecureLLMBridgeMCPServer {
       if (!session) {
         return {
           content: [{ type: "text", text: "Session not found" }],
-          isError: true
+          isError: true,
         };
       }
 
       const entries = await this.db.getRecentKnowledge(args.session_id, 100);
       return {
-        content: [{
-          type: "text",
-          text: stringify({ session, entries, count: entries.length })
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify({ session, entries, count: entries.length }),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -1762,22 +1805,24 @@ class SecureLLMBridgeMCPServer {
     if (!this.db) {
       return {
         content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true
+        isError: true,
       };
     }
 
     try {
       const sessions = await this.db.listSessions(args.limit || 20, args.offset || 0);
       return {
-        content: [{
-          type: "text",
-          text: stringify({ sessions, count: sessions.length })
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify({ sessions, count: sessions.length }),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -1786,22 +1831,24 @@ class SecureLLMBridgeMCPServer {
     if (!this.db) {
       return {
         content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true
+        isError: true,
       };
     }
 
     try {
       const entries = await this.db.getRecentKnowledge(args.session_id, args.limit || 20);
       return {
-        content: [{
-          type: "text",
-          text: stringify({ entries, count: entries.length })
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify({ entries, count: entries.length }),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -1810,7 +1857,7 @@ class SecureLLMBridgeMCPServer {
     if (!this.db) {
       return {
         content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true
+        isError: true,
       };
     }
 
@@ -1818,15 +1865,17 @@ class SecureLLMBridgeMCPServer {
       await this.db.maintenance();
       const stats = await this.db.getStats();
       return {
-        content: [{
-          type: "text",
-          text: stringify({ message: "Maintenance completed successfully", stats })
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify({ message: "Maintenance completed successfully", stats }),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -1841,14 +1890,16 @@ class SecureLLMBridgeMCPServer {
         status[provider] = {
           performance: {
             totalRequests: metrics.totalRequests,
-            successRate: metrics.totalRequests > 0
-              ? `${((metrics.successfulRequests / metrics.totalRequests) * 100).toFixed(2)}%`
-              : '0%',
+            successRate:
+              metrics.totalRequests > 0
+                ? `${((metrics.successfulRequests / metrics.totalRequests) * 100).toFixed(2)}%`
+                : "0%",
             requestsPerMinute: metrics.requestsPerMinute.toFixed(1),
             retriedRequests: metrics.retriedRequests,
-            averageRetries: metrics.retriedRequests > 0
-              ? (metrics.totalRetries / metrics.retriedRequests).toFixed(1)
-              : '0',
+            averageRetries:
+              metrics.retriedRequests > 0
+                ? (metrics.totalRetries / metrics.retriedRequests).toFixed(1)
+                : "0",
           },
           latency: {
             average: `${metrics.averageLatency.toFixed(0)}ms`,
@@ -1866,9 +1917,10 @@ class SecureLLMBridgeMCPServer {
             current: queueStatus || { queueLength: 0, processing: false },
             averageLength: metrics.queueMetrics.averageQueueLength.toFixed(1),
             maxLength: metrics.queueMetrics.maxQueueLength,
-            averageWaitTime: metrics.totalRequests > 0
-              ? `${(metrics.queueMetrics.totalTimeInQueue / metrics.totalRequests).toFixed(0)}ms`
-              : '0ms',
+            averageWaitTime:
+              metrics.totalRequests > 0
+                ? `${(metrics.queueMetrics.totalTimeInQueue / metrics.totalRequests).toFixed(0)}ms`
+                : "0ms",
           },
           timeWindow: {
             duration: `${(metrics.timeWindow.durationMs / 1000).toFixed(0)}s`,
@@ -2030,15 +2082,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleEmergencyStatus();
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2047,15 +2101,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleEmergencyAbort(args.force || false);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2064,15 +2120,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleEmergencyCooldown();
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2081,15 +2139,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleEmergencyNuke(args.confirm || false);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2098,15 +2158,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleEmergencySwap();
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2115,15 +2177,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleSystemHealthCheck(args.detailed || false);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2132,15 +2196,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleSafeRebuildCheck();
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2151,15 +2217,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleThermalCheck(args.max_temp || 75);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2168,15 +2236,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleRebuildSafetyCheck();
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2185,15 +2255,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleThermalForensics(args.duration || 180, args.skip_rebuild || false);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2202,15 +2274,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleThermalWarroom(args.duration || 60);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2219,15 +2293,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleLaptopVerdict(args.evidence_dir);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2236,15 +2312,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleFullInvestigation();
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2253,15 +2331,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleForceCooldown();
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2270,15 +2350,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleResetPerformance();
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2289,15 +2371,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleWebSearch(args);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2306,15 +2390,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleNixSearch(args);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2323,15 +2409,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleGithubSearch(args);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2340,15 +2428,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleTechNewsSearch(args);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2357,15 +2447,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleDiscourseSearch(args);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2374,15 +2466,17 @@ Generate server and client TLS certificates for secure communication.
     try {
       const result = await handleStackOverflowSearch(args);
       return {
-        content: [{
-          type: "text",
-          text: stringify(result)
-        }]
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
       };
     } catch (error: any) {
       return {
         content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true
+        isError: true,
       };
     }
   }
@@ -2394,29 +2488,36 @@ Generate server and client TLS certificates for secure communication.
     const metricsPort = process.env.METRICS_PORT;
     if (metricsPort) {
       try {
-        const http = await import('http');
-        const metricsHost = process.env.METRICS_HOST || '0.0.0.0'; // Use 0.0.0.0 for K8s
-        http.createServer((req, res) => {
-          if (req.url === '/metrics') {
-            res.writeHead(200, { 'Content-Type': 'text/plain' });
-            // Combine rate limiter metrics and tool metrics
-            const rateLimiterMetrics = this.rateLimiter.getAggregatePrometheusMetrics();
-            const toolMetrics = this.toolMetricsCollector.getPrometheusMetrics();
-            res.end([rateLimiterMetrics, toolMetrics].filter(Boolean).join('\n\n'));
-          } else if (req.url === '/health') {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              status: 'ok',
-              timestamp: new Date().toISOString(),
-              limiter: this.toolLimiter.getStatus(),
-            }));
-          } else {
-            res.writeHead(404);
-            res.end();
-          }
-        }).listen(parseInt(metricsPort, 10), metricsHost, () => {
-          logger.info({ port: metricsPort, host: metricsHost }, "Prometheus metrics server running");
-        });
+        const http = await import("http");
+        const metricsHost = process.env.METRICS_HOST || "0.0.0.0"; // Use 0.0.0.0 for K8s
+        http
+          .createServer((req, res) => {
+            if (req.url === "/metrics") {
+              res.writeHead(200, { "Content-Type": "text/plain" });
+              // Combine rate limiter metrics and tool metrics
+              const rateLimiterMetrics = this.rateLimiter.getAggregatePrometheusMetrics();
+              const toolMetrics = this.toolMetricsCollector.getPrometheusMetrics();
+              res.end([rateLimiterMetrics, toolMetrics].filter(Boolean).join("\n\n"));
+            } else if (req.url === "/health") {
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(
+                JSON.stringify({
+                  status: "ok",
+                  timestamp: new Date().toISOString(),
+                  limiter: this.toolLimiter.getStatus(),
+                })
+              );
+            } else {
+              res.writeHead(404);
+              res.end();
+            }
+          })
+          .listen(parseInt(metricsPort, 10), metricsHost, () => {
+            logger.info(
+              { port: metricsPort, host: metricsHost },
+              "Prometheus metrics server running"
+            );
+          });
       } catch (err) {
         logger.error({ err }, "Failed to start metrics server");
       }

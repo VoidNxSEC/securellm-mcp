@@ -25,7 +25,7 @@ export class OAuthError extends Error {
         this.type = type;
         this.provider = provider;
         this.originalError = originalError;
-        this.name = 'OAuthError';
+        this.name = "OAuthError";
     }
 }
 //# sourceMappingURL=oauth.js.map

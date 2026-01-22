@@ -1,6 +1,6 @@
 /**
  * OAuth 2.0 Manager - Base class for OAuth authentication flows
- * 
+ *
  * Provides:
  * - Authorization URL generation with PKCE support
  * - Token exchange (authorization code → access token)
@@ -9,7 +9,7 @@
  * - Token validation and expiration checks
  */
 
-import crypto from 'node:crypto';
+import crypto from "node:crypto";
 import {
   OAuthConfig,
   OAuthToken,
@@ -18,7 +18,8 @@ import {
   OAuthError,
   OAuthErrorType,
   OAuthProvider,
-} from '../types/oauth.js';
+  OAuthTokenResponse,
+} from "../types/oauth.js";
 
 /**
  * Base OAuth Manager for handling OAuth 2.0 flows
@@ -40,35 +41,31 @@ export abstract class OAuthManager {
     if (!config.clientId) {
       throw new OAuthError(
         OAuthErrorType.INVALID_CONFIG,
-        'OAuth client ID is required',
+        "OAuth client ID is required",
         config.provider
       );
     }
     if (!config.clientSecret) {
       throw new OAuthError(
         OAuthErrorType.INVALID_CONFIG,
-        'OAuth client secret is required',
+        "OAuth client secret is required",
         config.provider
       );
     }
     if (!config.authorizationUrl) {
       throw new OAuthError(
         OAuthErrorType.INVALID_CONFIG,
-        'Authorization URL is required',
+        "Authorization URL is required",
         config.provider
       );
     }
     if (!config.tokenUrl) {
-      throw new OAuthError(
-        OAuthErrorType.INVALID_CONFIG,
-        'Token URL is required',
-        config.provider
-      );
+      throw new OAuthError(OAuthErrorType.INVALID_CONFIG, "Token URL is required", config.provider);
     }
     if (!config.redirectUri) {
       throw new OAuthError(
         OAuthErrorType.INVALID_CONFIG,
-        'Redirect URI is required',
+        "Redirect URI is required",
         config.provider
       );
     }
@@ -78,18 +75,15 @@ export abstract class OAuthManager {
    * Generate a cryptographically secure random state
    */
   protected generateState(): string {
-    return crypto.randomBytes(32).toString('base64url');
+    return crypto.randomBytes(32).toString("base64url");
   }
 
   /**
    * Generate PKCE code verifier and challenge
    */
   protected generatePKCE(): { verifier: string; challenge: string } {
-    const verifier = crypto.randomBytes(32).toString('base64url');
-    const challenge = crypto
-      .createHash('sha256')
-      .update(verifier)
-      .digest('base64url');
+    const verifier = crypto.randomBytes(32).toString("base64url");
+    const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
     return { verifier, challenge };
   }
 
@@ -108,16 +102,16 @@ export abstract class OAuthManager {
     const params = new URLSearchParams({
       client_id: this.config.clientId,
       redirect_uri: this.config.redirectUri,
-      response_type: 'code',
+      response_type: "code",
       state,
-      scope: this.config.scopes.join(' '),
+      scope: this.config.scopes.join(" "),
     });
 
     if (usePKCE) {
       const { verifier, challenge } = this.generatePKCE();
       oauthState.codeVerifier = verifier;
-      params.set('code_challenge', challenge);
-      params.set('code_challenge_method', 'S256');
+      params.set("code_challenge", challenge);
+      params.set("code_challenge_method", "S256");
     }
 
     this.states.set(state, oauthState);
@@ -146,7 +140,7 @@ export abstract class OAuthManager {
     if (!oauthState) {
       throw new OAuthError(
         OAuthErrorType.INVALID_STATE,
-        'Invalid or expired OAuth state',
+        "Invalid or expired OAuth state",
         this.config.provider
       );
     }
@@ -156,7 +150,7 @@ export abstract class OAuthManager {
       this.states.delete(state);
       throw new OAuthError(
         OAuthErrorType.INVALID_STATE,
-        'OAuth state has expired',
+        "OAuth state has expired",
         this.config.provider
       );
     }
@@ -172,7 +166,7 @@ export abstract class OAuthManager {
     this.states.delete(request.state); // Single use
 
     const params = new URLSearchParams({
-      grant_type: 'authorization_code',
+      grant_type: "authorization_code",
       code: request.code,
       redirect_uri: this.config.redirectUri,
       client_id: this.config.clientId,
@@ -180,15 +174,15 @@ export abstract class OAuthManager {
     });
 
     if (oauthState.codeVerifier && request.codeVerifier) {
-      params.set('code_verifier', request.codeVerifier);
+      params.set("code_verifier", request.codeVerifier);
     }
 
     try {
       const response = await fetch(this.config.tokenUrl, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Accept: 'application/json',
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
         },
         body: params.toString(),
       });
@@ -202,7 +196,7 @@ export abstract class OAuthManager {
         );
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as OAuthTokenResponse;
       return this.parseTokenResponse(data);
     } catch (error) {
       if (error instanceof OAuthError) {
@@ -210,7 +204,7 @@ export abstract class OAuthManager {
       }
       throw new OAuthError(
         OAuthErrorType.NETWORK_ERROR,
-        'Failed to exchange authorization code',
+        "Failed to exchange authorization code",
         this.config.provider,
         error as Error
       );
@@ -220,11 +214,11 @@ export abstract class OAuthManager {
   /**
    * Parse token response from provider
    */
-  protected parseTokenResponse(data: any): OAuthToken {
+  protected parseTokenResponse(data: OAuthTokenResponse): OAuthToken {
     const token: OAuthToken = {
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
-      tokenType: data.token_type || 'Bearer',
+      tokenType: data.token_type || "Bearer",
       scopes: this.config.scopes,
       provider: this.config.provider,
     };
@@ -243,13 +237,13 @@ export abstract class OAuthManager {
     if (!token.refreshToken) {
       throw new OAuthError(
         OAuthErrorType.REFRESH_FAILED,
-        'No refresh token available',
+        "No refresh token available",
         this.config.provider
       );
     }
 
     const params = new URLSearchParams({
-      grant_type: 'refresh_token',
+      grant_type: "refresh_token",
       refresh_token: token.refreshToken,
       client_id: this.config.clientId,
       client_secret: this.config.clientSecret,
@@ -257,10 +251,10 @@ export abstract class OAuthManager {
 
     try {
       const response = await fetch(this.config.tokenUrl, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Accept: 'application/json',
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
         },
         body: params.toString(),
       });
@@ -274,7 +268,7 @@ export abstract class OAuthManager {
         );
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as OAuthTokenResponse;
       return this.parseTokenResponse(data);
     } catch (error) {
       if (error instanceof OAuthError) {
@@ -282,7 +276,7 @@ export abstract class OAuthManager {
       }
       throw new OAuthError(
         OAuthErrorType.NETWORK_ERROR,
-        'Failed to refresh token',
+        "Failed to refresh token",
         this.config.provider,
         error as Error
       );

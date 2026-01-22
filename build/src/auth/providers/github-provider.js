@@ -12,10 +12,10 @@
  *
  * Documentation: https://docs.github.com/en/apps/oauth-apps/building-oauth-apps
  */
-import { OAuthManager } from '../oauth-manager.js';
-import { OAuthError, OAuthErrorType, } from '../../types/oauth.js';
-import { GITHUB_API_ENDPOINTS, } from '../../types/providers/github.js';
-import { logger } from '../../utils/logger.js';
+import { OAuthManager } from "../oauth-manager.js";
+import { OAuthError, OAuthErrorType } from "../../types/oauth.js";
+import { GITHUB_API_ENDPOINTS, } from "../../types/providers/github.js";
+import { logger } from "../../utils/logger.js";
 /**
  * GitHub OAuth Provider implementation
  */
@@ -23,9 +23,9 @@ export class GitHubOAuthProvider extends OAuthManager {
     /**
      * Create GitHub OAuth provider with default configuration
      */
-    static createDefault(clientId, clientSecret, redirectUri, scopes = ['user:email', 'read:user']) {
+    static createDefault(clientId, clientSecret, redirectUri, scopes = ["user:email", "read:user"]) {
         const config = {
-            provider: 'github',
+            provider: "github",
             clientId,
             clientSecret,
             authorizationUrl: GITHUB_API_ENDPOINTS.authorization,
@@ -43,14 +43,14 @@ export class GitHubOAuthProvider extends OAuthManager {
             const response = await fetch(GITHUB_API_ENDPOINTS.user, {
                 headers: {
                     Authorization: `Bearer ${token.accessToken}`,
-                    Accept: 'application/vnd.github.v3+json',
-                    'User-Agent': 'SecureLLM-Bridge-MCP',
+                    Accept: "application/vnd.github.v3+json",
+                    "User-Agent": "SecureLLM-Bridge-MCP",
                 },
             });
             return response.ok;
         }
         catch (error) {
-            logger.warn({ err: error }, 'GitHub token validation failed');
+            logger.warn({ err: error }, "GitHub token validation failed");
             return false;
         }
     }
@@ -62,33 +62,33 @@ export class GitHubOAuthProvider extends OAuthManager {
             const response = await fetch(GITHUB_API_ENDPOINTS.user, {
                 headers: {
                     Authorization: `Bearer ${token.accessToken}`,
-                    Accept: 'application/vnd.github.v3+json',
-                    'User-Agent': 'SecureLLM-Bridge-MCP',
+                    Accept: "application/vnd.github.v3+json",
+                    "User-Agent": "SecureLLM-Bridge-MCP",
                 },
             });
             if (!response.ok) {
                 const error = await response.text();
-                throw new OAuthError(OAuthErrorType.PROVIDER_ERROR, `Failed to fetch GitHub user info: ${error}`, 'github');
+                throw new OAuthError(OAuthErrorType.PROVIDER_ERROR, `Failed to fetch GitHub user info: ${error}`, "github");
             }
-            const user = await response.json();
+            const user = (await response.json());
             // Fetch email if not included
-            if (!user.email && token.scopes.includes('user:email')) {
+            if (!user.email && token.scopes.includes("user:email")) {
                 try {
                     const emailResponse = await fetch(GITHUB_API_ENDPOINTS.userEmails, {
                         headers: {
                             Authorization: `Bearer ${token.accessToken}`,
-                            Accept: 'application/vnd.github.v3+json',
-                            'User-Agent': 'SecureLLM-Bridge-MCP',
+                            Accept: "application/vnd.github.v3+json",
+                            "User-Agent": "SecureLLM-Bridge-MCP",
                         },
                     });
                     if (emailResponse.ok) {
-                        const emails = await emailResponse.json();
+                        const emails = (await emailResponse.json());
                         const primaryEmail = emails.find((e) => e.primary);
                         user.email = primaryEmail?.email || null;
                     }
                 }
                 catch (error) {
-                    logger.warn({ err: error }, 'Failed to fetch GitHub user emails');
+                    logger.warn({ err: error }, "Failed to fetch GitHub user emails");
                 }
             }
             return user;
@@ -97,37 +97,35 @@ export class GitHubOAuthProvider extends OAuthManager {
             if (error instanceof OAuthError) {
                 throw error;
             }
-            throw new OAuthError(OAuthErrorType.NETWORK_ERROR, 'Failed to fetch GitHub user info', 'github', error);
+            throw new OAuthError(OAuthErrorType.NETWORK_ERROR, "Failed to fetch GitHub user info", "github", error);
         }
     }
     /**
      * Make authenticated request to GitHub API
      */
     async makeRequest(token, endpoint, options = {}) {
-        const url = endpoint.startsWith('http')
-            ? endpoint
-            : `https://api.github.com${endpoint}`;
+        const url = endpoint.startsWith("http") ? endpoint : `https://api.github.com${endpoint}`;
         try {
             const response = await fetch(url, {
                 ...options,
                 headers: {
                     Authorization: `Bearer ${token.accessToken}`,
-                    Accept: 'application/vnd.github.v3+json',
-                    'User-Agent': 'SecureLLM-Bridge-MCP',
+                    Accept: "application/vnd.github.v3+json",
+                    "User-Agent": "SecureLLM-Bridge-MCP",
                     ...options.headers,
                 },
             });
             if (!response.ok) {
                 const error = await response.text();
-                throw new OAuthError(OAuthErrorType.PROVIDER_ERROR, `GitHub API request failed: ${error}`, 'github');
+                throw new OAuthError(OAuthErrorType.PROVIDER_ERROR, `GitHub API request failed: ${error}`, "github");
             }
-            return await response.json();
+            return (await response.json());
         }
         catch (error) {
             if (error instanceof OAuthError) {
                 throw error;
             }
-            throw new OAuthError(OAuthErrorType.NETWORK_ERROR, `GitHub API request failed: ${error}`, 'github', error);
+            throw new OAuthError(OAuthErrorType.NETWORK_ERROR, `GitHub API request failed: ${error instanceof Error ? error.message : String(error)}`, "github", error instanceof Error ? error : undefined);
         }
     }
     /**
@@ -135,25 +133,25 @@ export class GitHubOAuthProvider extends OAuthManager {
      */
     async listRepositories(token, options = {}) {
         const params = new URLSearchParams({
-            type: options.type || 'all',
-            sort: options.sort || 'updated',
+            type: options.type || "all",
+            sort: options.sort || "updated",
             per_page: String(options.per_page || 30),
             page: String(options.page || 1),
         });
-        return this.makeRequest(token, `/user/repos?${params}`);
+        return this.makeRequest(token, `/user/repos?${params.toString()}`);
     }
     /**
      * Get repository details
      */
     async getRepository(token, owner, repo) {
-        return this.makeRequest(token, `/repos/${owner}/${repo}`);
+        return this.makeRequest(token, `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);
     }
     /**
      * Create a gist
      */
     async createGist(token, files, description, isPublic = false) {
-        return this.makeRequest(token, '/gists', {
-            method: 'POST',
+        return this.makeRequest(token, "/gists", {
+            method: "POST",
             body: JSON.stringify({
                 description,
                 public: isPublic,

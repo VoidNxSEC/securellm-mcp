@@ -12,9 +12,9 @@
  *
  * Documentation: https://docs.github.com/en/apps/oauth-apps/building-oauth-apps
  */
-import { OAuthManager } from '../oauth-manager.js';
-import { OAuthToken } from '../../types/oauth.js';
-import { GitHubUser, GitHubScope } from '../../types/providers/github.js';
+import { OAuthManager } from "../oauth-manager.js";
+import { OAuthToken } from "../../types/oauth.js";
+import { GitHubUser, GitHubScope, GitHubRepository, GitHubGist } from "../../types/providers/github.js";
 /**
  * GitHub OAuth Provider implementation
  */
@@ -34,25 +34,25 @@ export declare class GitHubOAuthProvider extends OAuthManager {
     /**
      * Make authenticated request to GitHub API
      */
-    makeRequest<T = any>(token: OAuthToken, endpoint: string, options?: RequestInit): Promise<T>;
+    makeRequest<T = unknown>(token: OAuthToken, endpoint: string, options?: RequestInit): Promise<T>;
     /**
      * List user repositories
      */
     listRepositories(token: OAuthToken, options?: {
-        type?: 'all' | 'owner' | 'public' | 'private' | 'member';
-        sort?: 'created' | 'updated' | 'pushed' | 'full_name';
+        type?: "all" | "owner" | "public" | "private" | "member";
+        sort?: "created" | "updated" | "pushed" | "full_name";
         per_page?: number;
         page?: number;
-    }): Promise<any[]>;
+    }): Promise<GitHubRepository[]>;
     /**
      * Get repository details
      */
-    getRepository(token: OAuthToken, owner: string, repo: string): Promise<any>;
+    getRepository(token: OAuthToken, owner: string, repo: string): Promise<GitHubGist>;
     /**
      * Create a gist
      */
     createGist(token: OAuthToken, files: Record<string, {
         content: string;
-    }>, description?: string, isPublic?: boolean): Promise<any>;
+    }>, description?: string, isPublic?: boolean): Promise<GitHubRepository>;
 }
 //# sourceMappingURL=github-provider.d.ts.map
