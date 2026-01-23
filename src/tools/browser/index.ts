@@ -41,10 +41,17 @@ class BrowserSessionManager {
     }
 
     try {
-      const browser = await puppeteer.launch({
+      const launchOptions: any = {
         headless,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
+      };
+
+      // Use Chromium from Nix environment if available
+      if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      }
+
+      const browser = await puppeteer.launch(launchOptions);
 
       const page = await browser.newPage();
       await page.setViewport(viewport);

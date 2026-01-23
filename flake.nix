@@ -48,9 +48,11 @@
             cp package.json $out/lib/mcp-server/
             cp -r node_modules $out/lib/mcp-server/
 
-            # Create executable wrapper
+            # Create executable wrapper with Chromium path
             cat > $out/bin/securellm-mcp <<EOF
             #!${pkgs.bash}/bin/bash
+            export PUPPETEER_EXECUTABLE_PATH="${pkgs.chromium}/bin/chromium"
+            export PUPPETEER_SKIP_DOWNLOAD="1"
             exec ${pkgs.nodejs}/bin/node $out/lib/mcp-server/build/src/index.js "\$@"
             EOF
             chmod +x $out/bin/securellm-mcp
@@ -84,6 +86,9 @@
             openssl
             sqlite
 
+            # Browser Automation
+            chromium
+
             # Utils
             ripgrep
             jq
@@ -91,9 +96,12 @@
 
           shellHook = ''
             export LD_LIBRARY_PATH=${pkgs.openssl.out}/lib:$LD_LIBRARY_PATH
+            export PUPPETEER_EXECUTABLE_PATH="${pkgs.chromium}/bin/chromium"
+            export PUPPETEER_SKIP_DOWNLOAD="1"
             echo "🛡️ SecureLLM Dev Environment (Node.js + Rust) Loaded"
             echo "Rust Version: $(rustc --version)"
             echo "Node Version: $(node --version)"
+            echo "Chromium: ${pkgs.chromium}/bin/chromium"
           '';
         };
       }
