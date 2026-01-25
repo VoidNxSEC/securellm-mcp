@@ -2,15 +2,23 @@
  * Web Search Tools for MCP Server
  *
  * Enhanced version with:
- * - Native fetch (no curl dependency)
+ * - Spider-Nix integration for real web crawling
  * - Intelligent formatted outputs
  * - Actionable summaries
  * - Source credibility indicators
+ * - OSINT capabilities
  */
 
 import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 import { PackageSearch } from "./nix/package-search.js";
 import { logger } from "../utils/logger.js";
+import {
+  webSearch as spiderWebSearch,
+  crawlWebsite,
+  osintDns,
+  osintSubdomains,
+  osintPortScan,
+} from "./spider-nix-wrapper.js";
 
 const packageSearch = new PackageSearch();
 
@@ -245,10 +253,120 @@ export const webSearchTools: ExtendedTool[] = [
       required: ["query"],
     },
   },
+  {
+    name: "osint_dns",
+    description: "Perform DNS reconnaissance on a domain using spider-nix. Retrieves DNS records, nameservers, MX records, and more.",
+    defer_loading: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        domain: {
+          type: "string",
+          description: "Target domain for DNS reconnaissance",
+        },
+        record_types: {
+          type: "array",
+          items: { type: "string" },
+          description: "DNS record types to query (e.g., ['A', 'AAAA', 'MX', 'NS', 'TXT'])",
+        },
+        timeout: {
+          type: "number",
+          description: "Timeout in milliseconds (default: 30000)",
+          default: 30000,
+        },
+      },
+      required: ["domain"],
+    },
+  },
+  {
+    name: "osint_subdomains",
+    description: "Discover subdomains for a target domain using spider-nix. Uses certificate transparency, DNS bruteforce, and other techniques.",
+    defer_loading: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        domain: {
+          type: "string",
+          description: "Target domain for subdomain discovery",
+        },
+        wordlist: {
+          type: "string",
+          description: "Path to custom subdomain wordlist (optional)",
+        },
+        timeout: {
+          type: "number",
+          description: "Timeout in milliseconds (default: 60000)",
+          default: 60000,
+        },
+      },
+      required: ["domain"],
+    },
+  },
+  {
+    name: "osint_portscan",
+    description: "Perform port scanning on a target host using spider-nix. Identifies open ports and running services.",
+    defer_loading: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        host: {
+          type: "string",
+          description: "Target host (IP address or hostname)",
+        },
+        ports: {
+          type: "string",
+          description: "Port range (e.g., '1-1000', '80,443,8080'). Default: common ports",
+        },
+        timeout: {
+          type: "number",
+          description: "Timeout in milliseconds (default: 120000)",
+          default: 120000,
+        },
+      },
+      required: ["host"],
+    },
+  },
+  {
+    name: "web_crawl",
+    description: "Crawl a website using spider-nix with advanced stealth and content extraction. Use for deep analysis of specific sites.",
+    defer_loading: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "Target URL to crawl",
+        },
+        pages: {
+          type: "number",
+          description: "Maximum number of pages to crawl (default: 10)",
+          default: 10,
+        },
+        browser: {
+          type: "boolean",
+          description: "Use browser mode for JavaScript-heavy sites (default: false)",
+          default: false,
+        },
+        follow_links: {
+          type: "boolean",
+          description: "Follow links on pages (default: true)",
+          default: true,
+        },
+        aggressive: {
+          type: "boolean",
+          description: "Use aggressive crawling mode (default: false)",
+          default: false,
+        },
+      },
+      required: ["url"],
+    },
+  },
 ];
 
 /**
- * Execute web search using native fetch
+ * Execute web search using spider-nix crawler
+ *
+ * Provides real web crawling with content extraction instead of limited API results
  */
 export async function handleWebSearch(args: WebSearchArgs) {
   const { query, search_type = "general", limit = 10 } = args;
@@ -272,59 +390,71 @@ export async function handleWebSearch(args: WebSearchArgs) {
         break;
     }
 
-    // Use DuckDuckGo's instant answer API
-    const encodedQuery = encodeURIComponent(searchQuery);
-    const ddgUrl = `https://api.duckduckgo.com/?q=${encodedQuery}&format=json&no_html=1&skip_disambig=1`;
+    logger.info(
+      { query: searchQuery, search_type, limit },
+      "Executing spider-nix web search"
+    );
 
-    const response = await fetch(ddgUrl, {
-      headers: { "User-Agent": USER_AGENT },
-      signal: AbortSignal.timeout(10000),
-    });
+    // Use spider-nix for real web crawling
+    const crawlResults = await spiderWebSearch(searchQuery, limit);
 
-    if (!response.ok) {
-      throw new Error(`DuckDuckGo API error: ${response.status}`);
-    }
-
-    const data = await response.json() as any;
-
-    // Build results from various DDG response fields
-    const results: any[] = [];
-
-    // Instant answer
-    if (data.AbstractText) {
-      results.push({
-        type: "instant_answer",
-        title: data.Heading || "Answer",
-        description: data.AbstractText,
-        url: data.AbstractURL,
-        source: data.AbstractSource,
-      });
-    }
-
-    // Related topics
-    for (const topic of (data.RelatedTopics || []).slice(0, limit - 1)) {
-      if (topic.Text) {
-        results.push({
-          type: "related",
-          title: topic.Text?.split(" - ")[0] || "Related",
-          description: topic.Text,
-          url: topic.FirstURL,
-        });
-      }
-    }
+    // Transform spider-nix results to our format
+    const results = crawlResults.map((result, index) => ({
+      type: "crawl_result",
+      rank: index + 1,
+      title: result.title || "No title",
+      description: result.description || result.content?.substring(0, 200) || "",
+      url: result.url,
+      content_preview: result.content?.substring(0, 500),
+      relevance: index < 3 ? "high" : index < 6 ? "medium" : "low",
+    }));
 
     return formatIntelligentOutput({
       query: searchQuery,
-      source: "DuckDuckGo",
+      source: "Spider-Nix Crawler",
       results,
-      summary: data.AbstractText ? "Found instant answer." : undefined,
+      summary: `Found ${results.length} results via intelligent web crawling.`,
     });
   } catch (error: any) {
+    logger.error({ err: error, query, search_type }, "Spider-nix search failed");
+
+    // Fallback: try simple DuckDuckGo instant answer
+    try {
+      const encodedQuery = encodeURIComponent(query);
+      const ddgUrl = `https://api.duckduckgo.com/?q=${encodedQuery}&format=json&no_html=1&skip_disambig=1`;
+
+      const response = await fetch(ddgUrl, {
+        headers: { "User-Agent": USER_AGENT },
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (response.ok) {
+        const data = await response.json() as any;
+
+        if (data.AbstractText) {
+          return formatIntelligentOutput({
+            query,
+            source: "DuckDuckGo (Fallback)",
+            results: [{
+              type: "instant_answer",
+              title: data.Heading || "Answer",
+              description: data.AbstractText,
+              url: data.AbstractURL,
+              source: data.AbstractSource,
+            }],
+            summary: "Spider-nix unavailable, using fallback instant answer.",
+          });
+        }
+      }
+    } catch (fallbackError: any) {
+      logger.warn({ err: fallbackError }, "Fallback search also failed");
+    }
+
     return {
       success: false,
       error: error.message,
       message: "Web search failed",
-      suggestion: "Try using research_agent for more comprehensive results",
+      suggestion: "Try using research_agent for more comprehensive results, or check if spider-nix is installed",
     };
   }
 }
@@ -676,6 +806,163 @@ export async function handleStackOverflowSearch(args: { query: string; tags?: st
       success: false,
       error: error.message,
       message: "Stack Overflow search failed",
+    };
+  }
+}
+
+/**
+ * Handle OSINT DNS reconnaissance
+ */
+export async function handleOsintDns(args: {
+  domain: string;
+  record_types?: string[];
+  timeout?: number;
+}) {
+  const { domain, record_types, timeout } = args;
+
+  try {
+    logger.info({ domain, record_types }, "Performing DNS reconnaissance");
+
+    const result = await osintDns(domain, {
+      recordTypes: record_types,
+      timeout,
+    });
+
+    return {
+      success: true,
+      domain,
+      records: result.records,
+      nameservers: result.nameservers,
+      mx: result.mx,
+      summary: `DNS records retrieved for ${domain}`,
+    };
+  } catch (error: any) {
+    logger.error({ err: error, domain }, "DNS reconnaissance failed");
+    return {
+      success: false,
+      error: error.message,
+      message: "DNS reconnaissance failed",
+    };
+  }
+}
+
+/**
+ * Handle OSINT subdomain discovery
+ */
+export async function handleOsintSubdomains(args: {
+  domain: string;
+  wordlist?: string;
+  timeout?: number;
+}) {
+  const { domain, wordlist, timeout } = args;
+
+  try {
+    logger.info({ domain, wordlist }, "Performing subdomain discovery");
+
+    const result = await osintSubdomains(domain, {
+      wordlist,
+      timeout,
+    });
+
+    return {
+      success: true,
+      domain,
+      subdomains: result.subdomains,
+      sources: result.sources,
+      count: result.subdomains.length,
+      summary: `Found ${result.subdomains.length} subdomains for ${domain}`,
+    };
+  } catch (error: any) {
+    logger.error({ err: error, domain }, "Subdomain discovery failed");
+    return {
+      success: false,
+      error: error.message,
+      message: "Subdomain discovery failed",
+    };
+  }
+}
+
+/**
+ * Handle OSINT port scanning
+ */
+export async function handleOsintPortScan(args: {
+  host: string;
+  ports?: string;
+  timeout?: number;
+}) {
+  const { host, ports, timeout } = args;
+
+  try {
+    logger.info({ host, ports }, "Performing port scan");
+
+    const result = await osintPortScan(host, {
+      ports,
+      timeout,
+    });
+
+    const openPorts = result.ports.filter(p => p.state === 'open');
+
+    return {
+      success: true,
+      host,
+      ports: result.ports,
+      open_count: openPorts.length,
+      open_ports: openPorts,
+      summary: `Found ${openPorts.length} open ports on ${host}`,
+    };
+  } catch (error: any) {
+    logger.error({ err: error, host }, "Port scan failed");
+    return {
+      success: false,
+      error: error.message,
+      message: "Port scan failed",
+    };
+  }
+}
+
+/**
+ * Handle direct website crawling
+ */
+export async function handleWebCrawl(args: {
+  url: string;
+  pages?: number;
+  browser?: boolean;
+  follow_links?: boolean;
+  aggressive?: boolean;
+}) {
+  const { url, pages = 10, browser = false, follow_links = true, aggressive = false } = args;
+
+  try {
+    logger.info({ url, pages, browser, aggressive }, "Crawling website");
+
+    const results = await crawlWebsite(url, {
+      pages,
+      browser,
+      followLinks: follow_links,
+      aggressive,
+      timeout: 120000,
+    });
+
+    return {
+      success: true,
+      url,
+      pages_crawled: results.length,
+      results: results.map((r, i) => ({
+        rank: i + 1,
+        url: r.url,
+        title: r.title,
+        description: r.description,
+        content_length: r.content?.length || 0,
+        links_found: r.links?.length || 0,
+      })),
+      summary: `Successfully crawled ${results.length} pages from ${url}`,
+    };
+  } catch (error: any) {
+    logger.error({ err: error, url }, "Web crawl failed");
+    return {
+      success: false,
+      error: error.message,
+      message: "Web crawl failed",
     };
   }
 }

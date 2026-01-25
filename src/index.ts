@@ -62,6 +62,10 @@ import {
   handleTechNewsSearch,
   handleDiscourseSearch,
   handleStackOverflowSearch,
+  handleOsintDns,
+  handleOsintSubdomains,
+  handleOsintPortScan,
+  handleWebCrawl,
   getNixCacheStats,
 } from "./tools/web-search.js";
 import { researchAgentTool, handleResearchAgent } from "./tools/research-agent.js";
@@ -993,6 +997,20 @@ class SecureLLMBridgeMCPServer {
                 break;
               case "stackoverflow_search":
                 toolResult = await this.handleStackOverflowSearch(args);
+                break;
+
+              // OSINT handlers (spider-nix integration)
+              case "osint_dns":
+                toolResult = await this.handleOsintDns(args);
+                break;
+              case "osint_subdomains":
+                toolResult = await this.handleOsintSubdomains(args);
+                break;
+              case "osint_portscan":
+                toolResult = await this.handleOsintPortScan(args);
+                break;
+              case "web_crawl":
+                toolResult = await this.handleWebCrawl(args);
                 break;
 
               // Research Agent handler
@@ -2465,6 +2483,82 @@ Generate server and client TLS certificates for secure communication.
   private async handleStackOverflowSearch(args: any) {
     try {
       const result = await handleStackOverflowSearch(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
+        isError: true,
+      };
+    }
+  }
+
+  private async handleOsintDns(args: any) {
+    try {
+      const result = await handleOsintDns(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
+        isError: true,
+      };
+    }
+  }
+
+  private async handleOsintSubdomains(args: any) {
+    try {
+      const result = await handleOsintSubdomains(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
+        isError: true,
+      };
+    }
+  }
+
+  private async handleOsintPortScan(args: any) {
+    try {
+      const result = await handleOsintPortScan(args);
+      return {
+        content: [
+          {
+            type: "text",
+            text: stringify(result),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
+        isError: true,
+      };
+    }
+  }
+
+  private async handleWebCrawl(args: any) {
+    try {
+      const result = await handleWebCrawl(args);
       return {
         content: [
           {
