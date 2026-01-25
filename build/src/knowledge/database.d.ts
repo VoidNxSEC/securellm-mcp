@@ -4,6 +4,10 @@ export declare class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
     constructor(dbPath: string);
     private initialize;
     /**
+     * Initialize compaction-related tables
+     */
+    private initCompactionTables;
+    /**
      * Initialize context inference tables
      */
     private initContextTables;
@@ -57,6 +61,57 @@ export declare class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
     private rowToSession;
     private rowToKnowledgeEntry;
     private createSnippet;
+    createSummary(input: {
+        session_id: string;
+        summary_type: string;
+        content: string;
+        entry_count: number;
+        token_count?: number;
+        source_entries: number[];
+        metadata?: Record<string, any>;
+    }): Promise<number>;
+    getSummary(id: number): Promise<any | null>;
+    getSummariesForSession(sessionId: string): Promise<any[]>;
+    createArchiveMetadata(input: {
+        session_id: string;
+        archive_file: string;
+        entry_count: number;
+        original_size: number;
+        compressed_size: number;
+        metadata?: Record<string, any>;
+    }): Promise<number>;
+    getArchiveMetadata(sessionId: string): Promise<any | null>;
+    updateArchiveRestore(sessionId: string): Promise<void>;
+    recordDuplicate(input: {
+        entry_id_1: number;
+        entry_id_2: number;
+        similarity_score: number;
+        action?: string;
+    }): Promise<number>;
+    getDuplicates(threshold?: number): Promise<any[]>;
+    startCompactionOperation(operation: string, metadata?: Record<string, any>): Promise<number>;
+    completeCompactionOperation(id: number, stats: {
+        entries_affected?: number;
+        space_saved?: number;
+        error?: string;
+    }): Promise<void>;
+    getCompactionHistory(limit?: number): Promise<any[]>;
+    /**
+     * Add missing columns to existing database (for migration)
+     */
+    migrateSchema(): Promise<void>;
+    /**
+     * Database backup
+     */
+    backup(backupPath: string): Promise<void>;
+    /**
+     * Database integrity check
+     */
+    checkIntegrity(): Promise<boolean>;
+    /**
+     * Foreign key check
+     */
+    checkForeignKeys(): Promise<any[]>;
     close(): void;
 }
 export declare function createKnowledgeDatabase(dbPath: string): KnowledgeDatabase;
