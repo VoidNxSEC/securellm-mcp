@@ -1,4 +1,4 @@
-# 2.0.0 (2026-01-21)
+# 2.0.0 (2026-01-25)
 
 
 ### Bug Fixes
@@ -18,6 +18,7 @@
 
 ### Features
 
+* **.mcp.json:** add cloudflared-linux-amd64 binary ([065ba64](https://github.com/marcosfpina/securellm-mcp/commit/065ba64dec42d42012fda34fa16a7b1a727b3a55))
 * Add enterprise-grade refactoring guide for MCP server ([54f338b](https://github.com/marcosfpina/securellm-mcp/commit/54f338b4594a0ebeb0c9dc3fbc23a0a91140e69b))
 * **async:** [MCP-2] replace blocking execSync with async execution ([683a824](https://github.com/marcosfpina/securellm-mcp/commit/683a8242be1045757a0e210c5c585933829b02ad))
 * **auth:** add OAuth management and provider modules ([9d32596](https://github.com/marcosfpina/securellm-mcp/commit/9d32596a24cf7b3f2d451d342f15104146a127ec))
