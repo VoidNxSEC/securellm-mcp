@@ -11,6 +11,7 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { logger } from "../utils/logger.js";
+import { getGitHubToken } from "../utils/github-token.js";
 
 const execAsync = promisify(exec);
 
@@ -156,13 +157,22 @@ export class DeepResearchEngine {
         try {
             switch (source) {
                 case "github": {
+                    const headers: Record<string, string> = {
+                        "Accept": "application/vnd.github.v3+json",
+                        "User-Agent": "SecureLLM-MCP/1.0",
+                    };
+
+                    // Add token if available (increases rate limit from 60 to 5000 req/h)
+                    // Token sources: ENV > gh CLI > SOPS (see src/utils/github-token.ts)
+                    const githubToken = await getGitHubToken();
+                    if (githubToken) {
+                        headers["Authorization"] = `Bearer ${githubToken}`;
+                    }
+
                     const response = await fetch(
                         `https://api.github.com/search/repositories?q=${encodedQuery}+language:nix&per_page=3`,
                         {
-                            headers: {
-                                "Accept": "application/vnd.github.v3+json",
-                                "User-Agent": "SecureLLM-MCP/1.0",
-                            },
+                            headers,
                             signal: AbortSignal.timeout(10000),
                         }
                     );

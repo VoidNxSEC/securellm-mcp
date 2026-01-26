@@ -12,6 +12,7 @@
 import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 import { PackageSearch } from "./nix/package-search.js";
 import { logger } from "../utils/logger.js";
+import { getGitHubToken } from "../utils/github-token.js";
 import {
   webSearch as spiderWebSearch,
   crawlWebsite,
@@ -474,11 +475,20 @@ export async function handleGithubSearch(args: GithubSearchArgs) {
     const encodedQuery = encodeURIComponent(searchQuery);
     const apiUrl = `https://api.github.com/search/${type}?q=${encodedQuery}&sort=${sort}&per_page=10`;
 
+    const headers: Record<string, string> = {
+      "Accept": "application/vnd.github.v3+json",
+      "User-Agent": USER_AGENT,
+    };
+
+    // Add token if available (increases rate limit from 60 to 5000 req/h)
+    // Token sources: ENV > gh CLI > SOPS (see src/utils/github-token.ts)
+    const githubToken = await getGitHubToken();
+    if (githubToken) {
+      headers["Authorization"] = `Bearer ${githubToken}`;
+    }
+
     const response = await fetch(apiUrl, {
-      headers: {
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": USER_AGENT,
-      },
+      headers,
       signal: AbortSignal.timeout(10000),
     });
 
