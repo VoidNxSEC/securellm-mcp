@@ -116,6 +116,7 @@ import { stringifyGeneric } from "./utils/json-schemas.js";
 import { ToolMetricsCollector } from "./middleware/tool-metrics.js";
 import { ToolExecutionLimiter } from "./middleware/tool-limiter.js";
 import { RequestDeduplicator, stableStringify } from "./middleware/request-deduplicator.js";
+import { adrTools, adrHandlers } from "./tools/adr/index.js";
 import crypto from "crypto";
 
 const shouldPrettyPrint = process.env.NODE_ENV === "development";
@@ -711,6 +712,8 @@ class SecureLLMBridgeMCPServer {
         ...webSearchTools,
         // Add Research Agent tool
         researchAgentTool,
+        // Add ADR (Architecture Decision Records) tools
+        ...adrTools,
         // Add Codebase Analysis Tools
         {
           name: "analyze_complexity",
