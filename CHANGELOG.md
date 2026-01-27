@@ -1,4 +1,4 @@
-# 2.0.0 (2026-01-26)
+# [2.1.0](https://github.com/marcosfpina/securellm-mcp/compare/863538f5d25612153036c69b4a23b803e4ffbc02...v2.1.0) (2026-01-17)
 
 
 ### Bug Fixes
@@ -18,16 +18,12 @@
 
 ### Features
 
-* **.mcp.json:** add cloudflared-linux-amd64 binary ([065ba64](https://github.com/marcosfpina/securellm-mcp/commit/065ba64dec42d42012fda34fa16a7b1a727b3a55))
 * Add enterprise-grade refactoring guide for MCP server ([54f338b](https://github.com/marcosfpina/securellm-mcp/commit/54f338b4594a0ebeb0c9dc3fbc23a0a91140e69b))
-* Add GitHub token provider with gh CLI/SOPS fallback + reusable utils ([70e5804](https://github.com/marcosfpina/securellm-mcp/commit/70e5804c705e6769eee554bb09f4e59fe0227bdd))
 * **async:** [MCP-2] replace blocking execSync with async execution ([683a824](https://github.com/marcosfpina/securellm-mcp/commit/683a8242be1045757a0e210c5c585933829b02ad))
 * **auth:** add OAuth management and provider modules ([9d32596](https://github.com/marcosfpina/securellm-mcp/commit/9d32596a24cf7b3f2d451d342f15104146a127ec))
 * **ci/cd:** add CI/CD workflows and code formatting configurations ([a7adbb5](https://github.com/marcosfpina/securellm-mcp/commit/a7adbb5257a68864895cdb71c019beae3f11401b))
 * **ci/cd:** add enterprise-grade CI/CD pipelines and portfolio enhancements ([089e3f7](https://github.com/marcosfpina/securellm-mcp/commit/089e3f7b3a90a8057088e8b060535aee1b556a68))
 * **logging:** [MCP-1] implement async logger with pino ([3ebfcb9](https://github.com/marcosfpina/securellm-mcp/commit/3ebfcb9f91623fcba1c5efa152d2edb256acc141))
-* **middleware:** enhance request deduplication and semantic caching ([87008fc](https://github.com/marcosfpina/securellm-mcp/commit/87008fc2026c7983d2aae89ecda628d5b8da3f2b))
-* **nix:** add packages output to flake with buildNpmPackage ([7bff370](https://github.com/marcosfpina/securellm-mcp/commit/7bff37093ca41e543b80a31bd8ea295d3bf0df91))
 * **tests:** add new test files for proactive logic and advanced SSH functionalities ([019f09c](https://github.com/marcosfpina/securellm-mcp/commit/019f09c9c2ce3176503876e354350fbceee2e867))
 * **tools/nix utils:** add cache manager utility ([1c120cb](https://github.com/marcosfpina/securellm-mcp/commit/1c120cb5b1ea83d043cda2a63c487f5fcd936e8e))
 
