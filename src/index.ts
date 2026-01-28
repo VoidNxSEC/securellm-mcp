@@ -314,8 +314,6 @@ class SecureLLMBridgeMCPServer {
     process.on("SIGTERM", shutdownHandler);
   }
 
-
-
   /**
    * Initialize async resources (PROJECT_ROOT, hostname, knowledge DB)
    * Must be called before starting the server
@@ -1019,6 +1017,26 @@ class SecureLLMBridgeMCPServer {
               // Research Agent handler
               case "research_agent":
                 toolResult = await handleResearchAgent(args as any);
+                break;
+
+              // ADR (Architecture Decision Records) handlers
+              case "adr_new":
+                toolResult = await adrHandlers.adr_new(args as any);
+                break;
+              case "adr_new_from_research":
+                toolResult = await adrHandlers.adr_new_from_research(args as any);
+                break;
+              case "adr_list":
+                toolResult = await adrHandlers.adr_list(args as any);
+                break;
+              case "adr_show":
+                toolResult = await adrHandlers.adr_show(args as any);
+                break;
+              case "adr_accept":
+                toolResult = await adrHandlers.adr_accept(args as any);
+                break;
+              case "adr_search":
+                toolResult = await adrHandlers.adr_search(args as any);
                 break;
 
               // Codebase Analysis handlers
