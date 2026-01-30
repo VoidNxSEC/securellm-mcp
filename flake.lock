@@ -88,11 +88,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1769758270,
-        "narHash": "sha256-B+jpXlgaez0lpXE+pctqqZs9pK5CVU11F/iinWtJulE=",
+        "lastModified": 1769758695,
+        "narHash": "sha256-y2nXxYlyRSfzgYHoZ5xjcvAm2s8x1ew0z5dGpTDqa/Q=",
         "ref": "refs/heads/main",
-        "rev": "702954ec8225ecedda1fb3b51c4dea8cfc525152",
-        "revCount": 12,
+        "rev": "17f7cf720494599586953122b58f8deb95124306",
+        "revCount": 13,
         "type": "git",
         "url": "file:/home/kernelcore/arch/spider-nix"
       },
