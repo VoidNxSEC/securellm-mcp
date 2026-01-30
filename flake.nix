@@ -7,9 +7,14 @@
     # Rust Overlay para versões precisas se necessário
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
+    # Spider-Nix local for web crawling/OSINT features
+    spider-nix = {
+      url = "git+file:/home/kernelcore/arch/spider-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, spider-nix, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
@@ -34,7 +39,7 @@
             PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "1";
           };
 
-          npmDepsHash = "sha256-tguduQ+LInsaOHdjeSTTgahQLqgRCL1tsKY6uCPSPt0=";
+          npmDepsHash = "sha256-KF7JPawB3W7jKO8gE5lqxWnZ9x3pMMJiHbKE1Ok5fUU=";
 
           buildPhase = ''
             npm run build
@@ -48,11 +53,12 @@
             cp package.json $out/lib/mcp-server/
             cp -r node_modules $out/lib/mcp-server/
 
-            # Create executable wrapper with Chromium path
+            # Create executable wrapper with Chromium and spider-nix paths
             cat > $out/bin/securellm-mcp <<EOF
             #!${pkgs.bash}/bin/bash
             export PUPPETEER_EXECUTABLE_PATH="${pkgs.chromium}/bin/chromium"
             export PUPPETEER_SKIP_DOWNLOAD="1"
+            export PATH="${spider-nix.packages.${system}.default}/bin:\$PATH"
             exec ${pkgs.nodejs}/bin/node $out/lib/mcp-server/build/src/index.js "\$@"
             EOF
             chmod +x $out/bin/securellm-mcp
@@ -89,6 +95,9 @@
             # Browser Automation
             chromium
 
+            # OSINT/Web Crawling
+            spider-nix.packages.${system}.default
+
             # Utils
             ripgrep
             jq
@@ -102,6 +111,7 @@
             echo "Rust Version: $(rustc --version)"
             echo "Node Version: $(node --version)"
             echo "Chromium: ${pkgs.chromium}/bin/chromium"
+            echo "Spider-Nix: $(which spider-nix 2>/dev/null || echo 'not found')"
           '';
         };
       }
