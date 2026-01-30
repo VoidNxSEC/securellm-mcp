@@ -67,11 +67,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1769568593,
-        "narHash": "sha256-vf3cZf8imUlPzFtICa1uyReDzoPV0XhHOIRM3tqI5VY=",
+        "lastModified": 1769742225,
+        "narHash": "sha256-roSD/OJ3x9nF+Dxr+/bLClX3U8FP9EkCQIFpzxKjSUM=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "6fe5039018d05cee5d01dda7df1c0846fb7943a4",
+        "rev": "bcdd8d37594f0e201639f55889c01c827baf5c75",
         "type": "github"
       },
       "original": {
@@ -88,10 +88,11 @@
         ]
       },
       "locked": {
-        "dirtyRev": "5fb8184a09d4d6e7fab626dcbe403bcaaf6e2ce5-dirty",
-        "dirtyShortRev": "5fb8184-dirty",
-        "lastModified": 1769754651,
-        "narHash": "sha256-y2nXxYlyRSfzgYHoZ5xjcvAm2s8x1ew0z5dGpTDqa/Q=",
+        "lastModified": 1769758270,
+        "narHash": "sha256-B+jpXlgaez0lpXE+pctqqZs9pK5CVU11F/iinWtJulE=",
+        "ref": "refs/heads/main",
+        "rev": "702954ec8225ecedda1fb3b51c4dea8cfc525152",
+        "revCount": 12,
         "type": "git",
         "url": "file:/home/kernelcore/arch/spider-nix"
       },
