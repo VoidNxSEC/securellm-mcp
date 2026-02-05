@@ -8,6 +8,8 @@
  * - Tracking cache hit rate
  */
 
+import { logger } from './logger.js';
+
 interface CacheEntry<T> {
   data: T;
   timestamp: number;
@@ -82,7 +84,7 @@ export class SmartCache {
       this.stats.rateLimited++;
       const entry = this.cache.get(key);
       if (entry) {
-        console.error(
+        logger.info(
           `[Cache] Rate limited ${tool}, returning stale cache`
         );
         return entry.data;
@@ -99,7 +101,7 @@ export class SmartCache {
       if (entry && Date.now() - entry.timestamp < ttl * 1000) {
         entry.hits++;
         this.stats.hits++;
-        console.error(
+        logger.info(
           `[Cache] HIT: ${tool} (age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s, hits: ${entry.hits})`
         );
         return entry.data;
@@ -108,7 +110,7 @@ export class SmartCache {
 
     // Cache miss - fetch data
     this.stats.misses++;
-    console.error(`[Cache] MISS: ${tool}`);
+    logger.info(`[Cache] MISS: ${tool}`);
 
     const data = await fetchFn();
 
@@ -197,7 +199,7 @@ export class SmartCache {
     if (oldestKey) {
       this.cache.delete(oldestKey);
       this.stats.evictions++;
-      console.error(`[Cache] Evicted: ${oldestKey}`);
+      logger.info(`[Cache] Evicted: ${oldestKey}`);
     }
   }
 
@@ -213,7 +215,7 @@ export class SmartCache {
       }
     }
     if (count > 0) {
-      console.error(`[Cache] Invalidated ${count} entries matching: ${pattern}`);
+      logger.info(`[Cache] Invalidated ${count} entries matching: ${pattern}`);
     }
     return count;
   }
@@ -224,7 +226,7 @@ export class SmartCache {
   clear(): void {
     this.cache.clear();
     this.rateLimit.clear();
-    console.error("[Cache] Cleared all entries");
+    logger.info("[Cache] Cleared all entries");
   }
 
   /**

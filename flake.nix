@@ -9,7 +9,7 @@
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     # Spider-Nix local for web crawling/OSINT features
     spider-nix = {
-      url = "git+file:/home/kernelcore/arch/spider-nix";
+      url = "git+file:/home/kernelcore/master/spider-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

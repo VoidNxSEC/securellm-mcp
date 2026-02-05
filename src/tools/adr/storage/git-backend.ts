@@ -1,6 +1,6 @@
 /**
  * Git-based storage backend for ADRs
- * 
+ *
  * Manages ADR files in Git repository with automated commits
  */
 
@@ -10,6 +10,7 @@ import { existsSync } from "fs";
 import { exec } from "child_process";
 import { promisify } from "util";
 import type { ADRRecord } from "../types.js";
+import { logger } from "../../../utils/logger.js";
 
 const execAsync = promisify(exec);
 
@@ -36,7 +37,7 @@ export class GitBackend {
             );
         } catch (error) {
             // Git operations optional - files still created
-            console.warn("Git commit failed:", error);
+            logger.warn({ error }, "Git commit failed");
         }
 
         return {
@@ -70,7 +71,8 @@ export class GitBackend {
                     results.push({ ...parsed, status: status as any });
                 }
             } catch (error) {
-                // Skip directories that don't exist
+                // Log errors but continue processing other directories
+                logger.warn({ error, dirPath }, "Failed to read ADR directory");
                 continue;
             }
         }
@@ -144,7 +146,7 @@ export class GitBackend {
             await execAsync(`git add "${targetPath}" "${sourcePath}"`, { cwd: this.repoPath });
             await execAsync(`git commit -m "ADR: Accept ${id}"`, { cwd: this.repoPath });
         } catch (error) {
-            console.warn("Git commit failed:", error);
+            logger.warn({ error }, "Git commit failed");
         }
     }
 

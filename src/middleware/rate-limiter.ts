@@ -12,7 +12,7 @@ import {
 } from '../types/middleware/rate-limiter.js';
 import { CircuitBreaker } from './circuit-breaker.js';
 import { RetryStrategy } from './retry-strategy.js';
-import { ErrorClassifier, ErrorCategory } from './error-classifier.js';
+import { ErrorClassifier, ErrorCategory, type ErrorClassification } from './error-classifier.js';
 import { MetricsCollector } from './metrics-collector.js';
 import { logger } from '../utils/logger.js';
 
@@ -99,7 +99,7 @@ export class SmartRateLimiter {
     }
 
     let lastError: Error | undefined;
-    let lastClassification: any = undefined;
+    let lastClassification: ErrorClassification | undefined = undefined;
 
     // Retry loop: attempt 0 to maxRetries (inclusive)
     for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
@@ -268,15 +268,9 @@ export class SmartRateLimiter {
         const result = await request.fn();
         const latency = Date.now() - startTime;
 
-        // Update metrics
-        this.updateMetrics(provider, true, latency);
-
         // Resolve the promise
         request.resolve(result);
       } catch (error) {
-        // Update metrics
-        this.updateMetrics(provider, false, 0);
-
         // Wrap error with context
         const wrappedError = this.wrapError(error, provider, request);
         request.reject(wrappedError);
@@ -309,25 +303,6 @@ export class SmartRateLimiter {
     // Otherwise, wait for the remaining time
     return minDelayMs - timeSinceLastRequest;
   }
-
-  /**
-   * Update metrics for a provider
-   * @deprecated This method is no longer used - MetricsCollector handles all metrics
-   */
-  private updateMetrics(provider: string, success: boolean, latency: number): void {
-    // Legacy method - metrics now handled by MetricsCollector
-    // Kept for backward compatibility but does nothing
-  }
-  
-  /**
-   * Update retry metrics when a request required retries
-   * @deprecated This method is no longer used - MetricsCollector handles all metrics
-   */
-  private updateRetryMetrics(provider: string, attemptCount: number): void {
-    // Legacy method - metrics now handled by MetricsCollector
-    logger.debug({ provider, attemptCount }, "Request succeeded after retries");
-  }
-
 
   /**
    * Wrap error with additional context

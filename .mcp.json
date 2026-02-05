@@ -2,7 +2,7 @@
   "mcpServers": {
     "securellm-mcp": {
       "command": "node",
-      "args": ["/home/kernelcore/arch/securellm-mcp/build/src/index.js"],
+      "args": ["/home/kernelcore/master/securellm-mcp/build/src/index.js"],
       "env": {
         "PROJECT_ROOT": "/nix/store/7hhp5bx0czr0r0jbbkbjhrlk8g9bg66d-securellm-bridge-mcp-2.0.0/bin/securellm-mcp",
         "KNOWLEDGE_DB_PATH": "/home/kernelcore/.local/share/securellm/knowledge.db",
@@ -115,22 +115,13 @@
             {
               "name": "Development Tools",
               "count": 4,
-              "tools": [
-                "lint_code",
-                "format_code",
-                "run_tests",
-                "github_actions"
-              ],
+              "tools": ["lint_code", "format_code", "run_tests", "github_actions"],
               "description": "Code linting (ESLint/Ruff), formatting (Prettier/Black), test execution, and GitHub Actions management"
             },
             {
               "name": "Package Management",
               "count": 3,
-              "tools": [
-                "package_diagnose",
-                "package_download",
-                "package_configure"
-              ],
+              "tools": ["package_diagnose", "package_download", "package_configure"],
               "description": "NixOS package debugging, downloading from multiple sources, and automatic configuration generation"
             },
             {
@@ -151,9 +142,7 @@
             {
               "name": "Secure Execution",
               "count": 1,
-              "tools": [
-                "execute_in_sandbox"
-              ],
+              "tools": ["execute_in_sandbox"],
               "description": "Isolated command execution in ephemeral Nix sandboxes with package dependency injection"
             },
             {
@@ -194,10 +183,7 @@
             {
               "name": "Rate Limiting & Monitoring",
               "count": 2,
-              "tools": [
-                "rate_limiter_status",
-                "cache_stats"
-              ],
+              "tools": ["rate_limiter_status", "cache_stats"],
               "description": "Performance monitoring, rate limit tracking, semantic cache metrics, and Nix package cache stats"
             }
           ]
@@ -251,14 +237,7 @@
           },
           "knowledge_persistence": {
             "enabled": true,
-            "storage_types": [
-              "insight",
-              "code",
-              "decision",
-              "reference",
-              "question",
-              "answer"
-            ],
+            "storage_types": ["insight", "code", "decision", "reference", "question", "answer"],
             "features": [
               "Full-text search",
               "Tag-based filtering",
@@ -285,17 +264,10 @@
             "ssh2",
             "node-fetch"
           ],
-          "optional": [
-            "anthropic",
-            "openai",
-            "@google/generative-ai"
-          ]
+          "optional": ["anthropic", "openai", "@google/generative-ai"]
         },
         "environment_variables": {
-          "required": [
-            "PROJECT_ROOT",
-            "KNOWLEDGE_DB_PATH"
-          ],
+          "required": ["PROJECT_ROOT", "KNOWLEDGE_DB_PATH"],
           "optional": [
             "ENABLE_KNOWLEDGE",
             "ANTHROPIC_API_KEY",

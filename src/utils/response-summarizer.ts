@@ -8,11 +8,21 @@
  * - Formatting for readability
  */
 
+import { logger } from './logger.js';
+
+interface ModelInfo {
+  id: string;
+  name: string;
+  format: string;
+  size_gb: number;
+  vram_estimate_gb: number;
+}
+
 export class ResponseSummarizer {
   /**
    * Summarize model list (most token-heavy response)
    */
-  static summarizeModels(models: any[], verbose: boolean = false): string {
+  static summarizeModels(models: ModelInfo[], verbose: boolean = false): string {
     if (models.length === 0) {
       return "No models found.";
     }
@@ -70,7 +80,26 @@ export class ResponseSummarizer {
   /**
    * Summarize VRAM status
    */
-  static summarizeVram(vram: any, verbose: boolean = false): string {
+  static summarizeVram(vram: {
+    total_gb: number;
+    used_gb: number;
+    free_gb: number;
+    utilization_percent: number;
+    gpus?: Array<{
+      id: number;
+      name: string;
+      used_mb: number;
+      total_mb: number;
+      utilization_percent: number;
+      temperature_c: number;
+    }>;
+    processes?: Array<{
+      gpu_id: number;
+      name: string;
+      pid: number;
+      memory_mb: number;
+    }>;
+  }, verbose: boolean = false): string {
     if (verbose) {
       return JSON.stringify(vram, null, 2);
     }
@@ -94,7 +123,7 @@ export class ResponseSummarizer {
     if (vram.processes && vram.processes.length > 0) {
       lines.push(`\nActive processes: ${vram.processes.length}`);
       const topProcs = vram.processes
-        .sort((a: any, b: any) => b.memory_mb - a.memory_mb)
+        .sort((a, b) => b.memory_mb - a.memory_mb)
         .slice(0, 5);
       for (const proc of topProcs) {
         lines.push(
@@ -282,7 +311,7 @@ export class ResponseSummarizer {
     const savings = originalTokens - summarizedTokens;
     const savingsPercent = ((savings / originalTokens) * 100).toFixed(1);
 
-    console.error(
+    logger.info(
       `[Summarizer] Tokens: ${originalTokens} → ${summarizedTokens} (saved ${savings} tokens, ${savingsPercent}%)`
     );
   }

@@ -46,7 +46,7 @@ export class Archiver {
         SELECT s.* FROM sessions s
         WHERE (julianday('now') - julianday(s.last_active)) > ?
       `;
-      const params: any[] = [age_threshold_days];
+      const params: (number | string)[] = [age_threshold_days];
 
       if (exclude_pinned) {
         query += ' AND COALESCE(s.pinned, 0) = 0';
@@ -61,7 +61,16 @@ export class Archiver {
         `;
       }
 
-      const oldSessions = this.db.prepare(query).all(...params) as any[];
+      interface SessionRow {
+        id: string;
+        created_at: string;
+        last_active: string;
+        summary: string | null;
+        entry_count: number;
+        metadata?: string;
+        pinned?: number;
+      }
+      const oldSessions = this.db.prepare(query).all(...params) as SessionRow[];
 
       if (oldSessions.length === 0) {
         return {
@@ -116,7 +125,7 @@ export class Archiver {
         space_saved_bytes: totalSpaceSaved,
         archive_files: archiveFiles,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error({ err }, 'Session archival failed');
       throw err;
     }
@@ -256,9 +265,13 @@ export class Archiver {
     await writeFile(tempFile, jsonContent, 'utf-8');
 
     // Compress
+    if (compression === 'bzip2') {
+      throw new Error('bzip2 compression is not yet supported. Use "gzip" or "none" instead.');
+    }
+
     const input = createReadStream(tempFile);
     const output = createWriteStream(filePath);
-    const compressor = compression === 'gzip' ? createGzip() : createGzip(); // TODO: Add bzip2 support
+    const compressor = createGzip();
 
     await pipeline(input, compressor, output);
 
