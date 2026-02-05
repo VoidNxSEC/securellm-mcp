@@ -19,7 +19,7 @@ import { stringifyGeneric } from "../../utils/json-schemas.js";
 import { logger } from "../../utils/logger.js";
 
 // Default ADR repository path
-const ADR_REPO_PATH = process.env.ADR_REPO_PATH || "/home/kernelcore/arch/adr-ledger";
+const ADR_REPO_PATH = process.env.ADR_REPO_PATH || "/home/kernelcore/master/adr-ledger";
 const backend = new GitBackend(ADR_REPO_PATH);
 
 /**
