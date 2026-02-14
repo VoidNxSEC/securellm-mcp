@@ -29,7 +29,7 @@ echo "   Created: ${CACHE_DIR}"
 # 2. Check llama.cpp daemon
 echo ""
 echo "🔍 Checking llama.cpp daemon..."
-LLAMA_URL="${LLAMA_CPP_URL:-http://localhost:8080}"
+LLAMA_URL="${LLAMA_CPP_URL:-http://localhost:8081}"
 
 if curl -s -f "${LLAMA_URL}/health" > /dev/null 2>&1; then
   echo -e "   ${GREEN}✓${NC} llama.cpp daemon is running at ${LLAMA_URL}"

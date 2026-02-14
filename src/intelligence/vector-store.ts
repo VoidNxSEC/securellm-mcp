@@ -43,7 +43,7 @@ export class VectorStore {
   private embeddingCache: LRUCache<string, Float32Array>;
   private summaryCache: LRUCache<string, string>;
   
-  constructor(dbPath: string, llamaCppServer: string = 'http://localhost:8080') {
+  constructor(dbPath: string, llamaCppServer: string = 'http://localhost:8081') {
     this.db = new Database(dbPath);
     this.llamaCppServer = llamaCppServer;
     
@@ -244,7 +244,8 @@ export class VectorStore {
     const results: SearchResult[] = [];
     
     for (const doc of documents) {
-      const embedding = new Float32Array(doc.embedding);
+      const embeddingBuf = doc.embedding as Buffer;
+      const embedding = new Float32Array(embeddingBuf.buffer, embeddingBuf.byteOffset, embeddingBuf.byteLength / Float32Array.BYTES_PER_ELEMENT);
       const similarity = this.cosineSimilarity(queryEmbedding, embedding);
       
       if (similarity >= threshold) {

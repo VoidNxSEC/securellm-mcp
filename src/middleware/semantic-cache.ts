@@ -306,7 +306,8 @@ export class SemanticCache {
       let bestSimilarity = 0;
 
       for (const candidate of candidates) {
-        const embedding = new Float32Array(candidate.query_embedding);
+        const embeddingBuf = candidate.query_embedding as Buffer;
+        const embedding = new Float32Array(embeddingBuf.buffer, embeddingBuf.byteOffset, embeddingBuf.byteLength / Float32Array.BYTES_PER_ELEMENT);
         const similarity = this.cosineSimilarity(queryEmbedding, embedding);
 
         if (similarity > bestSimilarity) {

@@ -85,7 +85,7 @@ export const DEFAULT_SEMANTIC_CACHE_CONFIG: SemanticCacheConfig = {
   ttlSeconds: parseInt(process.env.SEMANTIC_CACHE_TTL || '3600', 10),
   maxEntries: parseInt(process.env.SEMANTIC_CACHE_MAX_ENTRIES || '1000', 10),
   minQueryLength: parseInt(process.env.SEMANTIC_CACHE_MIN_QUERY_LENGTH || '10', 10),
-  llamaCppUrl: process.env.LLAMA_CPP_URL || 'http://localhost:8080',
+  llamaCppUrl: process.env.LLAMA_CPP_URL || 'http://localhost:8081',
   embeddingTimeout: parseInt(process.env.EMBEDDING_TIMEOUT || '5000', 10),
   excludeTools: process.env.SEMANTIC_CACHE_EXCLUDE_TOOLS?.split(',').map(t => t.trim()) || [],
 };

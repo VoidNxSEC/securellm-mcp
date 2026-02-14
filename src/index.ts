@@ -118,6 +118,7 @@ import { ToolExecutionLimiter } from "./middleware/tool-limiter.js";
 import { RequestDeduplicator, stableStringify } from "./middleware/request-deduplicator.js";
 import { adrTools, adrHandlers } from "./tools/adr/index.js";
 import crypto from "crypto";
+import { DisposableRegistry } from "./utils/disposable.js";
 
 const shouldPrettyPrint = process.env.NODE_ENV === "development";
 
@@ -198,6 +199,7 @@ class SecureLLMBridgeMCPServer {
   private toolMetricsCollector: ToolMetricsCollector;
   private toolLimiter: ToolExecutionLimiter;
   private requestDeduplicator: RequestDeduplicator;
+  private disposables: DisposableRegistry = new DisposableRegistry();
 
   /**
    * Parse tool configuration from environment variable
@@ -258,56 +260,20 @@ class SecureLLMBridgeMCPServer {
 
     this.server.onerror = (error) => logger.error({ err: error }, "MCP server error");
 
+    // Register core resources for cleanup (order matters: first registered = last disposed)
+    this.disposables.register('mcp-server', () => this.server.close());
+    this.disposables.register('request-deduplicator', () => this.requestDeduplicator.close());
+
     // Register shutdown handlers for graceful cleanup
     const shutdownHandler = () => {
       logger.info("Received shutdown signal, cleaning up resources");
 
-      // Fire and forget async cleanup
-      (async () => {
-        try {
-          // Stop project watcher first to prevent new events
-          if (this.projectWatcher) {
-            this.projectWatcher.stop();
-            this.projectWatcher = null;
-          }
-
-          // Close semantic cache (stops cleanup interval)
-          if (this.semanticCache) {
-            this.semanticCache.close();
-            this.semanticCache = null;
-          }
-
-          // Close knowledge database
-          if (this.db) {
-            this.db.close();
-            this.db = null;
-          }
-
-          // Clear context manager
-          if (this.contextManager) {
-            this.contextManager = null;
-          }
-
-          // Clear pre-action interceptor
-          if (this.preActionInterceptor) {
-            this.preActionInterceptor = null;
-          }
-
-          // Close request deduplicator
-          if (this.requestDeduplicator) {
-            this.requestDeduplicator.close();
-          }
-
-          // Close MCP server
-          await this.server.close();
-
-          logger.info("Shutdown complete");
-        } catch (error) {
-          logger.error({ err: error }, "Error during shutdown");
-        }
-
+      this.disposables.disposeAll().then(() => {
         process.exit(0);
-      })();
+      }).catch((error) => {
+        logger.error({ err: error }, "Error during shutdown");
+        process.exit(1);
+      });
     };
 
     process.on("SIGINT", shutdownHandler);
@@ -388,6 +354,7 @@ class SecureLLMBridgeMCPServer {
   private initKnowledge() {
     try {
       this.db = createKnowledgeDatabase(KNOWLEDGE_DB_PATH);
+      this.disposables.register('knowledge-db', () => { if (this.db) { this.db.close(); this.db = null; } });
       logger.info({ dbPath: KNOWLEDGE_DB_PATH }, "Knowledge database initialized");
 
       // Initialize Project Watcher if we have a project root
@@ -403,6 +370,7 @@ class SecureLLMBridgeMCPServer {
         this.projectWatcher = new ProjectWatcher(this.projectRoot);
         this.projectWatcher.setDatabase(this.db);
         this.projectWatcher.start();
+        this.disposables.register('project-watcher', () => { if (this.projectWatcher) { this.projectWatcher.stop(); this.projectWatcher = null; } });
 
         // Initialize Proactive Logic components
         this.contextManager = new ContextManager(this.projectRoot, this.db as any); // Cast to any to avoid type mismatch if different SQLite wrapper
@@ -436,8 +404,9 @@ class SecureLLMBridgeMCPServer {
         enabled: process.env.ENABLE_SEMANTIC_CACHE !== "false",
         similarityThreshold: parseFloat(process.env.SEMANTIC_CACHE_THRESHOLD || "0.85"),
         ttlSeconds: parseInt(process.env.SEMANTIC_CACHE_TTL || "3600", 10),
-        llamaCppUrl: process.env.LLAMA_CPP_URL || "http://localhost:8080",
+        llamaCppUrl: process.env.LLAMA_CPP_URL || "http://localhost:8081",
       });
+      this.disposables.register('semantic-cache', () => { if (this.semanticCache) { this.semanticCache.close(); this.semanticCache = null; } });
 
       logger.info({ dbPath: cacheDbPath }, "Semantic cache initialized");
       // Note: SemanticCache handles its own cleanup interval internally
