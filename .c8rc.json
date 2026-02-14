@@ -1,0 +1,16 @@
+{
+  "all": true,
+  "check-coverage": false,
+  "lines": 40,
+  "functions": 40,
+  "branches": 35,
+  "reporter": ["text", "html", "lcov"],
+  "exclude": [
+    "build/**",
+    "tests/**",
+    "node_modules/**",
+    "*.config.*",
+    "coverage/**"
+  ],
+  "src": ["build/src/**"]
+}
