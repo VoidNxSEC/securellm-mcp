@@ -8,6 +8,7 @@ import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { validatePaths } from '../../security/path-validator.js';
 import type {
   CleanupAnalyzeWasteArgs,
   CleanupExecuteSmartArgs,
@@ -33,6 +34,8 @@ export class CleanupAnalyzeWasteTool {
     } = criteria;
 
     try {
+      validatePaths(paths, '/');
+
       const recommendations: Array<{
         path: string;
         size_mb: number;
@@ -144,7 +147,12 @@ export class CleanupAnalyzeWasteTool {
   }
 
   private matchPattern(filename: string, pattern: string): boolean {
-    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
+    // Escape regex metacharacters first, then convert glob wildcards
+    const escaped = pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '.*')
+      .replace(/\?/g, '.');
+    const regex = new RegExp('^' + escaped + '$');
     return regex.test(filename);
   }
 }
@@ -180,6 +188,7 @@ export class CleanupDuplicateResolverTool {
     const { paths, strategy, hash_algorithm = 'sha256', min_size_mb = 1 } = args;
 
     try {
+      validatePaths(paths, '/');
       const fileHashes = new Map<string, string[]>(); // hash -> [paths]
       let filesScanned = 0;
 
@@ -373,8 +382,8 @@ export class CleanupLogRotationTool {
       }
     }
 
-    // Compress current log
-    const { stdout } = await execAsync(`gzip -c ${logPath} > ${logPath}.1.gz`);
+    // Compress current log (use quoted paths to prevent injection)
+    const { stdout } = await execAsync(`gzip -c "${logPath.replace(/"/g, '\\"')}" > "${logPath.replace(/"/g, '\\"')}".1.gz`);
     
     // Truncate original log
     await fs.writeFile(logPath, '');

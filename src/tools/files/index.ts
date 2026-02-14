@@ -7,6 +7,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import Database from 'better-sqlite3';
+import { validatePath, validatePaths } from '../../security/path-validator.js';
 import type {
   FilesAnalyzeStructureArgs,
   FilesAutoOrganizeArgs,
@@ -25,6 +26,7 @@ export class FilesAnalyzeStructureTool {
     const { base_path, max_depth = 5, min_size_mb = 0, file_types = [] } = args;
 
     try {
+      validatePath(base_path, process.cwd());
       const analysis = await this.analyzeDirectory(base_path, 0, max_depth, min_size_mb * 1024 * 1024, file_types);
 
       return {
@@ -145,6 +147,7 @@ export class FilesAutoOrganizeTool {
     const { source_path, strategy, dry_run = true, custom_rules = [] } = args;
 
     try {
+      validatePath(source_path, process.cwd());
       const operations: Array<{ from: string; to: string; reason: string }> = [];
       const files = await this.getFiles(source_path);
 
@@ -253,6 +256,7 @@ export class FilesCreateCatalogTool {
     const { paths, include_metadata = true, include_checksums = false, output_format = 'sqlite' } = args;
 
     try {
+      validatePaths(paths, process.cwd());
       const catalogId = `catalog-${Date.now()}`;
       const catalogPath = `/tmp/${catalogId}.db`;
 

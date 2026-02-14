@@ -1,5 +1,7 @@
 import { execa } from 'execa';
+import * as path from 'path';
 import { logger } from '../utils/logger.js';
+import { validatePath } from './path-validator.js';
 
 export interface SandboxOptions {
   packages?: string[]; // List of packages e.g. ['git', 'rustc']
@@ -44,6 +46,8 @@ export class SandboxManager {
 
     // If using inputs from a flake (e.g. local project)
     if (inputsFrom) {
+      // Validate inputsFrom is within the current working directory
+      validatePath(path.resolve(cwd, inputsFrom), cwd);
       nixArgs.push('--inputs-from', inputsFrom);
     }
 
@@ -124,10 +128,16 @@ export class SandboxManager {
 
   /**
    * Check if a command is safe to run without sandbox (allowlist)
+   * Uses word-boundary matching to prevent prefix bypasses like "ls-malicious"
    */
   isSafeCommand(command: string): boolean {
     const safePrefixes = ['ls', 'echo', 'cat', 'grep', 'rg', 'git status', 'git log'];
-    return safePrefixes.some(prefix => command.startsWith(prefix));
+    return safePrefixes.some(prefix => {
+      if (!command.startsWith(prefix)) return false;
+      // Ensure the prefix is followed by end-of-string, space, or a flag
+      const nextChar = command[prefix.length];
+      return nextChar === undefined || nextChar === ' ' || nextChar === '\t';
+    });
   }
 }
 

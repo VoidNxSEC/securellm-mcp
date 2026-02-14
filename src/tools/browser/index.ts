@@ -5,6 +5,7 @@
 
 // @ts-ignore
 import puppeteer, { Browser, Page } from 'puppeteer';
+import { logger } from '../../utils/logger.js';
 import type {
   BrowserLaunchAdvancedArgs,
   BrowserExtractDataArgs,
@@ -32,7 +33,7 @@ class BrowserSessionManager {
 
     // Security: validate URL
     const domain = new URL(url).hostname;
-    if (!this.allowedDomains.some(d => domain.includes(d))) {
+    if (!this.allowedDomains.some(d => domain === d || domain.endsWith('.' + d))) {
       return {
         success: false,
         error: `Domain ${domain} not in whitelist`,
@@ -41,9 +42,15 @@ class BrowserSessionManager {
     }
 
     try {
+      const browserArgs = ['--disable-setuid-sandbox'];
+      if (process.env.BROWSER_DISABLE_SANDBOX === 'true') {
+        logger.warn('Puppeteer --no-sandbox enabled via BROWSER_DISABLE_SANDBOX. This reduces security isolation.');
+        browserArgs.unshift('--no-sandbox');
+      }
+
       const launchOptions: any = {
         headless,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: browserArgs,
       };
 
       // Use Chromium from Nix environment if available

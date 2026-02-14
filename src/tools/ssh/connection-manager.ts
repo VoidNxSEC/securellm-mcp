@@ -6,6 +6,7 @@
 // @ts-ignore - ssh2 types are in @types/ssh2
 import { Client } from 'ssh2';
 import * as fs from 'fs/promises';
+import { validatePath } from '../../security/path-validator.js';
 import type { SSHConnectArgs, SSHConnectionResult, SSHConfig } from '../../types/extended-tools.js';
 
 export interface Connection {
@@ -161,6 +162,9 @@ export class SSHConnectionManager {
         };
 
         if (auth_method === 'key' && key_path) {
+          // Validate key_path stays within home directory
+          const homeDir = process.env.HOME || '/root';
+          validatePath(key_path, homeDir);
           fs.readFile(key_path).then(privateKey => {
             config.privateKey = privateKey;
             client.connect(config);

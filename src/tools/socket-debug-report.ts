@@ -2,6 +2,7 @@ import { z } from "zod";
 import { execa } from "execa";
 import { zodToMcpSchema } from "../utils/schema-converter.js";
 import { stringifyGeneric } from "../utils/json-schemas.js";
+import { SafeServiceName, SafeTimePeriod } from "../security/input-validators.js";
 
 /**
  * Socket Debug Report (Read-only)
@@ -25,7 +26,9 @@ const socketDebugReportSchema = z.object({
     .object({
       port: z.number().int().min(1).max(65535).optional(),
       proto: z.enum(["tcp", "udp", "all"]).optional().default("all"),
-      service: z.string().optional().describe("systemd unit name (e.g. sshd.service)"),
+      service: SafeServiceName
+        .optional()
+        .describe("systemd unit name (e.g. sshd.service)"),
       pid: z.number().int().min(1).optional(),
     })
     .optional()
@@ -44,7 +47,10 @@ const socketDebugReportSchema = z.object({
     .default({ firewall: true, dns: true, routes: true, systemd: true, logs: true }),
 
   /** Log window for journalctl */
-  logs_since: z.string().optional().default("1 hour ago").describe("journalctl --since value (e.g. '30 min ago')"),
+  logs_since: SafeTimePeriod
+    .optional()
+    .default("1 hour ago")
+    .describe("journalctl --since value (e.g. '30 min ago')"),
 });
 
 export const socketDebugReportTool = {

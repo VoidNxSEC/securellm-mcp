@@ -12,13 +12,10 @@
 
 import { execaCommand } from 'execa';
 import { logger } from '../utils/logger.js';
-
-function hasShellMeta(value: string): boolean {
-  return /[;&|`$<>\n\r]/.test(value) || value.includes('"') || value.includes("'");
-}
+import { hasShellMeta, SafeServiceName, SafeHostname } from '../security/input-validators.js';
 
 function isSafeServiceName(value: string): boolean {
-  return /^[a-zA-Z0-9_.@-]+$/.test(value);
+  return SafeServiceName.safeParse(value).success;
 }
 
 function commandLooksDestructive(cmd: string): boolean {
@@ -97,13 +94,21 @@ export class WildcardCommandSystem {
       pattern: /^net-diagnose\s*(.+?)?$/i,
       generator: (match) => {
         const target = match[1] || '';
-        return [
+        const cmds = [
           'ip addr show',
           'ip route show',
           'resolvectl status',
-          target ? `ping -c 4 ${target}` : 'ping -c 4 8.8.8.8',
-          target ? `traceroute ${target}` : '',
-        ].filter(Boolean);
+        ];
+        if (target) {
+          // Validate target is a safe hostname/IP
+          if (!SafeHostname.safeParse(target).success) {
+            return ['echo "Invalid target: must be a hostname or IP address"'];
+          }
+          cmds.push(`ping -c 4 -- ${target}`, `traceroute -- ${target}`);
+        } else {
+          cmds.push('ping -c 4 8.8.8.8');
+        }
+        return cmds;
       },
       description: 'Complete network diagnostics',
       riskLevel: 'safe',
@@ -321,7 +326,20 @@ export class WildcardCommandSystem {
         return {
           success: false,
           output: '',
-          error: 'Invalid service name. Allowed: letters, numbers, underscore, dot, dash, @',
+          error: 'Invalid service name. Allowed: starts with letter, then letters/numbers/underscore/dot/dash/@, max 64 chars',
+          commands: [],
+          riskLevel: 'safe',
+        };
+      }
+    }
+
+    if (name === 'net-diagnose') {
+      const target = match[1];
+      if (target && !SafeHostname.safeParse(target).success) {
+        return {
+          success: false,
+          output: '',
+          error: 'Invalid target. Must be a hostname or IP address (alphanumeric, dots, dashes only)',
           commands: [],
           riskLevel: 'safe',
         };

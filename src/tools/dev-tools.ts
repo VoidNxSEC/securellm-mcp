@@ -6,6 +6,7 @@ import { zodToMcpSchema } from '../utils/schema-converter.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { stringifyGeneric } from '../utils/json-schemas.js';
+import { validatePath } from '../security/path-validator.js';
 
 const execAsync = promisify(exec);
 
@@ -59,6 +60,7 @@ async function detectAndRun(command: string, args: string[], cwd: string = proce
 
 async function handleLintCode(args: z.infer<typeof lintCodeSchema>) {
   const { target, fix } = args;
+  validatePath(target, process.cwd());
   const ext = path.extname(target);
   
   let cmd = '';
@@ -86,6 +88,7 @@ async function handleLintCode(args: z.infer<typeof lintCodeSchema>) {
 
 async function handleFormatCode(args: z.infer<typeof formatCodeSchema>) {
   const { target, check_only } = args;
+  validatePath(target, process.cwd());
   const ext = path.extname(target);
 
   let cmd = '';
@@ -113,7 +116,10 @@ async function handleFormatCode(args: z.infer<typeof formatCodeSchema>) {
 
 async function handleRunTests(args: z.infer<typeof runTestsSchema>) {
   const { target } = args;
-  
+  if (target) {
+    validatePath(target, process.cwd());
+  }
+
   // Detect test runner based on package.json or file extension
   let cmd = 'npm test';
   let cmdArgs = target ? ['--', target] : [];
