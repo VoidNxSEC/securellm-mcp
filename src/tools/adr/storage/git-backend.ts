@@ -167,6 +167,114 @@ export class GitBackend {
     }
 
     /**
+     * Suggest lifecycle changes for proposed ADRs based on task completion
+     * and topic overlap detection (ADR-0036 Phase 3)
+     */
+    async suggestLifecycleChanges(): Promise<Array<{ adrId: string; action: string; reason: string }>> {
+        const proposed = await this.list("proposed");
+        const suggestions: Array<{ adrId: string; action: string; reason: string }> = [];
+
+        for (const adr of proposed) {
+            if (!adr.content || !adr.id) continue;
+
+            // Check task completion — parse markdown checkboxes
+            const tasks = this.parseTasks(adr.content);
+            if (tasks.total > 0 && tasks.completed === tasks.total) {
+                suggestions.push({
+                    adrId: adr.id,
+                    action: "accept",
+                    reason: `All ${tasks.total} implementation tasks completed`,
+                });
+            }
+
+            // Check for stale ADRs (>60 days with no updates)
+            const dateMatch = adr.content.match(/^date:\s*"([^"]+)"/m);
+            if (dateMatch) {
+                const created = new Date(dateMatch[1]);
+                const daysSince = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+                if (daysSince > 60) {
+                    suggestions.push({
+                        adrId: adr.id,
+                        action: "review",
+                        reason: `Proposed for ${Math.floor(daysSince)} days — consider accepting, rejecting, or updating`,
+                    });
+                }
+            }
+
+            // Check for topic overlap with other proposed ADRs
+            const adrKeywords = this.extractTopicKeywords(adr.content);
+            for (const other of proposed) {
+                if (!other.content || !other.id || other.id === adr.id) continue;
+                if (other.id <= adr.id) continue; // avoid duplicate pairs
+
+                const otherKeywords = this.extractTopicKeywords(other.content);
+                const overlap = this.calculateOverlap(adrKeywords, otherKeywords);
+
+                if (overlap > 0.6) {
+                    suggestions.push({
+                        adrId: adr.id,
+                        action: "supersede",
+                        reason: `High topic overlap (${Math.round(overlap * 100)}%) with ${other.id} — consider consolidating`,
+                    });
+                }
+            }
+        }
+
+        return suggestions;
+    }
+
+    /**
+     * Parse markdown checkbox tasks from ADR content
+     */
+    private parseTasks(content: string): { total: number; completed: number } {
+        const taskLines = content.match(/^- \[[ x]\] .+$/gm) || [];
+        const completed = taskLines.filter(l => l.startsWith("- [x]")).length;
+        return { total: taskLines.length, completed };
+    }
+
+    /**
+     * Extract topic keywords from ADR content for overlap detection
+     */
+    private extractTopicKeywords(content: string): Set<string> {
+        const keywords = new Set<string>();
+
+        // From title
+        const title = content.match(/^title:\s*"([^"]+)"/m)?.[1] || "";
+        title.toLowerCase().split(/[\s\-_:,]+/).filter(w => w.length > 3).forEach(w => keywords.add(w));
+
+        // From keywords block
+        const kwBlock = content.match(/keywords:\s*\n((?:\s*-\s*"[^"]+"\s*\n?)*)/m);
+        if (kwBlock) {
+            for (const m of kwBlock[1].matchAll(/-\s*"([^"]+)"/g)) {
+                m[1].toLowerCase().split(/[\s-]+/).filter(w => w.length > 3).forEach(w => keywords.add(w));
+            }
+        }
+
+        // From scope projects
+        const projects = content.match(/projects:\s*\n((?:\s*-\s*\w+\s*\n?)*)/m);
+        if (projects) {
+            for (const m of projects[1].matchAll(/-\s*(\w+)/g)) {
+                keywords.add(m[1].toLowerCase());
+            }
+        }
+
+        return keywords;
+    }
+
+    /**
+     * Calculate Jaccard similarity between two keyword sets
+     */
+    private calculateOverlap(a: Set<string>, b: Set<string>): number {
+        if (a.size === 0 || b.size === 0) return 0;
+        let intersection = 0;
+        for (const word of a) {
+            if (b.has(word)) intersection++;
+        }
+        const union = a.size + b.size - intersection;
+        return union > 0 ? intersection / union : 0;
+    }
+
+    /**
      * Get next available ADR ID
      */
     async getNextId(): Promise<string> {

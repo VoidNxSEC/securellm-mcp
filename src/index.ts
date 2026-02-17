@@ -117,6 +117,7 @@ import { ToolMetricsCollector } from "./middleware/tool-metrics.js";
 import { ToolExecutionLimiter } from "./middleware/tool-limiter.js";
 import { RequestDeduplicator, stableStringify } from "./middleware/request-deduplicator.js";
 import { adrTools, adrHandlers } from "./tools/adr/index.js";
+import { ADRHygieneMiddleware } from "./middleware/adr-hygiene.js";
 import crypto from "crypto";
 import { DisposableRegistry } from "./utils/disposable.js";
 
@@ -196,6 +197,7 @@ class SecureLLMBridgeMCPServer {
   private semanticCache: SemanticCache | null = null;
   private contextManager: ContextManager | null = null;
   private preActionInterceptor: PreActionInterceptor | null = null;
+  private adrHygieneMiddleware: ADRHygieneMiddleware | null = null;
   private toolMetricsCollector: ToolMetricsCollector;
   private toolLimiter: ToolExecutionLimiter;
   private requestDeduplicator: RequestDeduplicator;
@@ -375,7 +377,8 @@ class SecureLLMBridgeMCPServer {
         // Initialize Proactive Logic components
         this.contextManager = new ContextManager(this.projectRoot, this.db as any); // Cast to any to avoid type mismatch if different SQLite wrapper
         this.preActionInterceptor = new PreActionInterceptor(this.contextManager);
-        logger.info("Proactive Logic Layer initialized");
+        this.adrHygieneMiddleware = new ADRHygieneMiddleware();
+        logger.info("Proactive Logic Layer initialized (incl. ADR Hygiene)");
       } else if (isSystemDir) {
         logger.info(
           { projectRoot: this.projectRoot },
@@ -988,24 +991,29 @@ class SecureLLMBridgeMCPServer {
                 toolResult = await handleResearchAgent(args as any);
                 break;
 
-              // ADR (Architecture Decision Records) handlers
+              // ADR (Architecture Decision Records) handlers — dynamic dispatch
               case "adr_new":
-                toolResult = await adrHandlers.adr_new(args as any);
-                break;
               case "adr_new_from_research":
-                toolResult = await adrHandlers.adr_new_from_research(args as any);
-                break;
               case "adr_list":
-                toolResult = await adrHandlers.adr_list(args as any);
-                break;
               case "adr_show":
-                toolResult = await adrHandlers.adr_show(args as any);
-                break;
-              case "adr_accept":
-                toolResult = await adrHandlers.adr_accept(args as any);
-                break;
               case "adr_search":
-                toolResult = await adrHandlers.adr_search(args as any);
+              case "adr_relations":
+              case "adr_validate":
+              case "governance_rules":
+              case "chain_status":
+              case "chain_verify":
+              case "chain_prove":
+              case "provenance_trace":
+              case "snapshot_latest":
+              case "economics_report":
+              case "sbom_status":
+              case "adr_accept":
+              case "adr_supersede":
+              case "adr_pre_sign":
+              case "chain_sign":
+              case "snapshot_create":
+              case "sbom_generate":
+                toolResult = await adrHandlers[name](args as any);
                 break;
 
               // Codebase Analysis handlers
@@ -1087,6 +1095,21 @@ class SecureLLMBridgeMCPServer {
         );
 
         snapshot.executionTime = Date.now() - executionStart;
+
+        // ADR HYGIENE: Periodic check (non-blocking, appends to result)
+        if (this.adrHygieneMiddleware) {
+          try {
+            const hygieneReport = await this.adrHygieneMiddleware.onToolCall();
+            if (hygieneReport && result && Array.isArray((result as any).content)) {
+              (result as any).content.push({
+                type: "text",
+                text: `\n---\n${hygieneReport.summary}\n${hygieneReport.details.join('\n')}`,
+              });
+            }
+          } catch {
+            // Non-blocking — hygiene failures should never affect tool execution
+          }
+        }
 
         // Measure response size (lazy: only if needed for metrics)
         // Use fast-json-stringify if available, otherwise estimate

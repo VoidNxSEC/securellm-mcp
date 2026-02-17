@@ -1,12 +1,16 @@
 /**
  * Pre-Action Interceptor
- * 
+ *
  * Intercepts tool calls to perform proactive checks and validation
  * BEFORE the tool is actually executed.
+ *
+ * ADR-0036: Also enriches context with relevant open ADRs so agents
+ * are aware of architectural decisions during their workflow.
  */
 
 import type { ContextManager } from '../context-manager.js';
 import type { EnrichedContext } from '../../types/context-inference.js';
+import { ADRContextInjector } from './adr-context-injector.js';
 
 export interface PreAction {
   type: 'list_files' | 'check_git' | 'validate_build' | 'analyze_deps' | 'check_auth' | 'check_rate_limit';
@@ -31,7 +35,12 @@ export interface ValidationResult {
 }
 
 export class PreActionInterceptor {
-  constructor(private contextManager: ContextManager) {}
+  private adrInjector: ADRContextInjector;
+
+  constructor(private contextManager: ContextManager) {
+    const adrRepoPath = process.env.ADR_REPO_PATH || '/home/kernelcore/master/adr-ledger';
+    this.adrInjector = new ADRContextInjector(adrRepoPath);
+  }
 
   /**
    * Intercept tool call and perform proactive checks
@@ -39,31 +48,40 @@ export class PreActionInterceptor {
   async intercept(
     toolName: string,
     args: any
-  ): Promise<{ shouldProceed: boolean; reason?: string; enrichedArgs?: any }> {
+  ): Promise<{ shouldProceed: boolean; reason?: string; enrichedArgs?: any; adrContext?: string }> {
     // 1. Enrich context first
     const context = await this.contextManager.enrichContext(JSON.stringify({ tool: toolName, args }));
-    
-    // 2. Plan pre-actions
+
+    // 2. ADR context enrichment (ADR-0036)
+    const adrContext = await this.adrInjector.enrichWithADRContext(toolName, args);
+
+    // 3. Plan pre-actions
     const preActions = this.planPreActions(toolName, args, context);
-    
+
     if (preActions.length === 0) {
-      return { shouldProceed: true };
+      return { shouldProceed: true, adrContext: adrContext || undefined };
     }
 
-    // 3. Execute pre-actions
+    // 4. Execute pre-actions
     const results = await this.executePreActions(preActions);
-    
-    // 4. Validate results
+
+    // 5. Validate results
     const validation = this.validateResults(toolName, results);
+
+    // Merge ADR suggestions into validation suggestions
+    if (adrContext) {
+      validation.suggestions.push(adrContext);
+    }
 
     if (!validation.canProceed) {
       return {
         shouldProceed: false,
-        reason: `Pre-action checks failed: ${validation.blockers.join(', ')}`
+        reason: `Pre-action checks failed: ${validation.blockers.join(', ')}`,
+        adrContext: adrContext || undefined,
       };
     }
 
-    return { shouldProceed: true };
+    return { shouldProceed: true, adrContext: adrContext || undefined };
   }
 
   /**
