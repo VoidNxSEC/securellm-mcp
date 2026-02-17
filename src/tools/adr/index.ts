@@ -661,7 +661,7 @@ async function handleAdrSupersede(args: { old_id: string; new_id: string }) {
 
 async function handleAdrPreSign(args: { adr_id: string; signer?: string }) {
     try {
-        const signer = args.signer || "system";
+        const signer = args.signer;
         const result = await backend.preSign(args.adr_id, signer);
         return ok({
             success: result.success,
@@ -679,7 +679,7 @@ async function handleAdrPreSign(args: { adr_id: string; signer?: string }) {
 
 async function handleChainSign(args: { adr_id: string; signer?: string }) {
     try {
-        const signer = args.signer || "system";
+        const signer = args.signer;
         const result = await backend.chainSign(args.adr_id, signer);
         return ok({
             success: result.success,

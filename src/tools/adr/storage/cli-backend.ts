@@ -187,8 +187,10 @@ export class CLIBackend {
         return { raw: result.stdout, proof };
     }
 
-    async chainSign(adrId: string, signer: string): Promise<{ success: boolean; stdout: string; stderr: string }> {
-        const result = await this.runPython("chain_manager.py", ["sign", adrId, "--signer", signer]);
+    async chainSign(adrId: string, signer?: string): Promise<{ success: boolean; stdout: string; stderr: string }> {
+        const args = ["sign", adrId];
+        if (signer) args.push("--signer", signer);
+        const result = await this.runPython("chain_manager.py", args);
         return { success: result.code === 0, stdout: result.stdout, stderr: result.stderr };
     }
 
@@ -293,8 +295,10 @@ export class CLIBackend {
     // Pre-signing
     // ─────────────────────────────────────────────
 
-    async preSign(adrId: string, signer: string): Promise<{ success: boolean; stdout: string; stderr: string }> {
-        const result = await this.runPython("pre_sign.py", ["sign", adrId, "--signer", signer]);
+    async preSign(adrId: string, signer?: string): Promise<{ success: boolean; stdout: string; stderr: string }> {
+        const args = ["sign", adrId];
+        if (signer) args.push("--signer", signer);
+        const result = await this.runPython("pre_sign.py", args);
         return { success: result.code === 0, stdout: result.stdout, stderr: result.stderr };
     }
 
