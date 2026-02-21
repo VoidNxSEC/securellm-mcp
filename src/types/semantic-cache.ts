@@ -41,6 +41,8 @@ export interface SemanticCacheConfig {
   llamaCppUrl: string; // llama.cpp server URL
   embeddingTimeout: number; // Timeout for embedding generation (ms)
   excludeTools?: string[]; // Tools to never cache
+  /** PHANTOM semantic search URL — enables real embedding-based lookup */
+  phantomUrl: string;
 }
 
 export interface SemanticCacheStats {
@@ -88,4 +90,5 @@ export const DEFAULT_SEMANTIC_CACHE_CONFIG: SemanticCacheConfig = {
   llamaCppUrl: process.env.LLAMA_CPP_URL || 'http://localhost:8081',
   embeddingTimeout: parseInt(process.env.EMBEDDING_TIMEOUT || '5000', 10),
   excludeTools: process.env.SEMANTIC_CACHE_EXCLUDE_TOOLS?.split(',').map(t => t.trim()) || [],
+  phantomUrl: process.env.PHANTOM_URL ?? 'http://localhost:8008',
 };

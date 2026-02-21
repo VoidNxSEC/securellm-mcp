@@ -24,6 +24,7 @@ import type {
   CacheStoreOptions,
 } from '../types/semantic-cache.js';
 import { DEFAULT_SEMANTIC_CACHE_CONFIG } from '../types/semantic-cache.js';
+import { PhantomClient } from '../utils/phantom-client.js';
 
 /**
  * Simple mutex implementation to prevent race conditions
@@ -68,10 +69,13 @@ export class SemanticCache {
   private stats: SemanticCacheStats;
   private statsMutex: Mutex = new Mutex();
   private cleanupInterval: NodeJS.Timeout | null = null;
+  /** PHANTOM client for real semantic similarity — null when disabled/unavailable */
+  private phantom: PhantomClient;
 
   constructor(dbPath: string, config: Partial<SemanticCacheConfig> = {}) {
     this.db = new Database(dbPath);
     this.config = { ...DEFAULT_SEMANTIC_CACHE_CONFIG, ...config };
+    this.phantom = new PhantomClient(this.config.phantomUrl);
     this.stats = {
       totalQueries: 0,
       cacheHits: 0,
@@ -279,6 +283,43 @@ export class SemanticCache {
     });
 
     try {
+      // ── PHANTOM semantic lookup (primary path) ──────────────────────────
+      // PHANTOM uses sentence-transformers (all-MiniLM-L6-v2, 384 dims) via
+      // FAISS — much more accurate than the char-frequency fallback.
+      try {
+        const phantomResults = await this.phantom.findSimilar(
+          options.queryText,
+          parseInt(process.env.SEMANTIC_CACHE_MAX_CANDIDATES || '10', 10),
+        );
+
+        for (const hit of phantomResults) {
+          if (hit.score < this.config.similarityThreshold) continue;
+          if (!hit.entryId) continue;
+
+          const now = Date.now();
+          const row = this.db
+            .prepare('SELECT * FROM semantic_cache WHERE id = ? AND tool_name = ? AND expires_at > ?')
+            .get(hit.entryId, options.toolName, now) as any;
+
+          if (!row) continue;
+
+          // Valid hit — record and return
+          await this.recordHit(row.id as string, hit.score);
+          logger.info(
+            { toolName: options.toolName, entryId: hit.entryId, similarity: hit.score.toFixed(3) },
+            'Semantic cache HIT (PHANTOM)',
+          );
+          return JSON.parse(row.response as string);
+        }
+
+        // No PHANTOM hit — fall through to embedding-based lookup
+        logger.debug({ toolName: options.toolName }, '[PHANTOM] No cache hit, falling back to embedding lookup');
+      } catch (phantomErr) {
+        // PHANTOM unavailable — silently fall through to embedding-based path
+        logger.debug({ err: phantomErr }, '[PHANTOM] lookup failed, falling back to embedding lookup');
+      }
+
+      // ── Embedding-based lookup (fallback) ───────────────────────────────
       // Generate embedding for query
       const { embedding: queryEmbedding, isFallback } = await this.generateEmbedding(options.queryText);
 
@@ -472,6 +513,10 @@ export class SemanticCache {
         },
         'Semantic cache entry stored'
       );
+
+      // ── Index into PHANTOM for future semantic lookups (non-blocking) ──
+      // Fire-and-forget: PHANTOM unavailability must never block the response.
+      void this.phantom.indexQuery(entry.id!, options.queryText);
     } catch (error) {
       logger.error({ err: error, options }, 'Failed to store in semantic cache');
     }

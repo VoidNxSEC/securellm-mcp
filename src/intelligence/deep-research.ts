@@ -15,6 +15,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { logger } from "../utils/logger.js";
 import { getGitHubToken } from "../utils/github-token.js";
+import { CerebroRerankerClient } from "../utils/reranker-client.js";
 
 const execAsync = promisify(exec);
 
@@ -131,6 +132,7 @@ export interface ResearchResult {
 export class DeepResearchEngine {
     private cache: Map<string, { result: ResearchResult; expiry: number }> = new Map();
     private readonly CACHE_TTL = 300_000; // 5 minutes
+    private readonly reranker = new CerebroRerankerClient();
 
     /**
      * Perform deep multi-source research with overall timeout.
@@ -174,8 +176,8 @@ export class DeepResearchEngine {
 
         const flatResults = allResults.flat().slice(0, maxSources * 2);
 
-        // Score and rank results
-        const scoredResults = this.scoreResults(flatResults, query);
+        // Semantic reranking via CEREBRO (falls back to keyword scoring)
+        const scoredResults = await this.rerankResults(flatResults, query);
         const topResults = scoredResults.slice(0, maxSources);
 
         // Detect consensus and conflicts
@@ -449,7 +451,45 @@ export class DeepResearchEngine {
     }
 
     /**
-     * Score and rank results by relevance
+     * Rerank results using CEREBRO CrossEncoder for semantic scoring.
+     *
+     * Pipeline:
+     *  1. Send (query, [title: content]) to CEREBRO /v1/rerank
+     *  2. Map returned semantic scores back to SourceResult objects
+     *  3. Blend: 0.65 * reranker_score + 0.35 * source_credibility
+     *     (credibility anchors authoritative sources even for short content)
+     *  4. Fall back to keyword-based scoreResults() if CEREBRO is unavailable
+     */
+    private async rerankResults(results: SourceResult[], query: string): Promise<SourceResult[]> {
+        if (results.length === 0) return results;
+
+        try {
+            // Build document strings: "title: content" (reranker needs some text)
+            const documents = results.map(r =>
+                `${r.title}${r.content ? `: ${r.content.substring(0, 512)}` : ''}`
+            );
+
+            const rerankItems = await this.reranker.rerank(query, documents, results.length);
+
+            // Map reranked items back to SourceResult using positional index
+            // (the reranker returns items in ranked order with original document text)
+            const docIndexMap = new Map(documents.map((doc, i) => [doc, i]));
+
+            return rerankItems.map(item => {
+                const originalIdx = docIndexMap.get(item.document) ?? 0;
+                const original = results[originalIdx];
+                // Blend semantic score with authoritative source credibility
+                const blended = (item.score * 0.65) + (original.credibility * 0.35);
+                return { ...original, relevance: blended };
+            });
+        } catch (error) {
+            logger.warn({ err: error }, "[DeepResearch] Reranker unavailable, falling back to keyword scoring");
+            return this.scoreResults(results, query);
+        }
+    }
+
+    /**
+     * Score and rank results by keyword relevance (fallback)
      */
     private scoreResults(results: SourceResult[], query: string): SourceResult[] {
         const queryTerms = query.toLowerCase().split(/\s+/);
