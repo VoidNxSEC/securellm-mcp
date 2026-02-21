@@ -160,9 +160,15 @@ export class SemanticCache {
   }
 
   /**
-   * Generate embedding using llama.cpp daemon
+   * Generate embedding using llama.cpp daemon.
+   * Returns { embedding, isFallback } so callers can adjust thresholds.
+   *
+   * IMPORTANT: the fallback character-frequency embedding produces cosine
+   * similarities of ~0.998 between ANY two English/technical texts, making it
+   * unsuitable for semantic matching. Callers MUST raise the threshold to ~0.999
+   * when isFallback === true (effectively: exact-match only).
    */
-  private async generateEmbedding(text: string): Promise<Float32Array> {
+  private async generateEmbedding(text: string): Promise<{ embedding: Float32Array; isFallback: boolean }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.embeddingTimeout);
 
@@ -179,7 +185,7 @@ export class SemanticCache {
       }
 
       const data = await response.json();
-      return new Float32Array(data.embedding);
+      return { embedding: new Float32Array(data.embedding), isFallback: false };
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         logger.warn('Embedding generation timeout, using fallback');
@@ -187,8 +193,7 @@ export class SemanticCache {
         logger.warn({ err: error }, 'llama.cpp embedding failed, using fallback');
       }
 
-      // Fallback to simple hash-based embedding
-      return this.fallbackEmbedding(text);
+      return { embedding: this.fallbackEmbedding(text), isFallback: true };
     } finally {
       clearTimeout(timeout);
     }
@@ -275,12 +280,21 @@ export class SemanticCache {
 
     try {
       // Generate embedding for query
-      const queryEmbedding = await this.generateEmbedding(options.queryText);
+      const { embedding: queryEmbedding, isFallback } = await this.generateEmbedding(options.queryText);
+
+      // Fallback char-frequency embeddings yield ~0.998 similarity for ANY two
+      // English texts — use near-exact threshold to avoid spurious cache hits.
+      const effectiveThreshold = isFallback ? 0.9995 : this.config.similarityThreshold;
+      if (isFallback) {
+        logger.debug({ toolName: options.toolName }, 'Semantic cache: using fallback embedding, threshold raised to 0.9995');
+      }
 
       // Find similar cached entries (optimized: limit candidates by recency)
       const now = Date.now();
       const maxCandidates = parseInt(process.env.SEMANTIC_CACHE_MAX_CANDIDATES || '50', 10);
-      const highSimilarityThreshold = parseFloat(process.env.SEMANTIC_CACHE_HIGH_SIMILARITY_THRESHOLD || '0.95');
+      const highSimilarityThreshold = isFallback
+        ? 0.9998
+        : parseFloat(process.env.SEMANTIC_CACHE_HIGH_SIMILARITY_THRESHOLD || '0.95');
       
       const stmt = this.db.prepare(`
         SELECT id, query_text, query_embedding, tool_name, tool_args, response,
@@ -336,8 +350,8 @@ export class SemanticCache {
         }
       }
 
-      // Check if best match exceeds threshold
-      if (bestMatch && bestSimilarity >= this.config.similarityThreshold) {
+      // Check if best match exceeds threshold (raised when using fallback embeddings)
+      if (bestMatch && bestSimilarity >= effectiveThreshold) {
         // Cache HIT!
         await this.recordHit(bestMatch.entry.id, bestSimilarity);
 
@@ -404,7 +418,7 @@ export class SemanticCache {
       }
 
       // Generate embedding
-      const embedding = await this.generateEmbedding(options.queryText);
+      const { embedding } = await this.generateEmbedding(options.queryText);
 
       const now = Date.now();
       const ttl = (options.ttlSeconds || this.config.ttlSeconds) * 1000;
