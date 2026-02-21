@@ -55,6 +55,48 @@ export interface TechNewsArgs {
 
 const USER_AGENT = "SecureLLM-MCP/2.0 (NixOS Research Agent)";
 
+// ─── GitHub Token Cache ────────────────────────────────────────────────────────
+/** Module-level cache: avoid re-fetching token on every GitHub API call */
+const _ghTokenCache: { value: string | null; expiry: number } = { value: null, expiry: 0 };
+const GH_TOKEN_TTL = 5 * 60_000; // 5 minutes
+
+async function getCachedGitHubToken(): Promise<string | null> {
+  if (Date.now() < _ghTokenCache.expiry && _ghTokenCache.value !== null) {
+    return _ghTokenCache.value;
+  }
+  const token = await getGitHubToken();
+  _ghTokenCache.value = token;
+  _ghTokenCache.expiry = Date.now() + GH_TOKEN_TTL;
+  return token;
+}
+
+// ─── OSINT Rate Limiter ────────────────────────────────────────────────────────
+/**
+ * Per-target cooldown for OSINT operations (DNS, subdomain, portscan).
+ * Prevents mass reconnaissance and protects against DNS provider rate-limiting.
+ */
+const OSINT_COOLDOWN_MS = 5 * 60_000; // 5 minutes per target
+const _osintLastQuery = new Map<string, number>(); // target → timestamp
+
+function enforceOsintRateLimit(target: string, operation: string): void {
+  const now = Date.now();
+  const key = `${operation}:${target.toLowerCase()}`;
+  const last = _osintLastQuery.get(key) ?? 0;
+  const elapsed = now - last;
+
+  if (elapsed < OSINT_COOLDOWN_MS) {
+    const waitSec = Math.ceil((OSINT_COOLDOWN_MS - elapsed) / 1000);
+    throw new Error(
+      `OSINT rate limit: '${target}' was queried via ${operation} ` +
+      `${Math.round(elapsed / 1000)}s ago. ` +
+      `Wait ${waitSec}s before retrying (cooldown: ${OSINT_COOLDOWN_MS / 1000}s).`
+    );
+  }
+
+  _osintLastQuery.set(key, now);
+  logger.info({ target, operation, lastQueryMs: elapsed }, "[OSINT] Rate limit check passed");
+}
+
 /**
  * Format results for intelligent consumption
  */
@@ -481,8 +523,8 @@ export async function handleGithubSearch(args: GithubSearchArgs) {
     };
 
     // Add token if available (increases rate limit from 60 to 5000 req/h)
-    // Token sources: ENV > gh CLI > SOPS (see src/utils/github-token.ts)
-    const githubToken = await getGitHubToken();
+    // Token resolved once and cached for 5 minutes (see getCachedGitHubToken)
+    const githubToken = await getCachedGitHubToken();
     if (githubToken) {
       headers["Authorization"] = `Bearer ${githubToken}`;
     }
@@ -831,6 +873,7 @@ export async function handleOsintDns(args: {
   const { domain, record_types, timeout } = args;
 
   try {
+    enforceOsintRateLimit(domain, "dns");
     logger.info({ domain, record_types }, "Performing DNS reconnaissance");
 
     const result = await osintDns(domain, {
@@ -867,6 +910,7 @@ export async function handleOsintSubdomains(args: {
   const { domain, wordlist, timeout } = args;
 
   try {
+    enforceOsintRateLimit(domain, "subdomains");
     logger.info({ domain, wordlist }, "Performing subdomain discovery");
 
     const result = await osintSubdomains(domain, {
@@ -903,6 +947,7 @@ export async function handleOsintPortScan(args: {
   const { host, ports, timeout } = args;
 
   try {
+    enforceOsintRateLimit(host, "portscan");
     logger.info({ host, ports }, "Performing port scan");
 
     const result = await osintPortScan(host, {

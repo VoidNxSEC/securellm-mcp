@@ -8,6 +8,71 @@
 import { execa } from 'execa';
 import { logger } from '../utils/logger.js';
 
+// ─── Security: Argument Validation ────────────────────────────────────────────
+
+/** Hard cap: never allocate more than 10 MB per spider-nix invocation */
+const MAX_BUFFER_HARD_CAP = 10 * 1024 * 1024; // 10 MB
+
+/** Top-level commands that spider-nix is allowed to execute */
+const ALLOWED_COMMANDS = new Set(['crawl', 'recon']);
+
+/** Sub-commands allowed under `recon` */
+const ALLOWED_RECON_SUBCOMMANDS = new Set(['dns', 'subdomains', 'portscan']);
+
+/** Characters that must never appear in individual arguments */
+const DANGEROUS_ARG_RE = /[;&|`$<>\n\r\\!#~{}()[\]*?'"]/;
+
+/** Max length for a single argument */
+const MAX_ARG_LENGTH = 2048;
+
+/**
+ * Validate all args before passing them to execa.
+ * Throws an Error with a descriptive message if any check fails.
+ */
+function validateSpiderNixArgs(args: string[]): void {
+  if (args.length === 0) {
+    throw new Error('spider-nix: empty argument list');
+  }
+
+  const cmd = args[0];
+  if (!ALLOWED_COMMANDS.has(cmd)) {
+    throw new Error(`spider-nix: disallowed command '${cmd}'. Allowed: ${[...ALLOWED_COMMANDS].join(', ')}`);
+  }
+
+  // Validate recon sub-command
+  if (cmd === 'recon') {
+    const sub = args[1];
+    if (!sub || !ALLOWED_RECON_SUBCOMMANDS.has(sub)) {
+      throw new Error(
+        `spider-nix: disallowed recon sub-command '${sub}'. Allowed: ${[...ALLOWED_RECON_SUBCOMMANDS].join(', ')}`
+      );
+    }
+  }
+
+  // Validate each argument
+  for (const arg of args) {
+    if (arg.length > MAX_ARG_LENGTH) {
+      throw new Error(`spider-nix: argument exceeds max length (${MAX_ARG_LENGTH} chars): ${arg.substring(0, 80)}…`);
+    }
+    if (DANGEROUS_ARG_RE.test(arg)) {
+      throw new Error(`spider-nix: potentially dangerous characters in argument: ${arg.substring(0, 80)}`);
+    }
+  }
+
+  // Validate URL for crawl commands
+  if (cmd === 'crawl' && args[1]) {
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(args[1]);
+    } catch {
+      throw new Error(`spider-nix: invalid URL '${args[1]}'`);
+    }
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new Error(`spider-nix: only http/https URLs are allowed, got '${parsedUrl.protocol}'`);
+    }
+  }
+}
+
 export interface SpiderNixOptions {
   cwd?: string;
   timeout?: number;
@@ -81,11 +146,18 @@ export async function executeSpiderNixCommand(
   args: string[],
   options: SpiderNixOptions = {}
 ): Promise<string> {
+  // Validate args before execution (throws on invalid input)
+  validateSpiderNixArgs(args);
+
   const {
     cwd = process.cwd(),
     timeout = 60000, // Default 60s for web operations
-    maxBuffer = 50 * 1024 * 1024, // 50MB for large crawl results
+    // Hard cap at 10 MB regardless of what the caller requests
+    maxBuffer = MAX_BUFFER_HARD_CAP,
   } = options;
+
+  // Enforce hard cap even when the caller passes a custom value
+  const effectiveMaxBuffer = Math.min(maxBuffer, MAX_BUFFER_HARD_CAP);
 
   const startTime = Date.now();
 
@@ -96,6 +168,7 @@ export async function executeSpiderNixCommand(
         args,
         cwd,
         timeout,
+        maxBufferBytes: effectiveMaxBuffer,
       },
       'Executing spider-nix command'
     );
@@ -103,7 +176,7 @@ export async function executeSpiderNixCommand(
     const result = await execa('spider-nix', args, {
       cwd,
       timeout,
-      maxBuffer,
+      maxBuffer: effectiveMaxBuffer,
       reject: false,
       env: {
         ...process.env,
