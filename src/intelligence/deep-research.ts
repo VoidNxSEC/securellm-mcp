@@ -464,20 +464,20 @@ export class DeepResearchEngine {
         if (results.length === 0) return results;
 
         try {
-            // Build document strings: "title: content" (reranker needs some text)
-            const documents = results.map(r =>
-                `${r.title}${r.content ? `: ${r.content.substring(0, 512)}` : ''}`
+            // Prefix each document with its positional index as an opaque key.
+            // This prevents silent collision when two results share the same
+            // title+content prefix (the Map would drop the duplicate).
+            const documents = results.map((r, i) =>
+                `[${i}] ${r.title}${r.content ? `: ${r.content.substring(0, 512)}` : ''}`
             );
 
             const rerankItems = await this.reranker.rerank(query, documents, results.length);
 
-            // Map reranked items back to SourceResult using positional index
-            // (the reranker returns items in ranked order with original document text)
-            const docIndexMap = new Map(documents.map((doc, i) => [doc, i]));
-
+            // Recover original index from the "[N] …" prefix the reranker echoes back
             return rerankItems.map(item => {
-                const originalIdx = docIndexMap.get(item.document) ?? 0;
-                const original = results[originalIdx];
+                const match = /^\[(\d+)\]/.exec(item.document);
+                const originalIdx = match ? parseInt(match[1], 10) : 0;
+                const original = results[originalIdx] ?? results[0];
                 // Blend semantic score with authoritative source credibility
                 const blended = (item.score * 0.65) + (original.credibility * 0.35);
                 return { ...original, relevance: blended };

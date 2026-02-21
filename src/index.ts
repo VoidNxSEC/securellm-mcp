@@ -346,6 +346,27 @@ class SecureLLMBridgeMCPServer {
       // Initialize Semantic Cache
       this.initSemanticCache();
 
+      // Health probe for optional PHANTOM + CEREBRO-Reranker services.
+      // Non-fatal: offline services degrade gracefully (semantic cache falls back to
+      // SQLite embeddings; reranker falls back to keyword scoring).
+      const [phantomResult, rerankerResult] = await Promise.allSettled([
+        fetch(
+          `${process.env.PHANTOM_URL ?? 'http://localhost:8008'}/health`,
+          { signal: AbortSignal.timeout(2_000) },
+        ).then(r => r.ok).catch(() => false),
+        fetch(
+          `${process.env.CEREBRO_RERANKER_URL ?? 'http://localhost:8016'}/health`,
+          { signal: AbortSignal.timeout(2_000) },
+        ).then(r => r.ok).catch(() => false),
+      ]);
+      logger.info(
+        {
+          phantomHealth: phantomResult.status === 'fulfilled' && phantomResult.value,
+          rerankerHealth: rerankerResult.status === 'fulfilled' && rerankerResult.value,
+        },
+        '[Startup] Optional service health',
+      );
+
       logger.info("MCP Server initialization complete");
     } catch (error) {
       logger.fatal({ err: error }, "Failed to initialize MCP server");
