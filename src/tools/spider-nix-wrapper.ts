@@ -19,8 +19,12 @@ const ALLOWED_COMMANDS = new Set(['crawl', 'recon']);
 /** Sub-commands allowed under `recon` */
 const ALLOWED_RECON_SUBCOMMANDS = new Set(['dns', 'subdomains', 'portscan']);
 
-/** Characters that must never appear in individual arguments */
-const DANGEROUS_ARG_RE = /[;&|`$<>\n\r\\!#~{}()[\]*?'"]/;
+/**
+ * Shell-injection characters dangerous in non-execa contexts.
+ * Excludes URL-safe chars (?, #, ', ", !, ~, (), []) since execa
+ * does NOT spawn a shell — these chars cannot cause injection.
+ */
+const DANGEROUS_ARG_RE = /[;&|`$<>\n\r\\]/;
 
 /** Max length for a single argument */
 const MAX_ARG_LENGTH = 2048;
@@ -28,6 +32,12 @@ const MAX_ARG_LENGTH = 2048;
 /**
  * Validate all args before passing them to execa.
  * Throws an Error with a descriptive message if any check fails.
+ *
+ * Strategy:
+ *  1. Check command allowlist
+ *  2. For `crawl`: validate the URL arg via new URL() first, then
+ *     skip the shell-char check for it (URL chars like ? # are legitimate)
+ *  3. For all other args: apply DANGEROUS_ARG_RE + length check
  */
 function validateSpiderNixArgs(args: string[]): void {
   if (args.length === 0) {
@@ -49,17 +59,8 @@ function validateSpiderNixArgs(args: string[]): void {
     }
   }
 
-  // Validate each argument
-  for (const arg of args) {
-    if (arg.length > MAX_ARG_LENGTH) {
-      throw new Error(`spider-nix: argument exceeds max length (${MAX_ARG_LENGTH} chars): ${arg.substring(0, 80)}…`);
-    }
-    if (DANGEROUS_ARG_RE.test(arg)) {
-      throw new Error(`spider-nix: potentially dangerous characters in argument: ${arg.substring(0, 80)}`);
-    }
-  }
-
-  // Validate URL for crawl commands
+  // For crawl: validate URL first, then skip shell-char check for that arg
+  let crawlUrlIndex = -1;
   if (cmd === 'crawl' && args[1]) {
     let parsedUrl: URL;
     try {
@@ -69,6 +70,18 @@ function validateSpiderNixArgs(args: string[]): void {
     }
     if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
       throw new Error(`spider-nix: only http/https URLs are allowed, got '${parsedUrl.protocol}'`);
+    }
+    crawlUrlIndex = 1; // mark as already-validated — skip shell-char check below
+  }
+
+  // Validate each argument (skip the validated crawl URL)
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.length > MAX_ARG_LENGTH) {
+      throw new Error(`spider-nix: argument exceeds max length (${MAX_ARG_LENGTH} chars): ${arg.substring(0, 80)}…`);
+    }
+    if (i !== crawlUrlIndex && DANGEROUS_ARG_RE.test(arg)) {
+      throw new Error(`spider-nix: potentially dangerous characters in argument: ${arg.substring(0, 80)}`);
     }
   }
 }
