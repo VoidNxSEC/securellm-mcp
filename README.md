@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6+-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![NixOS](https://img.shields.io/badge/NixOS-First--Class-5277C3?logo=nixos&logoColor=white)](https://nixos.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Production Ready](https://img.shields.io/badge/status-production--ready-success)](https://github.com/kernelcore/securellm-mcp)
+[![Production Ready](https://img.shields.io/badge/status-production--ready-success)](https://github.com/marcosfpina/securellm-mcp)
 
 ---
 
@@ -154,7 +154,7 @@ Next-generation AI capabilities currently in development:
 
 ```bash
 # Clone repository
-git clone https://github.com/kernelcore/securellm-mcp.git
+git clone https://github.com/marcosfpina/securellm-mcp.git
 cd securellm-mcp
 
 # Install dependencies
@@ -612,9 +612,9 @@ Inspired by:
 
 ## Contact
 
-**Author**: kernelcore
-**Project**: [github.com/kernelcore/securellm-mcp](https://github.com/kernelcore/securellm-mcp)
-**Issues**: [GitHub Issues](https://github.com/kernelcore/securellm-mcp/issues)
+**Author**: marcosfpina
+**Project**: [github.com/marcosfpina/securellm-mcp](https://github.com/marcosfpina/securellm-mcp)
+**Issues**: [GitHub Issues](https://github.com/marcosfpina/securellm-mcp/issues)
 
 ---
 

@@ -37,3 +37,15 @@ coverage/
 # Temporary files
 *.tmp
 .cache/
+
+# Databases
+*.db
+*.db-shm
+*.db-wal
+
+# Binary downloads
+cloudflared-*
+
+# OAuth secrets (keep directory structure via .gitkeep)
+secrets/oauth/*
+!secrets/oauth/.gitkeep
