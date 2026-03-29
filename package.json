@@ -44,8 +44,8 @@
     "security",
     "knowledge-management"
   ],
-  "author": "kernelcore",
-  "license": "MIT",
+  "author": "voidnxlabs",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/marcosfpina/securellm-mcp.git"
