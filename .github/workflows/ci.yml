@@ -76,6 +76,9 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Run npm audit fix
+        run: npm audit fix || true
+
       - name: Run npm audit
         run: npm audit --audit-level=moderate
 
