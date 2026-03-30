@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Test on Node.js ${{ matrix.node-version }}
+    name: Build & Test (Node.js ${{ matrix.node-version }} & Rust)
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -22,22 +22,35 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: "npm"
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "crates/agent-core -> target"
 
       - name: Install dependencies
-        run: npm ci
-
-      - name: Run linter
-        run: npm run lint
+        run: make install
 
       - name: Run formatter check
-        run: npm run format:check
+        run: make check
+
+      - name: Run linter
+        run: make lint
 
       - name: Build project
-        run: npm run build
+        run: make build
 
-      - name: Run tests with coverage
-        run: npm run test:coverage
+      - name: Run tests
+        run: make test
+
+      - name: Run Node.js coverage
+        run: make coverage
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -45,6 +58,7 @@ jobs:
           files: ./coverage/coverage-final.json
           flags: unittests
           name: codecov-umbrella
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   security:
     name: Security Audit
@@ -59,8 +73,23 @@ jobs:
         with:
           node-version: 22.x
 
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Run npm audit
         run: npm audit --audit-level=moderate
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        run: |
+          if [ -d "crates/agent-core" ]; then
+            cd crates/agent-core && cargo audit
+          else
+            echo "Rust crates directory not found. Skipping rust audit."
+          fi
+        continue-on-error: true
 
       - name: Run Snyk security scan
         uses: snyk/actions/node@master
