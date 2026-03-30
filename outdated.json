@@ -1,7 +1,7 @@
 {
   "@modelcontextprotocol/sdk": {
-    "wanted": "1.27.1",
-    "latest": "1.27.1",
+    "wanted": "1.28.0",
+    "latest": "1.28.0",
     "dependent": "securellm-mcp"
   },
   "better-sqlite3": {
