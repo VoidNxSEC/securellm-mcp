@@ -1,3 +1,4 @@
+
 # [2.1.0](https://github.com/marcosfpina/securellm-mcp/compare/863538f5d25612153036c69b4a23b803e4ffbc02...v2.1.0) (2026-01-17)
 
 
@@ -26,6 +27,3 @@
 * **logging:** [MCP-1] implement async logger with pino ([3ebfcb9](https://github.com/marcosfpina/securellm-mcp/commit/3ebfcb9f91623fcba1c5efa152d2edb256acc141))
 * **tests:** add new test files for proactive logic and advanced SSH functionalities ([019f09c](https://github.com/marcosfpina/securellm-mcp/commit/019f09c9c2ce3176503876e354350fbceee2e867))
 * **tools/nix utils:** add cache manager utility ([1c120cb](https://github.com/marcosfpina/securellm-mcp/commit/1c120cb5b1ea83d043cda2a63c487f5fcd936e8e))
-
-
-
