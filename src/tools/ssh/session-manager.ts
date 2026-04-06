@@ -4,6 +4,8 @@
  */
 
 import Database from 'better-sqlite3';
+import fs from 'fs';
+import path from 'path';
 import { SSHConnectionManager } from './connection-manager.js';
 import { SSHTunnelManager } from './tunnel-manager.js';
 import { SSHJumpHostManager } from './jump-host-manager.js';
@@ -41,6 +43,9 @@ export class SSHSessionManager {
     tunnelManager: SSHTunnelManager,
     jumpHostManager: SSHJumpHostManager
   ) {
+    if (dbPath !== ':memory:') {
+      fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    }
     this.db = new Database(dbPath);
     this.connectionManager = connectionManager;
     this.tunnelManager = tunnelManager;

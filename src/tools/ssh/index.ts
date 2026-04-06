@@ -16,6 +16,7 @@ import type {
   ToolResult,
 } from '../../types/extended-tools.js';
 import path from 'path';
+import os from 'os';
 
 export { SSHConnectionManager, sshConnectSchema } from './connection-manager.js';
 
@@ -25,8 +26,10 @@ const connectionManager = new SSHConnectionManager();
 const tunnelManager = new SSHTunnelManager(connectionManager);
 const jumpHostManager = new SSHJumpHostManager(connectionManager);
 
-// We need a path for the SQLite DB. Using default location for now.
-const DB_PATH = process.env.SSH_SESSION_DB_PATH || path.join(process.cwd(), 'ssh_sessions.db');
+// Use XDG_DATA_HOME or ~/.local/share to avoid polluting cwd.
+// Falls back to in-memory DB if no persistent path is configured.
+const _xdgData = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+const DB_PATH = process.env.SSH_SESSION_DB_PATH || path.join(_xdgData, 'securellm-mcp', 'ssh_sessions.db');
 const sessionManager = new SSHSessionManager(
   DB_PATH,
   connectionManager,
