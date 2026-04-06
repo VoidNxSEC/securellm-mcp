@@ -5,8 +5,8 @@
  * Uses execa to execute spider-nix CLI commands without blocking event loop
  */
 
-import { execa } from 'execa';
-import { logger } from '../utils/logger.js';
+import { execa } from "execa";
+import { logger } from "../utils/logger.js";
 
 // ─── Security: Argument Validation ────────────────────────────────────────────
 
@@ -14,10 +14,10 @@ import { logger } from '../utils/logger.js';
 const MAX_BUFFER_HARD_CAP = 10 * 1024 * 1024; // 10 MB
 
 /** Top-level commands that spider-nix is allowed to execute */
-const ALLOWED_COMMANDS = new Set(['crawl', 'recon']);
+const ALLOWED_COMMANDS = new Set(["crawl", "recon"]);
 
 /** Sub-commands allowed under `recon` */
-const ALLOWED_RECON_SUBCOMMANDS = new Set(['dns', 'subdomains', 'portscan']);
+const ALLOWED_RECON_SUBCOMMANDS = new Set(["dns", "subdomains", "portscan"]);
 
 /**
  * Shell-injection characters dangerous in non-execa contexts.
@@ -41,34 +41,36 @@ const MAX_ARG_LENGTH = 2048;
  */
 function validateSpiderNixArgs(args: string[]): void {
   if (args.length === 0) {
-    throw new Error('spider-nix: empty argument list');
+    throw new Error("spider-nix: empty argument list");
   }
 
   const cmd = args[0];
   if (!ALLOWED_COMMANDS.has(cmd)) {
-    throw new Error(`spider-nix: disallowed command '${cmd}'. Allowed: ${[...ALLOWED_COMMANDS].join(', ')}`);
+    throw new Error(
+      `spider-nix: disallowed command '${cmd}'. Allowed: ${[...ALLOWED_COMMANDS].join(", ")}`
+    );
   }
 
   // Validate recon sub-command
-  if (cmd === 'recon') {
+  if (cmd === "recon") {
     const sub = args[1];
     if (!sub || !ALLOWED_RECON_SUBCOMMANDS.has(sub)) {
       throw new Error(
-        `spider-nix: disallowed recon sub-command '${sub}'. Allowed: ${[...ALLOWED_RECON_SUBCOMMANDS].join(', ')}`
+        `spider-nix: disallowed recon sub-command '${sub}'. Allowed: ${[...ALLOWED_RECON_SUBCOMMANDS].join(", ")}`
       );
     }
   }
 
   // For crawl: validate URL first, then skip shell-char check for that arg
   let crawlUrlIndex = -1;
-  if (cmd === 'crawl' && args[1]) {
+  if (cmd === "crawl" && args[1]) {
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(args[1]);
     } catch {
       throw new Error(`spider-nix: invalid URL '${args[1]}'`);
     }
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
       throw new Error(`spider-nix: only http/https URLs are allowed, got '${parsedUrl.protocol}'`);
     }
     crawlUrlIndex = 1; // mark as already-validated — skip shell-char check below
@@ -78,10 +80,14 @@ function validateSpiderNixArgs(args: string[]): void {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg.length > MAX_ARG_LENGTH) {
-      throw new Error(`spider-nix: argument exceeds max length (${MAX_ARG_LENGTH} chars): ${arg.substring(0, 80)}…`);
+      throw new Error(
+        `spider-nix: argument exceeds max length (${MAX_ARG_LENGTH} chars): ${arg.substring(0, 80)}…`
+      );
     }
     if (i !== crawlUrlIndex && DANGEROUS_ARG_RE.test(arg)) {
-      throw new Error(`spider-nix: potentially dangerous characters in argument: ${arg.substring(0, 80)}`);
+      throw new Error(
+        `spider-nix: potentially dangerous characters in argument: ${arg.substring(0, 80)}`
+      );
     }
   }
 }
@@ -98,7 +104,7 @@ export interface CrawlOptions extends SpiderNixOptions {
   aggressive?: boolean;
   followLinks?: boolean;
   proxyFile?: string;
-  outputFormat?: 'json' | 'csv';
+  outputFormat?: "json" | "csv";
 }
 
 export interface OsintDnsOptions extends SpiderNixOptions {
@@ -143,7 +149,7 @@ export interface PortScanResult {
   host: string;
   ports: Array<{
     port: number;
-    state: 'open' | 'closed' | 'filtered';
+    state: "open" | "closed" | "filtered";
     service?: string;
   }>;
 }
@@ -177,16 +183,16 @@ export async function executeSpiderNixCommand(
   try {
     logger.debug(
       {
-        command: 'spider-nix',
+        command: "spider-nix",
         args,
         cwd,
         timeout,
         maxBufferBytes: effectiveMaxBuffer,
       },
-      'Executing spider-nix command'
+      "Executing spider-nix command"
     );
 
-    const result = await execa('spider-nix', args, {
+    const result = await execa("spider-nix", args, {
       cwd,
       timeout,
       maxBuffer: effectiveMaxBuffer,
@@ -194,7 +200,7 @@ export async function executeSpiderNixCommand(
       env: {
         ...process.env,
         // Ensure spider-nix uses machine-readable output
-        PYTHONIOENCODING: 'utf-8',
+        PYTHONIOENCODING: "utf-8",
       },
     });
 
@@ -208,7 +214,7 @@ export async function executeSpiderNixCommand(
           exitCode: result.exitCode,
           durationMs: duration,
         },
-        'Spider-nix command failed'
+        "Spider-nix command failed"
       );
       throw new Error(`Spider-nix command failed: ${result.stderr}`);
     }
@@ -220,15 +226,15 @@ export async function executeSpiderNixCommand(
         durationMs: duration,
         stdoutLength: result.stdout.length,
       },
-      'Spider-nix command succeeded'
+      "Spider-nix command succeeded"
     );
 
     return result.stdout;
   } catch (error: any) {
     const duration = Date.now() - startTime;
 
-    if (error.name === 'ExecaError' && error.timedOut) {
-      logger.warn({ args, timeout, durationMs: duration }, 'Spider-nix command timed out');
+    if (error.name === "ExecaError" && error.timedOut) {
+      logger.warn({ args, timeout, durationMs: duration }, "Spider-nix command timed out");
       throw new Error(`Spider-nix command timed out after ${timeout}ms`);
     }
 
@@ -247,31 +253,31 @@ export async function crawlWebsite(
   url: string,
   options: CrawlOptions = {}
 ): Promise<CrawlResult[]> {
-  const args = ['crawl', url];
+  const args = ["crawl", url];
 
   if (options.pages) {
-    args.push('--pages', options.pages.toString());
+    args.push("--pages", options.pages.toString());
   }
 
   if (options.browser) {
-    args.push('--browser');
+    args.push("--browser");
   }
 
   if (options.aggressive) {
-    args.push('--aggressive');
+    args.push("--aggressive");
   }
 
   if (options.followLinks !== false) {
-    args.push('--follow-links');
+    args.push("--follow-links");
   }
 
   if (options.proxyFile) {
-    args.push('--proxy-file', options.proxyFile);
+    args.push("--proxy-file", options.proxyFile);
   }
 
   // Force JSON output for parsing
-  const format = options.outputFormat || 'json';
-  args.push('--output-format', format);
+  const format = options.outputFormat || "json";
+  args.push("--output-format", format);
 
   try {
     const stdout = await executeSpiderNixCommand(args, {
@@ -279,7 +285,7 @@ export async function crawlWebsite(
       maxBuffer: options.maxBuffer,
     });
 
-    if (format === 'json') {
+    if (format === "json") {
       return JSON.parse(stdout) as CrawlResult[];
     }
 
@@ -291,7 +297,7 @@ export async function crawlWebsite(
       },
     ];
   } catch (error: any) {
-    logger.error({ err: error, url, options }, 'Crawl failed');
+    logger.error({ err: error, url, options }, "Crawl failed");
     throw new Error(`Failed to crawl ${url}: ${error.message}`);
   }
 }
@@ -303,18 +309,15 @@ export async function crawlWebsite(
  * @param options - DNS options
  * @returns Promise resolving to DNS results
  */
-export async function osintDns(
-  domain: string,
-  options: OsintDnsOptions = {}
-): Promise<DnsResult> {
-  const args = ['recon', 'dns', domain];
+export async function osintDns(domain: string, options: OsintDnsOptions = {}): Promise<DnsResult> {
+  const args = ["recon", "dns", domain];
 
   if (options.recordTypes && options.recordTypes.length > 0) {
-    args.push('--records', options.recordTypes.join(','));
+    args.push("--records", options.recordTypes.join(","));
   }
 
   // Force JSON output
-  args.push('--output-format', 'json');
+  args.push("--output-format", "json");
 
   try {
     const stdout = await executeSpiderNixCommand(args, {
@@ -323,7 +326,7 @@ export async function osintDns(
 
     return JSON.parse(stdout) as DnsResult;
   } catch (error: any) {
-    logger.error({ err: error, domain }, 'DNS recon failed');
+    logger.error({ err: error, domain }, "DNS recon failed");
     throw new Error(`DNS reconnaissance failed for ${domain}: ${error.message}`);
   }
 }
@@ -339,13 +342,13 @@ export async function osintSubdomains(
   domain: string,
   options: OsintSubdomainOptions = {}
 ): Promise<SubdomainResult> {
-  const args = ['recon', 'subdomains', domain];
+  const args = ["recon", "subdomains", domain];
 
   if (options.wordlist) {
-    args.push('--wordlist', options.wordlist);
+    args.push("--wordlist", options.wordlist);
   }
 
-  args.push('--output-format', 'json');
+  args.push("--output-format", "json");
 
   try {
     const stdout = await executeSpiderNixCommand(args, {
@@ -354,7 +357,7 @@ export async function osintSubdomains(
 
     return JSON.parse(stdout) as SubdomainResult;
   } catch (error: any) {
-    logger.error({ err: error, domain }, 'Subdomain discovery failed');
+    logger.error({ err: error, domain }, "Subdomain discovery failed");
     throw new Error(`Subdomain discovery failed for ${domain}: ${error.message}`);
   }
 }
@@ -370,13 +373,13 @@ export async function osintPortScan(
   host: string,
   options: OsintPortScanOptions = {}
 ): Promise<PortScanResult> {
-  const args = ['recon', 'portscan', host];
+  const args = ["recon", "portscan", host];
 
   if (options.ports) {
-    args.push('-p', options.ports);
+    args.push("-p", options.ports);
   }
 
-  args.push('--output-format', 'json');
+  args.push("--output-format", "json");
 
   try {
     const stdout = await executeSpiderNixCommand(args, {
@@ -385,7 +388,7 @@ export async function osintPortScan(
 
     return JSON.parse(stdout) as PortScanResult;
   } catch (error: any) {
-    logger.error({ err: error, host }, 'Port scan failed');
+    logger.error({ err: error, host }, "Port scan failed");
     throw new Error(`Port scan failed for ${host}: ${error.message}`);
   }
 }
@@ -414,13 +417,13 @@ export async function webSearch(
     });
 
     return results.map((r) => ({
-      title: r.title || 'No title',
+      title: r.title || "No title",
       url: r.url,
-      description: r.description || '',
-      content: r.content || '',
+      description: r.description || "",
+      content: r.content || "",
     }));
   } catch (error: any) {
-    logger.error({ err: error, query }, 'Web search failed');
+    logger.error({ err: error, query }, "Web search failed");
     throw new Error(`Web search failed for "${query}": ${error.message}`);
   }
 }

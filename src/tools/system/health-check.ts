@@ -3,11 +3,11 @@
  * Comprehensive system health monitoring
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from "child_process";
+import { promisify } from "util";
 // @ts-ignore - systeminformation doesn't have type definitions
-import * as si from 'systeminformation';
-import type { SystemHealthCheckArgs, SystemHealthResult } from '../../types/extended-tools.js';
+import * as si from "systeminformation";
+import type { SystemHealthCheckArgs, SystemHealthResult } from "../../types/extended-tools.js";
 
 const execAsync = promisify(exec);
 
@@ -21,7 +21,7 @@ export class SystemHealthCheckTool {
   async execute(args: SystemHealthCheckArgs): Promise<SystemHealthResult> {
     const startTime = Date.now();
     const detailed = args.detailed ?? true;
-    const components = args.components ?? ['cpu', 'memory', 'disk', 'network', 'services'];
+    const components = args.components ?? ["cpu", "memory", "disk", "network", "services"];
 
     try {
       const healthData: any = {
@@ -29,11 +29,11 @@ export class SystemHealthCheckTool {
           hostname: (await si.osInfo()).hostname,
           platform: (await si.osInfo()).platform,
           uptime: (await si.time()).uptime,
-        }
+        },
       };
 
       // CPU Check
-      if (components.includes('cpu')) {
+      if (components.includes("cpu")) {
         const cpuData = await si.currentLoad();
         const cpuInfo = await si.cpu();
         healthData.cpu = {
@@ -47,35 +47,35 @@ export class SystemHealthCheckTool {
       }
 
       // Memory Check
-      if (components.includes('memory')) {
+      if (components.includes("memory")) {
         const memData = await si.mem();
         healthData.memory = {
-          used: Math.round(memData.used / (1024 ** 3) * 100) / 100, // GB
-          total: Math.round(memData.total / (1024 ** 3) * 100) / 100, // GB
+          used: Math.round((memData.used / 1024 ** 3) * 100) / 100, // GB
+          total: Math.round((memData.total / 1024 ** 3) * 100) / 100, // GB
           percentage: Math.round((memData.used / memData.total) * 100),
-          available: Math.round(memData.available / (1024 ** 3) * 100) / 100, // GB
+          available: Math.round((memData.available / 1024 ** 3) * 100) / 100, // GB
           swap: {
-            used: Math.round(memData.swapused / (1024 ** 3) * 100) / 100,
-            total: Math.round(memData.swaptotal / (1024 ** 3) * 100) / 100,
-          }
+            used: Math.round((memData.swapused / 1024 ** 3) * 100) / 100,
+            total: Math.round((memData.swaptotal / 1024 ** 3) * 100) / 100,
+          },
         };
       }
 
       // Disk Check
-      if (components.includes('disk')) {
+      if (components.includes("disk")) {
         const diskData = await si.fsSize();
         healthData.disk = diskData.map((d: any) => ({
           mount: d.mount,
           filesystem: d.fs,
-          used: Math.round(d.used / (1024 ** 3) * 100) / 100, // GB
-          total: Math.round(d.size / (1024 ** 3) * 100) / 100, // GB
+          used: Math.round((d.used / 1024 ** 3) * 100) / 100, // GB
+          total: Math.round((d.size / 1024 ** 3) * 100) / 100, // GB
           percentage: Math.round(d.use),
-          available: Math.round((d.size - d.used) / (1024 ** 3) * 100) / 100, // GB
+          available: Math.round(((d.size - d.used) / 1024 ** 3) * 100) / 100, // GB
         }));
       }
 
       // Network Check
-      if (components.includes('network')) {
+      if (components.includes("network")) {
         const netData = await si.networkStats();
         healthData.network = {
           interfaces: netData.map((n: any) => ({
@@ -84,12 +84,12 @@ export class SystemHealthCheckTool {
             tx_bytes: n.tx_bytes,
             rx_sec: n.rx_sec,
             tx_sec: n.tx_sec,
-          }))
+          })),
         };
       }
 
       // Services Check (NixOS systemd services)
-      if (components.includes('services')) {
+      if (components.includes("services")) {
         healthData.services = await this.checkCriticalServices();
       }
 
@@ -117,7 +117,7 @@ export class SystemHealthCheckTool {
         metadata: {
           duration_ms: duration,
           components_checked: components.length,
-        }
+        },
       };
     } catch (error: any) {
       return {
@@ -137,13 +137,15 @@ export class SystemHealthCheckTool {
     }
   }
 
-  private async checkCriticalServices(): Promise<Array<{ name: string; status: string; uptime?: number }>> {
+  private async checkCriticalServices(): Promise<
+    Array<{ name: string; status: string; uptime?: number }>
+  > {
     const criticalServices = [
-      'sshd',
-      'systemd-journald',
-      'systemd-logind',
-      'dbus',
-      'NetworkManager',
+      "sshd",
+      "systemd-journald",
+      "systemd-logind",
+      "dbus",
+      "NetworkManager",
     ];
 
     const services = [];
@@ -151,9 +153,9 @@ export class SystemHealthCheckTool {
       try {
         const { stdout } = await execAsync(`systemctl is-active ${service}`);
         const status = stdout.trim();
-        
+
         let uptime: number | undefined;
-        if (status === 'active') {
+        if (status === "active") {
           try {
             const { stdout: uptimeOut } = await execAsync(
               `systemctl show ${service} --property=ActiveEnterTimestamp --value`
@@ -167,7 +169,7 @@ export class SystemHealthCheckTool {
 
         services.push({ name: service, status, uptime });
       } catch (error) {
-        services.push({ name: service, status: 'inactive' });
+        services.push({ name: service, status: "inactive" });
       }
     }
 
@@ -177,7 +179,8 @@ export class SystemHealthCheckTool {
 
 export const healthCheckSchema = {
   name: "system_health_check",
-  description: "Comprehensive system health check including CPU, memory, disk, network, and services",
+  description:
+    "Comprehensive system health check including CPU, memory, disk, network, and services",
   inputSchema: {
     type: "object",
     properties: {

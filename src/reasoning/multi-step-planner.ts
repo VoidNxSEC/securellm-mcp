@@ -1,6 +1,6 @@
 /**
  * Multi-Step Planner
- * 
+ *
  * Main coordinator for automatic task decomposition and execution.
  */
 
@@ -9,10 +9,10 @@ import type {
   ExecutionPlan,
   PlanExecutionResult,
   PlanCheckpoint,
-} from '../types/planning.js';
-import { PlanGenerator } from './planning/plan-generator.js';
-import { PlanExecutor } from './planning/plan-executor.js';
-import { DependencyResolver } from './planning/dependency-resolver.js';
+} from "../types/planning.js";
+import { PlanGenerator } from "./planning/plan-generator.js";
+import { PlanExecutor } from "./planning/plan-executor.js";
+import { DependencyResolver } from "./planning/dependency-resolver.js";
 
 /**
  * Multi-Step Planner

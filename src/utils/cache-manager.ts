@@ -1,9 +1,9 @@
-import { LRUCache } from 'lru-cache';
-import { logger } from './logger.js';
+import { LRUCache } from "lru-cache";
+import { logger } from "./logger.js";
 
 export interface CacheOptions {
   max?: number;
-  ttl?: number;  // milliseconds
+  ttl?: number; // milliseconds
   updateAgeOnGet?: boolean;
 }
 
@@ -15,7 +15,7 @@ export class CacheManager<K extends {}, V extends {}> {
   constructor(options: CacheOptions = {}) {
     this.cache = new LRUCache({
       max: options.max || 500,
-      ttl: options.ttl || 600000,  // 10 min default
+      ttl: options.ttl || 600000, // 10 min default
       updateAgeOnGet: options.updateAgeOnGet ?? true,
     });
   }
@@ -24,10 +24,10 @@ export class CacheManager<K extends {}, V extends {}> {
     const value = this.cache.get(key);
     if (value !== undefined) {
       this.hits++;
-      logger.debug({ key, hitRate: this.getHitRate() }, 'Cache hit');
+      logger.debug({ key, hitRate: this.getHitRate() }, "Cache hit");
     } else {
       this.misses++;
-      logger.debug({ key, hitRate: this.getHitRate() }, 'Cache miss');
+      logger.debug({ key, hitRate: this.getHitRate() }, "Cache miss");
     }
     return value;
   }

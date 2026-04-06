@@ -1,6 +1,6 @@
 /**
  * Tool Execution Limiter
- * 
+ *
  * Controls concurrency and backpressure for tool execution:
  * - Global concurrency limit
  * - Per-tool concurrency limits
@@ -8,7 +8,7 @@
  * - Timeout handling per tool
  */
 
-import { logger } from '../utils/logger.js';
+import { logger } from "../utils/logger.js";
 
 export interface ToolLimiterConfig {
   globalMaxConcurrency?: number;
@@ -42,12 +42,14 @@ export class ToolExecutionLimiter {
   private readonly toolConcurrency: Record<string, number>;
 
   constructor(config: ToolLimiterConfig = {}) {
-    this.globalMaxConcurrency = config.globalMaxConcurrency 
-      ?? parseInt(process.env.TOOL_LIMITER_GLOBAL_MAX_CONCURRENCY || '50', 10);
-    this.defaultToolTimeout = config.defaultToolTimeout 
-      ?? parseInt(process.env.TOOL_LIMITER_DEFAULT_TIMEOUT || '30000', 10);
-    this.maxQueueSize = config.maxQueueSize 
-      ?? parseInt(process.env.TOOL_LIMITER_MAX_QUEUE_SIZE || '100', 10);
+    this.globalMaxConcurrency =
+      config.globalMaxConcurrency ??
+      parseInt(process.env.TOOL_LIMITER_GLOBAL_MAX_CONCURRENCY || "50", 10);
+    this.defaultToolTimeout =
+      config.defaultToolTimeout ??
+      parseInt(process.env.TOOL_LIMITER_DEFAULT_TIMEOUT || "30000", 10);
+    this.maxQueueSize =
+      config.maxQueueSize ?? parseInt(process.env.TOOL_LIMITER_MAX_QUEUE_SIZE || "100", 10);
     this.toolTimeouts = config.toolTimeouts || {};
     this.toolConcurrency = config.toolConcurrency || {};
 
@@ -66,7 +68,7 @@ export class ToolExecutionLimiter {
         toolConcurrency: this.toolConcurrency,
         toolTimeouts: this.toolTimeouts,
       },
-      'ToolExecutionLimiter initialized'
+      "ToolExecutionLimiter initialized"
     );
   }
 
@@ -88,7 +90,7 @@ export class ToolExecutionLimiter {
             queueLength: this.queue.length,
             maxQueueSize: this.maxQueueSize,
           },
-          'Tool execution queue full, rejecting request'
+          "Tool execution queue full, rejecting request"
         );
         reject(error);
         return;
@@ -129,7 +131,7 @@ export class ToolExecutionLimiter {
           queueLength: this.queue.length,
           position: this.queue.length,
         },
-        'Tool execution queued'
+        "Tool execution queued"
       );
     });
   }
@@ -192,7 +194,7 @@ export class ToolExecutionLimiter {
             requestId,
             timeout,
           },
-          'Tool execution timeout, aborting'
+          "Tool execution timeout, aborting"
         );
         // Release permit on timeout
         permit.release();
@@ -259,10 +261,13 @@ export class ToolExecutionLimiter {
     queueLength: number;
     maxQueueSize: number;
     activeRequests: number;
-    toolStatus: Record<string, {
-      semaphore: number;
-      maxConcurrency?: number;
-    }>;
+    toolStatus: Record<
+      string,
+      {
+        semaphore: number;
+        maxConcurrency?: number;
+      }
+    >;
   } {
     const toolStatus: Record<string, { semaphore: number; maxConcurrency?: number }> = {};
     for (const [toolName, maxConcurrency] of Object.entries(this.toolConcurrency)) {

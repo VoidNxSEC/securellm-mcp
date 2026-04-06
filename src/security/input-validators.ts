@@ -5,8 +5,8 @@
  * Uses Zod for schema validation with branded types for type safety.
  */
 
-import { z } from 'zod';
-import { validatePath as _validatePath } from './path-validator.js';
+import { z } from "zod";
+import { validatePath as _validatePath } from "./path-validator.js";
 
 // ─── Path Validators ───────────────────────────────────────────────
 
@@ -26,7 +26,7 @@ export const SafeServiceName = z
   .max(64)
   .regex(
     /^[a-zA-Z][a-zA-Z0-9_.@-]{0,63}$/,
-    'Service name must start with a letter and contain only alphanumeric, dots, underscores, @ or hyphens'
+    "Service name must start with a letter and contain only alphanumeric, dots, underscores, @ or hyphens"
   );
 
 // ─── Network Validators ───────────────────────────────────────────
@@ -38,16 +38,14 @@ export const SafeHostname = z
   .max(253)
   .regex(
     /^[a-zA-Z0-9._:-]+$/,
-    'Hostname must contain only alphanumeric, dots, colons, hyphens or underscores'
+    "Hostname must contain only alphanumeric, dots, colons, hyphens or underscores"
   );
 
 /** Port number: 1-65535 */
 export const SafePort = z.number().int().min(1).max(65535);
 
 /** MFA / OTP code: exactly 6 digits */
-export const SafeMfaCode = z
-  .string()
-  .regex(/^\d{6}$/, 'MFA code must be exactly 6 digits');
+export const SafeMfaCode = z.string().regex(/^\d{6}$/, "MFA code must be exactly 6 digits");
 
 // ─── Time / Duration Validators ───────────────────────────────────
 
@@ -66,19 +64,13 @@ const SHELL_META_PATTERN = /[;&|`$<>\n\r\\!#~{}()\[\]]/;
 
 /** Test whether a string contains shell metacharacters */
 export function hasShellMeta(value: string): boolean {
-  return (
-    SHELL_META_PATTERN.test(value) ||
-    value.includes('"') ||
-    value.includes("'")
-  );
+  return SHELL_META_PATTERN.test(value) || value.includes('"') || value.includes("'");
 }
 
 /** A string free of shell metacharacters */
-export const ShellSafeString = z
-  .string()
-  .refine((v) => !hasShellMeta(v), {
-    message: 'Value contains unsafe shell metacharacters',
-  });
+export const ShellSafeString = z.string().refine((v) => !hasShellMeta(v), {
+  message: "Value contains unsafe shell metacharacters",
+});
 
 // ─── Kubernetes / Infrastructure ──────────────────────────────────
 
@@ -89,7 +81,7 @@ export const SafeK8sName = z
   .max(63)
   .regex(
     /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/,
-    'Must be lowercase alphanumeric with optional hyphens, not starting/ending with hyphen'
+    "Must be lowercase alphanumeric with optional hyphens, not starting/ending with hyphen"
   );
 
 /** Volume / resource name: alphanumeric + hyphens + underscores */
@@ -99,7 +91,7 @@ export const SafeResourceName = z
   .max(253)
   .regex(
     /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/,
-    'Resource name must start with alphanumeric and contain only alphanumeric, hyphens or underscores'
+    "Resource name must start with alphanumeric and contain only alphanumeric, hyphens or underscores"
   );
 
 /** CIDR notation: 0-32 for IPv4 */

@@ -21,10 +21,10 @@
  * Token will be available at /run/secrets/github_token
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { readFile } from 'fs/promises';
-import { logger } from './logger.js';
+import { exec } from "child_process";
+import { promisify } from "util";
+import { readFile } from "fs/promises";
+import { logger } from "./logger.js";
 
 const execAsync = promisify(exec);
 
@@ -41,36 +41,36 @@ class GitHubTokenProvider {
 
   private sources: TokenSource[] = [
     {
-      name: 'ENV',
+      name: "ENV",
       priority: 1,
       fetch: async () => process.env.GITHUB_TOKEN || null,
     },
     {
-      name: 'gh CLI',
+      name: "gh CLI",
       priority: 2,
       fetch: async () => {
         try {
-          const { stdout } = await execAsync('gh auth token');
+          const { stdout } = await execAsync("gh auth token");
           const token = stdout.trim();
-          if (token && (token.startsWith('gho_') || token.startsWith('ghp_'))) {
+          if (token && (token.startsWith("gho_") || token.startsWith("ghp_"))) {
             return token;
           }
           return null;
         } catch (error) {
-          logger.debug({ error }, '[GitHubToken] gh CLI not available');
+          logger.debug({ error }, "[GitHubToken] gh CLI not available");
           return null;
         }
       },
     },
     {
-      name: 'SOPS',
+      name: "SOPS",
       priority: 3,
       fetch: async () => {
         try {
-          const token = await readFile('/run/secrets/github_token', 'utf-8');
+          const token = await readFile("/run/secrets/github_token", "utf-8");
           return token.trim() || null;
         } catch (error) {
-          logger.debug({ error }, '[GitHubToken] SOPS secret not available');
+          logger.debug({ error }, "[GitHubToken] SOPS secret not available");
           return null;
         }
       },
@@ -84,7 +84,7 @@ class GitHubTokenProvider {
   async getToken(): Promise<string | null> {
     // Return cached token if still valid
     const now = Date.now();
-    if (this.cachedToken && (now - this.cacheTimestamp) < this.CACHE_TTL) {
+    if (this.cachedToken && now - this.cacheTimestamp < this.CACHE_TTL) {
       return this.cachedToken;
     }
 
@@ -99,11 +99,11 @@ class GitHubTokenProvider {
           return token;
         }
       } catch (error) {
-        logger.debug({ error, source: source.name }, '[GitHubToken] Source failed');
+        logger.debug({ error, source: source.name }, "[GitHubToken] Source failed");
       }
     }
 
-    logger.warn('[GitHubToken] No token available from any source');
+    logger.warn("[GitHubToken] No token available from any source");
     return null;
   }
 
@@ -124,10 +124,10 @@ class GitHubTokenProvider {
     remaining: number;
   }> {
     try {
-      const response = await fetch('https://api.github.com/rate_limit', {
+      const response = await fetch("https://api.github.com/rate_limit", {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github.v3+json',
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
         },
       });
 
@@ -135,14 +135,14 @@ class GitHubTokenProvider {
         return { valid: false, rateLimit: 0, remaining: 0 };
       }
 
-      const data = await response.json() as any;
+      const data = (await response.json()) as any;
       return {
         valid: true,
         rateLimit: data.rate.limit,
         remaining: data.rate.remaining,
       };
     } catch (error) {
-      logger.error({ error }, '[GitHubToken] Validation failed');
+      logger.error({ error }, "[GitHubToken] Validation failed");
       return { valid: false, rateLimit: 0, remaining: 0 };
     }
   }

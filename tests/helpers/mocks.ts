@@ -22,11 +22,11 @@ export function createMockSSHClient(options?: {
     connect: (config: any) => {
       setTimeout(() => {
         if (options?.connectError) {
-          const errorHandlers = listeners.get('error');
-          errorHandlers?.forEach(h => h(options.connectError));
+          const errorHandlers = listeners.get("error");
+          errorHandlers?.forEach((h) => h(options.connectError));
         } else {
-          const readyHandlers = listeners.get('ready');
-          readyHandlers?.forEach(h => h());
+          const readyHandlers = listeners.get("ready");
+          readyHandlers?.forEach((h) => h());
         }
       }, 0);
     },
@@ -38,10 +38,10 @@ export function createMockSSHClient(options?: {
       }
       const stream = {
         on: (event: string, handler: Function) => {
-          if (event === 'data') {
-            handler(Buffer.from(options?.execOutput || ''));
+          if (event === "data") {
+            handler(Buffer.from(options?.execOutput || ""));
           }
-          if (event === 'close') {
+          if (event === "close") {
             setTimeout(() => handler(0), 0);
           }
           return stream;
@@ -74,11 +74,11 @@ export function createMockExecResult(options?: {
   timedOut?: boolean;
 }) {
   return {
-    stdout: options?.stdout || '',
-    stderr: options?.stderr || '',
+    stdout: options?.stdout || "",
+    stderr: options?.stderr || "",
     exitCode: options?.exitCode ?? 0,
     failed: options?.failed ?? false,
     timedOut: options?.timedOut ?? false,
-    command: 'mock-command',
+    command: "mock-command",
   };
 }

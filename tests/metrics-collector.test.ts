@@ -1,10 +1,10 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
-import { MetricsCollector } from '../src/middleware/metrics-collector.js';
-import { ErrorCategory } from '../src/middleware/error-classifier.js';
+import { describe, it } from "node:test";
+import assert from "node:assert";
+import { MetricsCollector } from "../src/middleware/metrics-collector.js";
+import { ErrorCategory } from "../src/middleware/error-classifier.js";
 
-describe('MetricsCollector', () => {
-  it('should track successful requests', () => {
+describe("MetricsCollector", () => {
+  it("should track successful requests", () => {
     const collector = new MetricsCollector();
 
     collector.recordSuccess(100);
@@ -19,7 +19,7 @@ describe('MetricsCollector', () => {
     assert.ok(metrics.averageLatency > 0);
   });
 
-  it('should track failed requests by category', () => {
+  it("should track failed requests by category", () => {
     const collector = new MetricsCollector();
 
     collector.recordFailure(100, ErrorCategory.RATE_LIMIT);
@@ -35,7 +35,7 @@ describe('MetricsCollector', () => {
     assert.strictEqual(metrics.errorsByCategory.permanent, 1);
   });
 
-  it('should calculate latency percentiles', () => {
+  it("should calculate latency percentiles", () => {
     const collector = new MetricsCollector();
 
     // Add 100 samples with known distribution
@@ -52,20 +52,20 @@ describe('MetricsCollector', () => {
     assert.strictEqual(metrics.latencyPercentiles.max, 1000); // Max
   });
 
-  it('should track retry attempts', () => {
+  it("should track retry attempts", () => {
     const collector = new MetricsCollector();
 
-    collector.recordRetry(true);  // First retry of request 1
+    collector.recordRetry(true); // First retry of request 1
     collector.recordRetry(false); // Second retry of request 1
-    collector.recordRetry(true);  // First retry of request 2
+    collector.recordRetry(true); // First retry of request 2
 
     const metrics = collector.getMetrics();
 
     assert.strictEqual(metrics.retriedRequests, 2); // 2 requests needed retries
-    assert.strictEqual(metrics.totalRetries, 3);    // 3 total retry attempts
+    assert.strictEqual(metrics.totalRetries, 3); // 3 total retry attempts
   });
 
-  it('should track circuit breaker trips', () => {
+  it("should track circuit breaker trips", () => {
     const collector = new MetricsCollector();
 
     collector.recordCircuitBreakerTrip();
@@ -76,7 +76,7 @@ describe('MetricsCollector', () => {
     assert.strictEqual(metrics.circuitBreakerActivations, 2);
   });
 
-  it('should track queue metrics', () => {
+  it("should track queue metrics", () => {
     const collector = new MetricsCollector();
 
     collector.recordQueueMetrics(5, 100);
@@ -90,7 +90,7 @@ describe('MetricsCollector', () => {
     assert.strictEqual(metrics.queueMetrics.totalTimeInQueue, 300); // 100+50+150
   });
 
-  it('should calculate requests per minute', () => {
+  it("should calculate requests per minute", () => {
     const collector = new MetricsCollector();
 
     // Record some requests
@@ -101,11 +101,11 @@ describe('MetricsCollector', () => {
     const metrics = collector.getMetrics();
 
     // Should calculate a rate (may be very high due to short duration)
-    assert.ok(metrics.requestsPerMinute >= 0, 'Requests per minute should be non-negative');
-    assert.strictEqual(metrics.totalRequests, 10, 'Should have tracked 10 requests');
+    assert.ok(metrics.requestsPerMinute >= 0, "Requests per minute should be non-negative");
+    assert.strictEqual(metrics.totalRequests, 10, "Should have tracked 10 requests");
   });
 
-  it('should reset metrics', () => {
+  it("should reset metrics", () => {
     const collector = new MetricsCollector();
 
     collector.recordSuccess(100);

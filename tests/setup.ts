@@ -7,7 +7,7 @@
  */
 export function createMockFunction(
   failCount: number,
-  errorMessage: string = 'Mock error'
+  errorMessage: string = "Mock error"
 ): () => Promise<string> {
   let callCount = 0;
   return async () => {
@@ -15,7 +15,7 @@ export function createMockFunction(
     if (callCount <= failCount) {
       throw new Error(errorMessage);
     }
-    return 'success';
+    return "success";
   };
 }
 
@@ -27,11 +27,11 @@ export function createRateLimitMock(failCount: number): () => Promise<string> {
   return async () => {
     callCount++;
     if (callCount <= failCount) {
-      const error: any = new Error('Rate limit exceeded');
+      const error: any = new Error("Rate limit exceeded");
       error.status = 429;
       throw error;
     }
-    return 'success';
+    return "success";
   };
 }
 
@@ -39,7 +39,7 @@ export function createRateLimitMock(failCount: number): () => Promise<string> {
  * Sleep helper for async tests
  */
 export function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

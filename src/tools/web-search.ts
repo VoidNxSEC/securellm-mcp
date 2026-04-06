@@ -88,8 +88,8 @@ function enforceOsintRateLimit(target: string, operation: string): void {
     const waitSec = Math.ceil((OSINT_COOLDOWN_MS - elapsed) / 1000);
     throw new Error(
       `OSINT rate limit: '${target}' was queried via ${operation} ` +
-      `${Math.round(elapsed / 1000)}s ago. ` +
-      `Wait ${waitSec}s before retrying (cooldown: ${OSINT_COOLDOWN_MS / 1000}s).`
+        `${Math.round(elapsed / 1000)}s ago. ` +
+        `Wait ${waitSec}s before retrying (cooldown: ${OSINT_COOLDOWN_MS / 1000}s).`
     );
   }
 
@@ -109,11 +109,12 @@ function formatIntelligentOutput(data: {
   const { query, source, results, summary } = data;
 
   // Generate actionable summary
-  const actionSummary = results.length > 0
-    ? `Found ${results.length} results. ${summary || ""}`
-    : `No results found for "${query}".`;
+  const actionSummary =
+    results.length > 0
+      ? `Found ${results.length} results. ${summary || ""}`
+      : `No results found for "${query}".`;
 
-  // Format each result with relevance indicator  
+  // Format each result with relevance indicator
   const formattedResults = results.map((r, i) => ({
     rank: i + 1,
     ...r,
@@ -129,7 +130,10 @@ function formatIntelligentOutput(data: {
     results: formattedResults,
     // Quick reference for LLM
     quick_answer: results[0]?.title || results[0]?.description || null,
-    top_urls: results.slice(0, 3).map(r => r.url).filter(Boolean),
+    top_urls: results
+      .slice(0, 3)
+      .map((r) => r.url)
+      .filter(Boolean),
   };
 }
 
@@ -139,7 +143,8 @@ function formatIntelligentOutput(data: {
 export const webSearchTools: ExtendedTool[] = [
   {
     name: "web_search",
-    description: "Search the web for configurations, news, features, issues, and bug reports. Uses DuckDuckGo for privacy-focused searches.",
+    description:
+      "Search the web for configurations, news, features, issues, and bug reports. Uses DuckDuckGo for privacy-focused searches.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -165,7 +170,8 @@ export const webSearchTools: ExtendedTool[] = [
   },
   {
     name: "nix_search",
-    description: "Search NixOS packages and options on search.nixos.org. Find package configurations, versions, and documentation.",
+    description:
+      "Search NixOS packages and options on search.nixos.org. Find package configurations, versions, and documentation.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -195,7 +201,8 @@ export const webSearchTools: ExtendedTool[] = [
   },
   {
     name: "github_search",
-    description: "Search GitHub for repositories, issues, and code. Find NixOS configurations, bug reports, and implementation examples.",
+    description:
+      "Search GitHub for repositories, issues, and code. Find NixOS configurations, bug reports, and implementation examples.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -226,7 +233,8 @@ export const webSearchTools: ExtendedTool[] = [
   },
   {
     name: "tech_news_search",
-    description: "Search tech news sources (Hacker News, Reddit, Lobsters) for discussions about packages, features, and issues.",
+    description:
+      "Search tech news sources (Hacker News, Reddit, Lobsters) for discussions about packages, features, and issues.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -253,7 +261,8 @@ export const webSearchTools: ExtendedTool[] = [
   },
   {
     name: "nixos_discourse_search",
-    description: "Search NixOS Discourse forum for community discussions, solutions, and best practices.",
+    description:
+      "Search NixOS Discourse forum for community discussions, solutions, and best practices.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -272,7 +281,8 @@ export const webSearchTools: ExtendedTool[] = [
   },
   {
     name: "stackoverflow_search",
-    description: "Search Stack Overflow for technical solutions and code examples related to NixOS and related technologies.",
+    description:
+      "Search Stack Overflow for technical solutions and code examples related to NixOS and related technologies.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -298,7 +308,8 @@ export const webSearchTools: ExtendedTool[] = [
   },
   {
     name: "osint_dns",
-    description: "Perform DNS reconnaissance on a domain using spider-nix. Retrieves DNS records, nameservers, MX records, and more.",
+    description:
+      "Perform DNS reconnaissance on a domain using spider-nix. Retrieves DNS records, nameservers, MX records, and more.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -323,7 +334,8 @@ export const webSearchTools: ExtendedTool[] = [
   },
   {
     name: "osint_subdomains",
-    description: "Discover subdomains for a target domain using spider-nix. Uses certificate transparency, DNS bruteforce, and other techniques.",
+    description:
+      "Discover subdomains for a target domain using spider-nix. Uses certificate transparency, DNS bruteforce, and other techniques.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -347,7 +359,8 @@ export const webSearchTools: ExtendedTool[] = [
   },
   {
     name: "osint_portscan",
-    description: "Perform port scanning on a target host using spider-nix. Identifies open ports and running services.",
+    description:
+      "Perform port scanning on a target host using spider-nix. Identifies open ports and running services.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -371,7 +384,8 @@ export const webSearchTools: ExtendedTool[] = [
   },
   {
     name: "web_crawl",
-    description: "Crawl a website using spider-nix with advanced stealth and content extraction. Use for deep analysis of specific sites.",
+    description:
+      "Crawl a website using spider-nix with advanced stealth and content extraction. Use for deep analysis of specific sites.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -433,10 +447,7 @@ export async function handleWebSearch(args: WebSearchArgs) {
         break;
     }
 
-    logger.info(
-      { query: searchQuery, search_type, limit },
-      "Executing spider-nix web search"
-    );
+    logger.info({ query: searchQuery, search_type, limit }, "Executing spider-nix web search");
 
     // Use spider-nix for real web crawling
     const crawlResults = await spiderWebSearch(searchQuery, limit);
@@ -472,19 +483,21 @@ export async function handleWebSearch(args: WebSearchArgs) {
       });
 
       if (response.ok) {
-        const data = await response.json() as any;
+        const data = (await response.json()) as any;
 
         if (data.AbstractText) {
           return formatIntelligentOutput({
             query,
             source: "DuckDuckGo (Fallback)",
-            results: [{
-              type: "instant_answer",
-              title: data.Heading || "Answer",
-              description: data.AbstractText,
-              url: data.AbstractURL,
-              source: data.AbstractSource,
-            }],
+            results: [
+              {
+                type: "instant_answer",
+                title: data.Heading || "Answer",
+                description: data.AbstractText,
+                url: data.AbstractURL,
+                source: data.AbstractSource,
+              },
+            ],
             summary: "Spider-nix unavailable, using fallback instant answer.",
           });
         }
@@ -497,7 +510,8 @@ export async function handleWebSearch(args: WebSearchArgs) {
       success: false,
       error: error.message,
       message: "Web search failed",
-      suggestion: "Try using research_agent for more comprehensive results, or check if spider-nix is installed",
+      suggestion:
+        "Try using research_agent for more comprehensive results, or check if spider-nix is installed",
     };
   }
 }
@@ -518,7 +532,7 @@ export async function handleGithubSearch(args: GithubSearchArgs) {
     const apiUrl = `https://api.github.com/search/${type}?q=${encodedQuery}&sort=${sort}&per_page=10`;
 
     const headers: Record<string, string> = {
-      "Accept": "application/vnd.github.v3+json",
+      Accept: "application/vnd.github.v3+json",
       "User-Agent": USER_AGENT,
     };
 
@@ -535,11 +549,11 @@ export async function handleGithubSearch(args: GithubSearchArgs) {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({})) as any;
+      const errorData = (await response.json().catch(() => ({}))) as any;
       throw new Error(errorData.message || `GitHub API error: ${response.status}`);
     }
 
-    const data = await response.json() as any;
+    const data = (await response.json()) as any;
 
     const results = (data.items || []).map((item: any) => {
       if (type === "repositories") {
@@ -615,7 +629,7 @@ export async function handleNixSearch(args: NixSearchArgs) {
     try {
       const packages = await packageSearch.search(searchTerm, 10);
 
-      const results = packages.map(pkg => ({
+      const results = packages.map((pkg) => ({
         name: pkg.name,
         path: pkg.attrPath,
         version: pkg.version,
@@ -629,9 +643,10 @@ export async function handleNixSearch(args: NixSearchArgs) {
         query: searchTerm,
         source: `NixOS (${channel})`,
         results,
-        summary: results.length > 0
-          ? `Found packages. Latest version: ${results[0]?.version || "unknown"}`
-          : undefined,
+        summary:
+          results.length > 0
+            ? `Found packages. Latest version: ${results[0]?.version || "unknown"}`
+            : undefined,
       });
     } catch (nixError) {
       // Fallback to web interface link
@@ -678,7 +693,7 @@ export async function handleTechNewsSearch(args: TechNewsArgs) {
         });
 
         if (response.ok) {
-          const hn = await response.json() as any;
+          const hn = (await response.json()) as any;
           const hnResults = (hn.hits || []).slice(0, 5).map((hit: any) => ({
             source: "Hacker News",
             title: hit.title,
@@ -707,7 +722,7 @@ export async function handleTechNewsSearch(args: TechNewsArgs) {
         });
 
         if (response.ok) {
-          const reddit = await response.json() as any;
+          const reddit = (await response.json()) as any;
           const redditResults = (reddit.data?.children || []).slice(0, 5).map((child: any) => ({
             source: "Reddit",
             title: child.data.title,
@@ -735,7 +750,7 @@ export async function handleTechNewsSearch(args: TechNewsArgs) {
 
     return formatIntelligentOutput({
       query: topic,
-      source: sources.map(s => s.name).join(", "),
+      source: sources.map((s) => s.name).join(", "),
       results: allResults,
       summary,
     });
@@ -769,7 +784,7 @@ export async function handleDiscourseSearch(args: { query: string; category?: st
       throw new Error(`Discourse API error: ${response.status}`);
     }
 
-    const data = await response.json() as any;
+    const data = (await response.json()) as any;
 
     const results = (data.posts || []).slice(0, 10).map((post: any) => ({
       title: post.blurb?.substring(0, 100),
@@ -783,9 +798,10 @@ export async function handleDiscourseSearch(args: { query: string; category?: st
 
     // Count solutions
     const solutionCount = results.filter((r: any) => r.is_solution).length;
-    const summary = solutionCount > 0
-      ? `Found ${solutionCount} marked solutions.`
-      : `Found ${results.length} discussions.`;
+    const summary =
+      solutionCount > 0
+        ? `Found ${solutionCount} marked solutions.`
+        : `Found ${results.length} discussions.`;
 
     return formatIntelligentOutput({
       query,
@@ -805,7 +821,11 @@ export async function handleDiscourseSearch(args: { query: string; category?: st
 /**
  * Search Stack Overflow using native fetch
  */
-export async function handleStackOverflowSearch(args: { query: string; tags?: string[]; sort?: string }) {
+export async function handleStackOverflowSearch(args: {
+  query: string;
+  tags?: string[];
+  sort?: string;
+}) {
   const { query, tags, sort = "relevance" } = args;
 
   try {
@@ -825,7 +845,7 @@ export async function handleStackOverflowSearch(args: { query: string; tags?: st
       throw new Error(`Stack Overflow API error: ${response.status}`);
     }
 
-    const data = await response.json() as any;
+    const data = (await response.json()) as any;
 
     const results = (data.items || []).slice(0, 10).map((item: any) => ({
       title: item.title,
@@ -842,9 +862,10 @@ export async function handleStackOverflowSearch(args: { query: string; tags?: st
     // Generate intelligent summary
     const answered = results.filter((r: any) => r.is_answered).length;
     const accepted = results.filter((r: any) => r.has_accepted).length;
-    const avgScore = results.length > 0
-      ? Math.round(results.reduce((sum: number, r: any) => sum + r.score, 0) / results.length)
-      : 0;
+    const avgScore =
+      results.length > 0
+        ? Math.round(results.reduce((sum: number, r: any) => sum + r.score, 0) / results.length)
+        : 0;
     const summary = `${answered}/${results.length} answered, ${accepted} with accepted answer. Avg score: ${avgScore}`;
 
     return formatIntelligentOutput({
@@ -955,7 +976,7 @@ export async function handleOsintPortScan(args: {
       timeout,
     });
 
-    const openPorts = result.ports.filter(p => p.state === 'open');
+    const openPorts = result.ports.filter((p) => p.state === "open");
 
     return {
       success: true,

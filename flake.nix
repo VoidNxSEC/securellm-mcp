@@ -7,14 +7,14 @@
     # Rust Overlay para versões precisas se necessário
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
-    # Spider-Nix local for web crawling/OSINT features
-    spider-nix = {
-      url = "git+file:/home/kernelcore/master/spider-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    # Spider-Nix for web crawling/OSINT features
+    #spider-nix = {
+      #url = "github:VoidNxSEC/spider-nix";
+      #inputs.nixpkgs.follows = "nixpkgs";
+    #};
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, spider-nix, ... }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];

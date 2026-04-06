@@ -12,9 +12,9 @@
  * Cost Savings: 50-70% reduction in tool call costs
  */
 
-import Database from 'better-sqlite3';
-import crypto from 'crypto';
-import { logger } from '../utils/logger.js';
+import Database from "better-sqlite3";
+import crypto from "crypto";
+import { logger } from "../utils/logger.js";
 import type {
   SemanticCacheEntry,
   SemanticCacheConfig,
@@ -22,9 +22,9 @@ import type {
   SemanticSearchResult,
   CacheLookupOptions,
   CacheStoreOptions,
-} from '../types/semantic-cache.js';
-import { DEFAULT_SEMANTIC_CACHE_CONFIG } from '../types/semantic-cache.js';
-import { PhantomClient } from '../utils/phantom-client.js';
+} from "../types/semantic-cache.js";
+import { DEFAULT_SEMANTIC_CACHE_CONFIG } from "../types/semantic-cache.js";
+import { PhantomClient } from "../utils/phantom-client.js";
 
 /**
  * Simple mutex implementation to prevent race conditions
@@ -94,7 +94,7 @@ export class SemanticCache {
         config: this.config,
         dbPath,
       },
-      'SemanticCache initialized'
+      "SemanticCache initialized"
     );
   }
 
@@ -103,16 +103,19 @@ export class SemanticCache {
    */
   private startAutoCleanup(): void {
     // Clean up every 10 minutes
-    this.cleanupInterval = setInterval(() => {
-      try {
-        const deleted = this.cleanExpired();
-        if (deleted > 0) {
-          logger.info({ deleted }, 'Auto-cleaned expired semantic cache entries');
+    this.cleanupInterval = setInterval(
+      () => {
+        try {
+          const deleted = this.cleanExpired();
+          if (deleted > 0) {
+            logger.info({ deleted }, "Auto-cleaned expired semantic cache entries");
+          }
+        } catch (error) {
+          logger.error({ err: error }, "Error during auto-cleanup");
         }
-      } catch (error) {
-        logger.error({ err: error }, 'Error during auto-cleanup');
-      }
-    }, 10 * 60 * 1000);
+      },
+      10 * 60 * 1000
+    );
 
     // Prevent interval from keeping process alive
     this.cleanupInterval.unref();
@@ -172,14 +175,16 @@ export class SemanticCache {
    * unsuitable for semantic matching. Callers MUST raise the threshold to ~0.999
    * when isFallback === true (effectively: exact-match only).
    */
-  private async generateEmbedding(text: string): Promise<{ embedding: Float32Array; isFallback: boolean }> {
+  private async generateEmbedding(
+    text: string
+  ): Promise<{ embedding: Float32Array; isFallback: boolean }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.embeddingTimeout);
 
     try {
       const response = await fetch(`${this.config.llamaCppUrl}/embedding`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: text }),
         signal: controller.signal,
       });
@@ -191,10 +196,10 @@ export class SemanticCache {
       const data = await response.json();
       return { embedding: new Float32Array(data.embedding), isFallback: false };
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        logger.warn('Embedding generation timeout, using fallback');
+      if (error instanceof Error && error.name === "AbortError") {
+        logger.warn("Embedding generation timeout, using fallback");
       } else {
-        logger.warn({ err: error }, 'llama.cpp embedding failed, using fallback');
+        logger.warn({ err: error }, "llama.cpp embedding failed, using fallback");
       }
 
       return { embedding: this.fallbackEmbedding(text), isFallback: true };
@@ -223,9 +228,7 @@ export class SemanticCache {
     embedding[1] = text.length;
 
     // Normalize
-    const norm = Math.sqrt(
-      Array.from(embedding).reduce((sum, val) => sum + val * val, 0)
-    );
+    const norm = Math.sqrt(Array.from(embedding).reduce((sum, val) => sum + val * val, 0));
 
     if (norm > 0) {
       for (let i = 0; i < embedding.length; i++) {
@@ -241,7 +244,7 @@ export class SemanticCache {
    */
   private cosineSimilarity(a: Float32Array, b: Float32Array): number {
     if (a.length !== b.length) {
-      logger.warn('Embedding dimension mismatch');
+      logger.warn("Embedding dimension mismatch");
       return 0;
     }
 
@@ -289,7 +292,7 @@ export class SemanticCache {
       try {
         const phantomResults = await this.phantom.findSimilar(
           options.queryText,
-          parseInt(process.env.SEMANTIC_CACHE_MAX_CANDIDATES || '10', 10),
+          parseInt(process.env.SEMANTIC_CACHE_MAX_CANDIDATES || "10", 10)
         );
 
         for (const hit of phantomResults) {
@@ -298,7 +301,9 @@ export class SemanticCache {
 
           const now = Date.now();
           const row = this.db
-            .prepare('SELECT * FROM semantic_cache WHERE id = ? AND tool_name = ? AND expires_at > ?')
+            .prepare(
+              "SELECT * FROM semantic_cache WHERE id = ? AND tool_name = ? AND expires_at > ?"
+            )
             .get(hit.entryId, options.toolName, now) as any;
 
           if (!row) continue;
@@ -307,44 +312,55 @@ export class SemanticCache {
           await this.recordHit(row.id as string, hit.score);
           logger.info(
             { toolName: options.toolName, entryId: hit.entryId, similarity: hit.score.toFixed(3) },
-            'Semantic cache HIT (PHANTOM)',
+            "Semantic cache HIT (PHANTOM)"
           );
           return JSON.parse(row.response as string);
         }
 
         // No PHANTOM hit — fall through to embedding-based lookup
-        logger.debug({ toolName: options.toolName }, '[PHANTOM] No cache hit, falling back to embedding lookup');
+        logger.debug(
+          { toolName: options.toolName },
+          "[PHANTOM] No cache hit, falling back to embedding lookup"
+        );
       } catch (phantomErr) {
         // PHANTOM unavailable — silently fall through to embedding-based path
-        logger.debug({ err: phantomErr }, '[PHANTOM] lookup failed, falling back to embedding lookup');
+        logger.debug(
+          { err: phantomErr },
+          "[PHANTOM] lookup failed, falling back to embedding lookup"
+        );
       }
 
       // ── Embedding-based lookup (fallback) ───────────────────────────────
       // Generate embedding for query
-      const { embedding: queryEmbedding, isFallback } = await this.generateEmbedding(options.queryText);
+      const { embedding: queryEmbedding, isFallback } = await this.generateEmbedding(
+        options.queryText
+      );
 
       // Fallback char-frequency embeddings yield ~0.998 similarity for ANY two
       // English texts — use near-exact threshold to avoid spurious cache hits.
       const effectiveThreshold = isFallback ? 0.9995 : this.config.similarityThreshold;
       if (isFallback) {
-        logger.debug({ toolName: options.toolName }, 'Semantic cache: using fallback embedding, threshold raised to 0.9995');
+        logger.debug(
+          { toolName: options.toolName },
+          "Semantic cache: using fallback embedding, threshold raised to 0.9995"
+        );
       }
 
       // Find similar cached entries (optimized: limit candidates by recency)
       const now = Date.now();
-      const maxCandidates = parseInt(process.env.SEMANTIC_CACHE_MAX_CANDIDATES || '50', 10);
+      const maxCandidates = parseInt(process.env.SEMANTIC_CACHE_MAX_CANDIDATES || "50", 10);
       const highSimilarityThreshold = isFallback
         ? 0.9998
-        : parseFloat(process.env.SEMANTIC_CACHE_HIGH_SIMILARITY_THRESHOLD || '0.95');
-      
+        : parseFloat(process.env.SEMANTIC_CACHE_HIGH_SIMILARITY_THRESHOLD || "0.95");
+
       const stmt = this.db.prepare(`
         SELECT id, query_text, query_embedding, tool_name, tool_args, response,
                provider, model, metadata, created_at, expires_at, hit_count, last_accessed_at
         FROM semantic_cache
         WHERE tool_name = ?
           AND expires_at > ?
-          ${options.provider ? 'AND provider = ?' : ''}
-          ${options.model ? 'AND model = ?' : ''}
+          ${options.provider ? "AND provider = ?" : ""}
+          ${options.model ? "AND model = ?" : ""}
         ORDER BY last_accessed_at DESC
         LIMIT ?
       `);
@@ -362,7 +378,11 @@ export class SemanticCache {
 
       for (const candidate of candidates) {
         const embeddingBuf = candidate.query_embedding as Buffer;
-        const embedding = new Float32Array(embeddingBuf.buffer, embeddingBuf.byteOffset, embeddingBuf.byteLength / Float32Array.BYTES_PER_ELEMENT);
+        const embedding = new Float32Array(
+          embeddingBuf.buffer,
+          embeddingBuf.byteOffset,
+          embeddingBuf.byteLength / Float32Array.BYTES_PER_ELEMENT
+        );
         const similarity = this.cosineSimilarity(queryEmbedding, embedding);
 
         if (similarity > bestSimilarity) {
@@ -371,7 +391,7 @@ export class SemanticCache {
             entry: {
               ...candidate,
               queryEmbedding: embedding,
-              metadata: JSON.parse(candidate.metadata || '{}'),
+              metadata: JSON.parse(candidate.metadata || "{}"),
             },
             similarity,
           };
@@ -384,7 +404,7 @@ export class SemanticCache {
                 similarity: bestSimilarity.toFixed(3),
                 candidatesChecked: candidates.indexOf(candidate) + 1,
               },
-              'Semantic cache short-circuit: high similarity match found'
+              "Semantic cache short-circuit: high similarity match found"
             );
             break;
           }
@@ -401,9 +421,9 @@ export class SemanticCache {
             toolName: options.toolName,
             similarity: bestSimilarity.toFixed(3),
             hitCount: bestMatch.entry.hitCount + 1,
-            age: Math.round((now - bestMatch.entry.createdAt) / 1000) + 's',
+            age: Math.round((now - bestMatch.entry.createdAt) / 1000) + "s",
           },
-          'Semantic cache HIT'
+          "Semantic cache HIT"
         );
 
         return JSON.parse(bestMatch.entry.response);
@@ -422,12 +442,12 @@ export class SemanticCache {
           threshold: this.config.similarityThreshold,
           candidates: candidates.length,
         },
-        'Semantic cache MISS'
+        "Semantic cache MISS"
       );
 
       return null;
     } catch (error) {
-      logger.error({ err: error, options }, 'Semantic cache lookup error');
+      logger.error({ err: error, options }, "Semantic cache lookup error");
       return null;
     }
   }
@@ -452,7 +472,7 @@ export class SemanticCache {
 
     try {
       // Check if we're at max capacity
-      const count = this.db.prepare('SELECT COUNT(*) as count FROM semantic_cache').get() as any;
+      const count = this.db.prepare("SELECT COUNT(*) as count FROM semantic_cache").get() as any;
       if (count.count >= this.config.maxEntries) {
         // Evict oldest entries
         this.evictOldest(Math.floor(this.config.maxEntries * 0.1)); // Evict 10%
@@ -509,16 +529,16 @@ export class SemanticCache {
         {
           toolName: options.toolName,
           entryId: entry.id,
-          ttl: Math.round(ttl / 1000) + 's',
+          ttl: Math.round(ttl / 1000) + "s",
         },
-        'Semantic cache entry stored'
+        "Semantic cache entry stored"
       );
 
       // ── Index into PHANTOM for future semantic lookups (non-blocking) ──
       // Fire-and-forget: PHANTOM unavailability must never block the response.
       void this.phantom.indexQuery(entry.id!, options.queryText);
     } catch (error) {
-      logger.error({ err: error, options }, 'Failed to store in semantic cache');
+      logger.error({ err: error, options }, "Failed to store in semantic cache");
     }
   }
 
@@ -579,7 +599,7 @@ export class SemanticCache {
       )
       .run(count);
 
-    logger.info({ evicted: count }, 'Evicted old cache entries');
+    logger.info({ evicted: count }, "Evicted old cache entries");
   }
 
   /**
@@ -587,12 +607,12 @@ export class SemanticCache {
    */
   cleanExpired(): number {
     const result = this.db
-      .prepare('DELETE FROM semantic_cache WHERE expires_at < ?')
+      .prepare("DELETE FROM semantic_cache WHERE expires_at < ?")
       .run(Date.now());
 
     const deleted = result.changes;
     if (deleted > 0) {
-      logger.info({ deleted }, 'Cleaned expired cache entries');
+      logger.info({ deleted }, "Cleaned expired cache entries");
     }
 
     return deleted;
@@ -603,7 +623,7 @@ export class SemanticCache {
    */
   getStats(): SemanticCacheStats {
     this.stats.entriesCount = (
-      this.db.prepare('SELECT COUNT(*) as count FROM semantic_cache').get() as any
+      this.db.prepare("SELECT COUNT(*) as count FROM semantic_cache").get() as any
     ).count;
 
     const ages = this.db
@@ -627,9 +647,7 @@ export class SemanticCache {
    * Load stats from database
    */
   private loadStats(): void {
-    const dbStats = this.db
-      .prepare('SELECT * FROM semantic_cache_stats WHERE id = 1')
-      .get() as any;
+    const dbStats = this.db.prepare("SELECT * FROM semantic_cache_stats WHERE id = 1").get() as any;
 
     if (dbStats) {
       this.stats.totalQueries = dbStats.total_queries;
@@ -676,8 +694,8 @@ export class SemanticCache {
    * Clear all cache entries
    */
   clear(): void {
-    this.db.prepare('DELETE FROM semantic_cache').run();
-    logger.info('Semantic cache cleared');
+    this.db.prepare("DELETE FROM semantic_cache").run();
+    logger.info("Semantic cache cleared");
   }
 
   /**
@@ -692,6 +710,6 @@ export class SemanticCache {
 
     this.persistStats();
     this.db.close();
-    logger.info('SemanticCache closed');
+    logger.info("SemanticCache closed");
   }
 }

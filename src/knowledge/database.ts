@@ -1,10 +1,10 @@
 // Knowledge Database Implementation with SQLite + FTS5
 
-import Database from 'better-sqlite3';
-import { randomBytes } from 'crypto';
-import { mkdirSync, existsSync } from 'fs';
-import { dirname } from 'path';
-import { logger } from '../utils/logger.js';
+import Database from "better-sqlite3";
+import { randomBytes } from "crypto";
+import { mkdirSync, existsSync } from "fs";
+import { dirname } from "path";
+import { logger } from "../utils/logger.js";
 import type {
   KnowledgeDatabase,
   Session,
@@ -14,7 +14,7 @@ import type {
   CreateSessionInput,
   SaveKnowledgeInput,
   SearchKnowledgeInput,
-} from '../types/knowledge.js';
+} from "../types/knowledge.js";
 
 export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
   private db: Database.Database;
@@ -26,10 +26,10 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
       mkdirSync(dir, { recursive: true });
       logger.info({ directory: dir }, "Created knowledge database directory");
     }
-    
+
     this.db = new Database(dbPath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
+    this.db.pragma("journal_mode = WAL");
+    this.db.pragma("foreign_keys = ON");
     this.initialize();
     this.initContextTables();
   }
@@ -271,19 +271,19 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
   async createSession(input: CreateSessionInput): Promise<Session> {
     const id = this.generateSessionId();
     const metadata = JSON.stringify(input.metadata || {});
-    
+
     const stmt = this.db.prepare(`
       INSERT INTO sessions (id, summary, metadata)
       VALUES (?, ?, ?)
     `);
-    
+
     stmt.run(id, input.summary || null, metadata);
-    
+
     const session = await this.getSession(id);
     if (!session) {
-      throw new Error('Failed to create session');
+      throw new Error("Failed to create session");
     }
-    
+
     return session;
   }
 
@@ -291,10 +291,10 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
     const stmt = this.db.prepare(`
       SELECT * FROM sessions WHERE id = ?
     `);
-    
+
     const row = stmt.get(id) as any;
     if (!row) return null;
-    
+
     return this.rowToSession(row);
   }
 
@@ -304,43 +304,43 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
       ORDER BY last_active DESC
       LIMIT ? OFFSET ?
     `);
-    
+
     const rows = stmt.all(limit, offset) as any[];
-    return rows.map(row => this.rowToSession(row));
+    return rows.map((row) => this.rowToSession(row));
   }
 
   async updateSession(id: string, updates: Partial<Session>): Promise<void> {
     const fields: string[] = [];
     const values: any[] = [];
-    
+
     if (updates.summary !== undefined) {
-      fields.push('summary = ?');
+      fields.push("summary = ?");
       values.push(updates.summary);
     }
-    
+
     if (updates.metadata !== undefined) {
-      fields.push('metadata = ?');
+      fields.push("metadata = ?");
       values.push(JSON.stringify(updates.metadata));
     }
-    
+
     // Always update last_active
-    fields.push('last_active = datetime(\'now\')');
-    
+    fields.push("last_active = datetime('now')");
+
     if (fields.length === 0) return;
-    
+
     values.push(id);
-    
+
     const stmt = this.db.prepare(`
       UPDATE sessions
-      SET ${fields.join(', ')}
+      SET ${fields.join(", ")}
       WHERE id = ?
     `);
-    
+
     stmt.run(...values);
   }
 
   async deleteSession(id: string): Promise<void> {
-    const stmt = this.db.prepare('DELETE FROM sessions WHERE id = ?');
+    const stmt = this.db.prepare("DELETE FROM sessions WHERE id = ?");
     stmt.run(id);
   }
 
@@ -353,31 +353,35 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
       const session = await this.createSession({});
       sessionId = session.id;
     }
-    
+
     const tags = JSON.stringify(input.tags || []);
     const metadata = JSON.stringify(input.metadata || {});
-    const priority = input.priority || 'medium';
-    
+    const priority = input.priority || "medium";
+
     const stmt = this.db.prepare(`
       INSERT INTO knowledge_entries (session_id, entry_type, content, tags, priority, metadata)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
-    
+
     const result = stmt.run(sessionId, input.type, input.content, tags, priority, metadata);
-    
+
     // Update session entry count and last_active
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       UPDATE sessions
       SET entry_count = entry_count + 1,
           last_active = datetime('now')
       WHERE id = ?
-    `).run(sessionId);
-    
+    `
+      )
+      .run(sessionId);
+
     const entry = await this.getKnowledgeEntry(result.lastInsertRowid as number);
     if (!entry) {
-      throw new Error('Failed to create knowledge entry');
+      throw new Error("Failed to create knowledge entry");
     }
-    
+
     return entry;
   }
 
@@ -385,10 +389,10 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
     const stmt = this.db.prepare(`
       SELECT * FROM knowledge_entries WHERE id = ?
     `);
-    
+
     const row = stmt.get(id) as any;
     if (!row) return null;
-    
+
     return this.rowToKnowledgeEntry(row);
   }
 
@@ -403,26 +407,26 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
       JOIN knowledge_fts kf ON ke.id = kf.entry_id
       WHERE knowledge_fts MATCH ?
     `;
-    
+
     const params: any[] = [input.query];
-    
+
     if (input.session_id) {
-      query += ' AND ke.session_id = ?';
+      query += " AND ke.session_id = ?";
       params.push(input.session_id);
     }
-    
+
     if (input.entry_type) {
-      query += ' AND ke.entry_type = ?';
+      query += " AND ke.entry_type = ?";
       params.push(input.entry_type);
     }
-    
-    query += ' ORDER BY kf.rank LIMIT ?';
+
+    query += " ORDER BY kf.rank LIMIT ?";
     params.push(input.limit || 10);
-    
+
     const stmt = this.db.prepare(query);
     const rows = stmt.all(...params) as any[];
-    
-    return rows.map(row => ({
+
+    return rows.map((row) => ({
       entry: this.rowToKnowledgeEntry(row),
       relevance: -row.rank, // FTS5 rank is negative
       snippet: row.search_snippet || this.createSnippet(row.content, input.query),
@@ -435,9 +439,9 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
   public async maintenance(): Promise<void> {
     logger.info("Running knowledge database maintenance...");
     try {
-      this.db.pragma('optimize');
-      this.db.exec('VACUUM');
-      this.db.exec('ANALYZE');
+      this.db.pragma("optimize");
+      this.db.exec("VACUUM");
+      this.db.exec("ANALYZE");
       logger.info("Database maintenance completed successfully");
     } catch (err) {
       logger.error({ err }, "Database maintenance failed");
@@ -445,44 +449,52 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
   }
 
   async getRecentKnowledge(session_id?: string, limit = 20): Promise<KnowledgeEntry[]> {
-    let query = 'SELECT * FROM knowledge_entries';
+    let query = "SELECT * FROM knowledge_entries";
     const params: any[] = [];
-    
+
     if (session_id) {
-      query += ' WHERE session_id = ?';
+      query += " WHERE session_id = ?";
       params.push(session_id);
     }
-    
-    query += ' ORDER BY timestamp DESC LIMIT ?';
+
+    query += " ORDER BY timestamp DESC LIMIT ?";
     params.push(limit);
-    
+
     const stmt = this.db.prepare(query);
     const rows = stmt.all(...params) as any[];
-    
-    return rows.map(row => this.rowToKnowledgeEntry(row));
+
+    return rows.map((row) => this.rowToKnowledgeEntry(row));
   }
 
   async deleteKnowledgeEntry(id: number): Promise<void> {
-    const stmt = this.db.prepare('DELETE FROM knowledge_entries WHERE id = ?');
+    const stmt = this.db.prepare("DELETE FROM knowledge_entries WHERE id = ?");
     stmt.run(id);
   }
 
   // ===== STATS =====
 
   async getStats(): Promise<SessionStats> {
-    const stats = this.db.prepare(`
+    const stats = this.db
+      .prepare(
+        `
       SELECT
         COUNT(DISTINCT s.id) as total_sessions,
         COUNT(ke.id) as total_entries,
         COUNT(DISTINCT CASE WHEN s.last_active >= datetime('now', '-7 days') THEN s.id END) as recent_sessions
       FROM sessions s
       LEFT JOIN knowledge_entries ke ON s.id = ke.session_id
-    `).get() as any;
-    
-    const dbSize = this.db.prepare(`
+    `
+      )
+      .get() as any;
+
+    const dbSize = this.db
+      .prepare(
+        `
       SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()
-    `).get() as any;
-    
+    `
+      )
+      .get() as any;
+
     return {
       total_sessions: stats.total_sessions || 0,
       total_entries: stats.total_entries || 0,
@@ -525,15 +537,15 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
    * Get patterns by type
    */
   public getPatterns(type?: string, limit: number = 10): any[] {
-    let query = 'SELECT * FROM patterns';
+    let query = "SELECT * FROM patterns";
     const params: any[] = [];
 
     if (type) {
-      query += ' WHERE type = ?';
+      query += " WHERE type = ?";
       params.push(type);
     }
 
-    query += ' ORDER BY frequency DESC, last_seen DESC LIMIT ?';
+    query += " ORDER BY frequency DESC, last_seen DESC LIMIT ?";
     params.push(limit);
 
     const stmt = this.db.prepare(query);
@@ -608,7 +620,7 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
       DELETE FROM sessions
       WHERE last_active < datetime('now', '-' || ? || ' days')
     `);
-    
+
     const result = stmt.run(days);
     return result.changes;
   }
@@ -616,7 +628,7 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
   // ===== HELPERS =====
 
   private generateSessionId(): string {
-    return `sess_${randomBytes(16).toString('hex')}`;
+    return `sess_${randomBytes(16).toString("hex")}`;
   }
 
   private rowToSession(row: any): Session {
@@ -646,7 +658,7 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
   private createSnippet(content: string, query: string, maxLength = 200): string {
     const words = query.toLowerCase().split(/\s+/);
     const contentLower = content.toLowerCase();
-    
+
     // Find first occurrence of any query word
     let startIdx = -1;
     for (const word of words) {
@@ -655,21 +667,21 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
         startIdx = idx;
       }
     }
-    
+
     if (startIdx === -1) {
       // No match found, return beginning
-      return content.substring(0, maxLength) + (content.length > maxLength ? '...' : '');
+      return content.substring(0, maxLength) + (content.length > maxLength ? "..." : "");
     }
-    
+
     // Create snippet around match
     const snippetStart = Math.max(0, startIdx - 50);
     const snippetEnd = Math.min(content.length, startIdx + maxLength);
-    
+
     let snippet = content.substring(snippetStart, snippetEnd);
-    
-    if (snippetStart > 0) snippet = '...' + snippet;
-    if (snippetEnd < content.length) snippet = snippet + '...';
-    
+
+    if (snippetStart > 0) snippet = "..." + snippet;
+    if (snippetEnd < content.length) snippet = snippet + "...";
+
     return snippet;
   }
 
@@ -730,7 +742,7 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
 
     const rows = stmt.all(sessionId) as any[];
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       session_id: row.session_id,
       summary_type: row.summary_type,
@@ -793,12 +805,16 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
   }
 
   async updateArchiveRestore(sessionId: string): Promise<void> {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       UPDATE archive_metadata
       SET restore_count = restore_count + 1,
           last_restored = datetime('now')
       WHERE session_id = ?
-    `).run(sessionId);
+    `
+      )
+      .run(sessionId);
   }
 
   // ===== DUPLICATE OPERATIONS =====
@@ -836,7 +852,10 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
 
   // ===== COMPACTION HISTORY =====
 
-  async startCompactionOperation(operation: string, metadata?: Record<string, any>): Promise<number> {
+  async startCompactionOperation(
+    operation: string,
+    metadata?: Record<string, any>
+  ): Promise<number> {
     const stmt = this.db.prepare(`
       INSERT INTO compaction_history (operation, started_at, metadata)
       VALUES (?, datetime('now'), ?)
@@ -846,24 +865,26 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
     return result.lastInsertRowid as number;
   }
 
-  async completeCompactionOperation(id: number, stats: {
-    entries_affected?: number;
-    space_saved?: number;
-    error?: string;
-  }): Promise<void> {
-    this.db.prepare(`
+  async completeCompactionOperation(
+    id: number,
+    stats: {
+      entries_affected?: number;
+      space_saved?: number;
+      error?: string;
+    }
+  ): Promise<void> {
+    this.db
+      .prepare(
+        `
       UPDATE compaction_history
       SET completed_at = datetime('now'),
           entries_affected = ?,
           space_saved = ?,
           error = ?
       WHERE id = ?
-    `).run(
-      stats.entries_affected || null,
-      stats.space_saved || null,
-      stats.error || null,
-      id
-    );
+    `
+      )
+      .run(stats.entries_affected || null, stats.space_saved || null, stats.error || null, id);
   }
 
   async getCompactionHistory(limit: number = 10): Promise<any[]> {
@@ -875,7 +896,7 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
 
     const rows = stmt.all(limit) as any[];
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       operation: row.operation,
       started_at: row.started_at,
@@ -900,18 +921,20 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
       const tableInfo = this.db.prepare("PRAGMA table_info(sessions)").all() as any[];
       const columnNames = tableInfo.map((col: any) => col.name);
 
-      if (!columnNames.includes('pinned')) {
+      if (!columnNames.includes("pinned")) {
         this.db.exec("ALTER TABLE sessions ADD COLUMN pinned INTEGER DEFAULT 0");
         logger.info("Added 'pinned' column to sessions table");
       }
 
-      if (!columnNames.includes('compaction_exempt')) {
+      if (!columnNames.includes("compaction_exempt")) {
         this.db.exec("ALTER TABLE sessions ADD COLUMN compaction_exempt INTEGER DEFAULT 0");
         logger.info("Added 'compaction_exempt' column to sessions table");
       }
 
-      if (!columnNames.includes('tier')) {
-        this.db.exec("ALTER TABLE sessions ADD COLUMN tier TEXT DEFAULT 'hot' CHECK(tier IN ('hot', 'warm', 'cold', 'frozen'))");
+      if (!columnNames.includes("tier")) {
+        this.db.exec(
+          "ALTER TABLE sessions ADD COLUMN tier TEXT DEFAULT 'hot' CHECK(tier IN ('hot', 'warm', 'cold', 'frozen'))"
+        );
         logger.info("Added 'tier' column to sessions table");
       }
 
@@ -919,23 +942,27 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
       const entriesInfo = this.db.prepare("PRAGMA table_info(knowledge_entries)").all() as any[];
       const entryColumns = entriesInfo.map((col: any) => col.name);
 
-      if (!entryColumns.includes('tier')) {
-        this.db.exec("ALTER TABLE knowledge_entries ADD COLUMN tier TEXT DEFAULT 'hot' CHECK(tier IN ('hot', 'warm', 'cold', 'frozen'))");
+      if (!entryColumns.includes("tier")) {
+        this.db.exec(
+          "ALTER TABLE knowledge_entries ADD COLUMN tier TEXT DEFAULT 'hot' CHECK(tier IN ('hot', 'warm', 'cold', 'frozen'))"
+        );
         logger.info("Added 'tier' column to knowledge_entries table");
       }
 
-      if (!entryColumns.includes('summarized')) {
+      if (!entryColumns.includes("summarized")) {
         this.db.exec("ALTER TABLE knowledge_entries ADD COLUMN summarized INTEGER DEFAULT 0");
         logger.info("Added 'summarized' column to knowledge_entries table");
       }
 
-      if (!entryColumns.includes('archived')) {
+      if (!entryColumns.includes("archived")) {
         this.db.exec("ALTER TABLE knowledge_entries ADD COLUMN archived INTEGER DEFAULT 0");
         logger.info("Added 'archived' column to knowledge_entries table");
       }
 
-      if (!entryColumns.includes('summary_id')) {
-        this.db.exec("ALTER TABLE knowledge_entries ADD COLUMN summary_id INTEGER REFERENCES knowledge_summaries(id) ON DELETE SET NULL");
+      if (!entryColumns.includes("summary_id")) {
+        this.db.exec(
+          "ALTER TABLE knowledge_entries ADD COLUMN summary_id INTEGER REFERENCES knowledge_summaries(id) ON DELETE SET NULL"
+        );
         logger.info("Added 'summary_id' column to knowledge_entries table");
       }
 
@@ -968,15 +995,15 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
    * Database integrity check
    */
   async checkIntegrity(): Promise<boolean> {
-    const result = this.db.pragma('integrity_check') as any[];
-    return result.length === 1 && result[0].integrity_check === 'ok';
+    const result = this.db.pragma("integrity_check") as any[];
+    return result.length === 1 && result[0].integrity_check === "ok";
   }
 
   /**
    * Foreign key check
    */
   async checkForeignKeys(): Promise<any[]> {
-    return this.db.pragma('foreign_key_check') as any[];
+    return this.db.pragma("foreign_key_check") as any[];
   }
 
   close(): void {

@@ -17,12 +17,7 @@ const execAsync = promisify(exec);
 
 export interface HostDetectionResult {
   hostname: string;
-  method:
-    | "env_var"
-    | "single_host"
-    | "system_hostname"
-    | "fallback_first"
-    | "error";
+  method: "env_var" | "single_host" | "system_hostname" | "fallback_first" | "error";
   confidence: "high" | "medium" | "low";
   availableHosts: string[];
   warnings: string[];
@@ -47,9 +42,7 @@ async function getSystemHostname(): Promise<string | null> {
  * @param projectRoot - Path to the project root (containing flake.nix)
  * @returns HostDetectionResult with selected hostname and detection metadata
  */
-export async function detectNixOSHost(
-  projectRoot: string
-): Promise<HostDetectionResult> {
+export async function detectNixOSHost(projectRoot: string): Promise<HostDetectionResult> {
   const warnings: string[] = [];
 
   // Get all available hosts from flake
@@ -63,9 +56,7 @@ export async function detectNixOSHost(
       confidence: "low",
       availableHosts: [],
       warnings: [
-        `Failed to parse flake.nix: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Failed to parse flake.nix: ${error instanceof Error ? error.message : String(error)}`,
       ],
     };
   }
@@ -160,17 +151,12 @@ export async function requireNixOSHost(projectRoot: string): Promise<string> {
 
   // Log warnings
   if (result.warnings.length > 0) {
-    logger.warn(
-      { warnings: result.warnings, projectRoot },
-      "NixOS host detection warnings"
-    );
+    logger.warn({ warnings: result.warnings, projectRoot }, "NixOS host detection warnings");
   }
 
   // Handle errors
   if (result.method === "error" || !result.hostname) {
-    throw new Error(
-      `Failed to detect NixOS host.\n${result.warnings.join("\n")}`
-    );
+    throw new Error(`Failed to detect NixOS host.\n${result.warnings.join("\n")}`);
   }
 
   // Log detection result

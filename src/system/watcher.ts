@@ -1,13 +1,13 @@
-import fs from 'fs';
-import path from 'path';
-import { EventEmitter } from 'events';
-import { logger } from '../utils/logger.js';
-import type { KnowledgeDatabase } from '../types/knowledge.js';
-import { KnowledgeChunker } from '../utils/chunker.js';
+import fs from "fs";
+import path from "path";
+import { EventEmitter } from "events";
+import { logger } from "../utils/logger.js";
+import type { KnowledgeDatabase } from "../types/knowledge.js";
+import { KnowledgeChunker } from "../utils/chunker.js";
 
 /**
  * Project Watcher
- * 
+ *
  * Monitors the filesystem for changes and updates the Knowledge Graph/State.
  * Enables the "Proactive" capability of the agent.
  */
@@ -42,9 +42,12 @@ export class ProjectWatcher extends EventEmitter {
       });
 
       // CRITICAL: Handle FSWatcher errors to prevent server crashes
-      watcher.on('error', (error: Error) => {
+      watcher.on("error", (error: Error) => {
         // Don't crash on permission denied or missing temp files
-        if ('code' in error && (error.code === 'EACCES' || error.code === 'ENOENT' || error.code === 'EPERM')) {
+        if (
+          "code" in error &&
+          (error.code === "EACCES" || error.code === "ENOENT" || error.code === "EPERM")
+        ) {
           logger.debug({ err: error }, "Project watcher: Ignoring filesystem access error");
         } else {
           logger.warn({ err: error }, "Project watcher error - continuing operation");
@@ -61,18 +64,18 @@ export class ProjectWatcher extends EventEmitter {
   private isIgnored(filename: string): boolean {
     // Ignore common development and system directories
     const ignoredPatterns = [
-      'node_modules',
-      '.git',            // Git directory and all subdirectories
-      '.cache',          // Cache directories
-      '.nix-',           // Nix temp directories
-      'build',
-      'dist',
-      '.gemini',
-      'result',          // Nix build results
-      '.direnv',
-      '__pycache__',
-      '.venv',
-      'venv',
+      "node_modules",
+      ".git", // Git directory and all subdirectories
+      ".cache", // Cache directories
+      ".nix-", // Nix temp directories
+      "build",
+      "dist",
+      ".gemini",
+      "result", // Nix build results
+      ".direnv",
+      "__pycache__",
+      ".venv",
+      "venv",
     ];
 
     // Check if filename contains any ignored pattern
@@ -83,18 +86,19 @@ export class ProjectWatcher extends EventEmitter {
     }
 
     // Ignore database files
-    if (filename.endsWith('.db') ||
-        filename.endsWith('.db-wal') ||
-        filename.endsWith('.db-shm') ||
-        filename.endsWith('.sqlite') ||
-        filename.endsWith('.sqlite-wal') ||
-        filename.endsWith('.sqlite-shm')) {
+    if (
+      filename.endsWith(".db") ||
+      filename.endsWith(".db-wal") ||
+      filename.endsWith(".db-shm") ||
+      filename.endsWith(".sqlite") ||
+      filename.endsWith(".sqlite-wal") ||
+      filename.endsWith(".sqlite-shm")
+    ) {
       return true;
     }
 
     // Ignore lock files
-    if (filename.endsWith('.lock') ||
-        filename.endsWith('.lockb')) {
+    if (filename.endsWith(".lock") || filename.endsWith(".lockb")) {
       return true;
     }
 
@@ -103,9 +107,9 @@ export class ProjectWatcher extends EventEmitter {
 
   private handleFileChange(filename: string) {
     this.changedFiles.add(filename);
-    
+
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    
+
     this.debounceTimer = setTimeout(() => {
       this.flushChanges();
     }, 2000); // 2 second debounce
@@ -120,7 +124,7 @@ export class ProjectWatcher extends EventEmitter {
     logger.info({ filesCount: files.length }, "Processing file changes");
 
     // Emit event for real-time systems
-    this.emit('change', files);
+    this.emit("change", files);
 
     // Update Knowledge Graph (Persistent State)
     if (this.db) {
@@ -132,7 +136,7 @@ export class ProjectWatcher extends EventEmitter {
           buildSuccess: false,
           recentFiles: files.slice(0, 10),
           fileTypes: this.countFileTypes(files),
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
 
         // 2. Extract and Chunk Content from important files
@@ -142,7 +146,6 @@ export class ProjectWatcher extends EventEmitter {
 
         // Only clear after successful processing
         this.changedFiles.clear();
-
       } catch (err) {
         logger.error({ err }, "Failed to update knowledge DB with file changes");
         // Keep changedFiles intact for retry on next flush
@@ -159,11 +162,11 @@ export class ProjectWatcher extends EventEmitter {
    */
   private async processFileKnowledge(filename: string) {
     const filePath = path.resolve(this.rootDir, filename);
-    
+
     // Only process readable text files of reasonable size
     const ext = path.extname(filename);
-    const supportedExts = ['.ts', '.js', '.nix', '.md', '.toml', '.json'];
-    
+    const supportedExts = [".ts", ".js", ".nix", ".md", ".toml", ".json"];
+
     if (!supportedExts.includes(ext)) return;
 
     try {
@@ -171,22 +174,22 @@ export class ProjectWatcher extends EventEmitter {
       const stats = fs.statSync(filePath);
       if (stats.size > 1024 * 100) return; // Limit to 100KB for now
 
-      const content = fs.readFileSync(filePath, 'utf-8');
-      
+      const content = fs.readFileSync(filePath, "utf-8");
+
       // Chunk the content
       const chunks = KnowledgeChunker.splitByCode(content);
-      
+
       // Store chunks in DB
       for (const chunk of chunks) {
         await this.db!.saveKnowledge({
-          type: 'code',
+          type: "code",
           content: chunk.content,
-          priority: 'medium',
-          tags: ['auto-extract', ext.substring(1), filename],
+          priority: "medium",
+          tags: ["auto-extract", ext.substring(1), filename],
           metadata: {
             file: filename,
-            ...chunk.metadata
-          }
+            ...chunk.metadata,
+          },
         });
       }
 
@@ -213,7 +216,7 @@ export class ProjectWatcher extends EventEmitter {
     }
 
     // Close all watchers
-    this.watchers.forEach(w => w.close());
+    this.watchers.forEach((w) => w.close());
     this.watchers = [];
 
     logger.info("Project watcher stopped");

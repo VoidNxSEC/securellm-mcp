@@ -3,13 +3,13 @@
  * Pseudonymization, encryption, and audit
  */
 
-import * as fs from 'fs/promises';
-import * as crypto from 'crypto';
+import * as fs from "fs/promises";
+import * as crypto from "crypto";
 // @ts-ignore
-import { faker } from 'faker';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { stringifyGeneric } from '../../utils/json-schemas.js';
+import { faker } from "faker";
+import { exec } from "child_process";
+import { promisify } from "util";
+import { stringifyGeneric } from "../../utils/json-schemas.js";
 import type {
   DataScanSensitiveArgs,
   DataPseudonymizeArgs,
@@ -17,7 +17,7 @@ import type {
   DataAuditAccessArgs,
   SensitiveDataScanResult,
   ToolResult,
-} from '../../types/extended-tools.js';
+} from "../../types/extended-tools.js";
 
 const execAsync = promisify(exec);
 
@@ -34,7 +34,12 @@ export class DataScanSensitiveTool {
   };
 
   async execute(args: DataScanSensitiveArgs): Promise<SensitiveDataScanResult> {
-    const { paths, patterns = ['email', 'phone', 'ssn', 'credit_card', 'ip'], custom_regex = [], recursive = true } = args;
+    const {
+      paths,
+      patterns = ["email", "phone", "ssn", "credit_card", "ip"],
+      custom_regex = [],
+      recursive = true,
+    } = args;
 
     try {
       const matches: Array<{ file: string; line: number; type: string; context: string }> = [];
@@ -45,13 +50,13 @@ export class DataScanSensitiveTool {
 
         for (const file of files) {
           try {
-            const content = await fs.readFile(file, 'utf-8');
-            const lines = content.split('\n');
+            const content = await fs.readFile(file, "utf-8");
+            const lines = content.split("\n");
 
             lines.forEach((line, index) => {
               // Check predefined patterns
               for (const pattern of patterns) {
-                if (pattern !== 'custom' && this.patterns[pattern as keyof typeof this.patterns]) {
+                if (pattern !== "custom" && this.patterns[pattern as keyof typeof this.patterns]) {
                   const regex = this.patterns[pattern as keyof typeof this.patterns];
                   const lineMatches = line.match(regex);
 
@@ -69,14 +74,14 @@ export class DataScanSensitiveTool {
               // Check custom regex
               for (const customPattern of custom_regex) {
                 try {
-                  const regex = new RegExp(customPattern, 'g');
+                  const regex = new RegExp(customPattern, "g");
                   const lineMatches = line.match(regex);
 
                   if (lineMatches) {
                     matches.push({
                       file,
                       line: index + 1,
-                      type: 'custom',
+                      type: "custom",
                       context: this.maskContext(line, lineMatches),
                     });
                   }
@@ -100,7 +105,10 @@ export class DataScanSensitiveTool {
           matches_found: matches.length,
           matches: matches.slice(0, 100), // Limit to 100 for performance
         },
-        warnings: matches.length > 0 ? [`Found ${matches.length} potential sensitive data occurrences`] : undefined,
+        warnings:
+          matches.length > 0
+            ? [`Found ${matches.length} potential sensitive data occurrences`]
+            : undefined,
         timestamp: new Date().toISOString(),
       };
     } catch (error: any) {
@@ -122,7 +130,7 @@ export class DataScanSensitiveTool {
         const fullPath = `${basePath}/${entry.name}`;
 
         if (entry.isDirectory() && recursive) {
-          files.push(...await this.getFiles(fullPath, recursive));
+          files.push(...(await this.getFiles(fullPath, recursive)));
         } else if (entry.isFile()) {
           files.push(fullPath);
         }
@@ -137,7 +145,7 @@ export class DataScanSensitiveTool {
   private maskContext(line: string, matches: RegExpMatchArray): string {
     let masked = line;
     for (const match of matches) {
-      masked = masked.replace(match, '***REDACTED***');
+      masked = masked.replace(match, "***REDACTED***");
     }
     return masked.substring(0, 100); // Limit context length
   }
@@ -151,21 +159,21 @@ export class DataPseudonymizeTool {
     const { input_file, output_file, fields, method, preserve_format = true } = args;
 
     try {
-      const content = await fs.readFile(input_file, 'utf-8');
+      const content = await fs.readFile(input_file, "utf-8");
       let pseudonymized = content;
 
       // Parse as JSON/CSV and pseudonymize fields
       try {
         const data = JSON.parse(content);
-        const processed = Array.isArray(data) 
-          ? data.map(item => this.pseudonymizeObject(item, fields, method, preserve_format))
+        const processed = Array.isArray(data)
+          ? data.map((item) => this.pseudonymizeObject(item, fields, method, preserve_format))
           : this.pseudonymizeObject(data, fields, method, preserve_format);
-        
+
         pseudonymized = stringifyGeneric(processed);
       } catch {
         // Not JSON, try line-by-line pseudonymization
-        const lines = content.split('\n');
-        pseudonymized = lines.map(line => this.pseudonymizeLine(line, fields, method)).join('\n');
+        const lines = content.split("\n");
+        pseudonymized = lines.map((line) => this.pseudonymizeLine(line, fields, method)).join("\n");
       }
 
       await fs.writeFile(output_file, pseudonymized);
@@ -190,7 +198,12 @@ export class DataPseudonymizeTool {
     }
   }
 
-  private pseudonymizeObject(obj: any, fields: string[], method: string, preserveFormat: boolean): any {
+  private pseudonymizeObject(
+    obj: any,
+    fields: string[],
+    method: string,
+    preserveFormat: boolean
+  ): any {
     const result = { ...obj };
 
     for (const field of fields) {
@@ -214,7 +227,7 @@ export class DataPseudonymizeTool {
       };
 
       if (patterns[field]) {
-        result = result.replace(patterns[field], () => this.pseudonymizeValue('', method, true));
+        result = result.replace(patterns[field], () => this.pseudonymizeValue("", method, true));
       }
     }
 
@@ -223,28 +236,28 @@ export class DataPseudonymizeTool {
 
   private pseudonymizeValue(value: string, method: string, preserveFormat: boolean): string {
     switch (method) {
-      case 'hash':
-        return crypto.createHash('sha256').update(value).digest('hex').substring(0, 16);
-      
-      case 'encrypt':
+      case "hash":
+        return crypto.createHash("sha256").update(value).digest("hex").substring(0, 16);
+
+      case "encrypt":
         // Simplified - in production would use proper encryption
-        return crypto.createHash('md5').update(value).digest('base64');
-      
-      case 'tokenize':
-        return `TOKEN_${crypto.randomBytes(8).toString('hex')}`;
-      
-      case 'mask':
-        if (value.includes('@')) {
+        return crypto.createHash("md5").update(value).digest("base64");
+
+      case "tokenize":
+        return `TOKEN_${crypto.randomBytes(8).toString("hex")}`;
+
+      case "mask":
+        if (value.includes("@")) {
           // Email
-          return preserveFormat ? `***@${value.split('@')[1]}` : '***@email.com';
+          return preserveFormat ? `***@${value.split("@")[1]}` : "***@email.com";
         } else if (/^\d+$/.test(value)) {
           // Number
-          return preserveFormat ? '*'.repeat(value.length) : '****';
+          return preserveFormat ? "*".repeat(value.length) : "****";
         } else {
           // Generic
-          return preserveFormat ? value[0] + '*'.repeat(value.length - 1) : '***';
+          return preserveFormat ? value[0] + "*".repeat(value.length - 1) : "***";
         }
-      
+
       default:
         return faker.random.word();
     }
@@ -259,12 +272,12 @@ export class DataEncryptSensitiveTool {
     const { file_path, operation, output_path, key_id } = args;
 
     try {
-      const outputFile = output_path || `${file_path}.${operation === 'encrypt' ? 'enc' : 'dec'}`;
+      const outputFile = output_path || `${file_path}.${operation === "encrypt" ? "enc" : "dec"}`;
 
-      if (operation === 'encrypt') {
+      if (operation === "encrypt") {
         // Use SOPS for encryption
         const { stdout, stderr } = await execAsync(
-          `sops --encrypt ${key_id ? `--kms ${key_id}` : ''} ${file_path} > ${outputFile}`
+          `sops --encrypt ${key_id ? `--kms ${key_id}` : ""} ${file_path} > ${outputFile}`
         );
 
         return {
@@ -279,9 +292,7 @@ export class DataEncryptSensitiveTool {
         };
       } else {
         // Decrypt
-        const { stdout, stderr } = await execAsync(
-          `sops --decrypt ${file_path} > ${outputFile}`
-        );
+        const { stdout, stderr } = await execAsync(`sops --decrypt ${file_path} > ${outputFile}`);
 
         return {
           success: true,
@@ -298,7 +309,7 @@ export class DataEncryptSensitiveTool {
       return {
         success: false,
         error: `${operation} failed: ${error.message}`,
-        warnings: ['Ensure SOPS is installed and properly configured'],
+        warnings: ["Ensure SOPS is installed and properly configured"],
         timestamp: new Date().toISOString(),
       };
     }
@@ -313,20 +324,20 @@ export class DataAuditAccessTool {
     const { resource_type, resource_path, time_range } = args;
 
     try {
-      let auditCommand = '';
+      let auditCommand = "";
 
       switch (resource_type) {
-        case 'file':
+        case "file":
           // Use ausearch for file access audit
           auditCommand = `ausearch -f ${resource_path} -ts recent 2>/dev/null || echo "Audit logs not available"`;
           break;
-        
-        case 'service':
+
+        case "service":
           // Check systemd journal for service access
-          auditCommand = `journalctl -u ${resource_path} ${time_range ? `--since "${time_range.start}"` : ''} -n 50 --no-pager`;
+          auditCommand = `journalctl -u ${resource_path} ${time_range ? `--since "${time_range.start}"` : ""} -n 50 --no-pager`;
           break;
-        
-        case 'secret':
+
+        case "secret":
           // Check for SOPS access logs
           auditCommand = `grep -r "${resource_path}" /var/log/sops* 2>/dev/null || echo "No SOPS logs found"`;
           break;
@@ -335,7 +346,10 @@ export class DataAuditAccessTool {
       const { stdout } = await execAsync(auditCommand);
 
       // Parse audit log output
-      const entries = stdout.split('\n').filter(l => l.trim()).slice(0, 50);
+      const entries = stdout
+        .split("\n")
+        .filter((l) => l.trim())
+        .slice(0, 50);
 
       return {
         success: true,
@@ -344,9 +358,12 @@ export class DataAuditAccessTool {
           resource_path,
           audit_entries: entries,
           entries_count: entries.length,
-          time_range: time_range || { start: 'recent', end: 'now' },
+          time_range: time_range || { start: "recent", end: "now" },
         },
-        warnings: entries.length === 0 ? ['No audit entries found - audit logging may not be enabled'] : undefined,
+        warnings:
+          entries.length === 0
+            ? ["No audit entries found - audit logging may not be enabled"]
+            : undefined,
         timestamp: new Date().toISOString(),
       };
     } catch (error: any) {
@@ -372,7 +389,11 @@ export const dataScanSensitiveSchema = {
         items: { type: "string", enum: ["email", "phone", "ssn", "credit_card", "ip", "custom"] },
         description: "Pattern types to detect",
       },
-      custom_regex: { type: "array", items: { type: "string" }, description: "Custom regex patterns" },
+      custom_regex: {
+        type: "array",
+        items: { type: "string" },
+        description: "Custom regex patterns",
+      },
       recursive: { type: "boolean", description: "Scan recursively (default: true)" },
     },
     required: ["paths"],

@@ -1,14 +1,14 @@
 // Disk Utilities
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from "child_process";
+import { promisify } from "util";
 
 const execAsync = promisify(exec);
 
 /**
  * Get available disk space in bytes for a given path
  */
-export async function diskUsage(path: string = '/'): Promise<number> {
+export async function diskUsage(path: string = "/"): Promise<number> {
   try {
     const { stdout } = await execAsync(`df -k "${path}" | tail -1 | awk '{print $4}'`);
     const availableKB = parseInt(stdout.trim(), 10);
@@ -22,7 +22,7 @@ export async function diskUsage(path: string = '/'): Promise<number> {
 /**
  * Get total disk space in bytes for a given path
  */
-export async function totalDiskSpace(path: string = '/'): Promise<number> {
+export async function totalDiskSpace(path: string = "/"): Promise<number> {
   try {
     const { stdout } = await execAsync(`df -k "${path}" | tail -1 | awk '{print $2}'`);
     const totalKB = parseInt(stdout.trim(), 10);
@@ -36,7 +36,7 @@ export async function totalDiskSpace(path: string = '/'): Promise<number> {
 /**
  * Get used disk space in bytes for a given path
  */
-export async function usedDiskSpace(path: string = '/'): Promise<number> {
+export async function usedDiskSpace(path: string = "/"): Promise<number> {
   try {
     const { stdout } = await execAsync(`df -k "${path}" | tail -1 | awk '{print $3}'`);
     const usedKB = parseInt(stdout.trim(), 10);
@@ -51,13 +51,13 @@ export async function usedDiskSpace(path: string = '/'): Promise<number> {
  * Format bytes to human-readable string
  */
 export function formatBytes(bytes: number, decimals: number = 2): string {
-  if (bytes === 0) return '0 Bytes';
+  if (bytes === 0) return "0 Bytes";
 
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
 
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
 }

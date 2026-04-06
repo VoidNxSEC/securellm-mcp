@@ -1,22 +1,22 @@
 /**
  * Multi-Step Planning Types
- * 
+ *
  * Types for automatic task decomposition with dependency resolution
  * and checkpoint/resume capability.
  */
 
-import type { EnrichedContext } from './context-inference.js';
-import type { BatchActionResult } from './proactive-actions.js';
+import type { EnrichedContext } from "./context-inference.js";
+import type { BatchActionResult } from "./proactive-actions.js";
 
 /**
  * Task step status
  */
-export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'blocked';
+export type StepStatus = "pending" | "running" | "completed" | "failed" | "skipped" | "blocked";
 
 /**
  * Task step priority
  */
-export type StepPriority = 'critical' | 'high' | 'normal' | 'low';
+export type StepPriority = "critical" | "high" | "normal" | "low";
 
 /**
  * Individual task step
@@ -61,7 +61,7 @@ export interface ExecutionPlan {
   /** Current step index */
   currentStep: number;
   /** Plan status */
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'paused';
+  status: "pending" | "running" | "completed" | "failed" | "paused";
   /** Created timestamp */
   createdAt: number;
   /** Started timestamp */

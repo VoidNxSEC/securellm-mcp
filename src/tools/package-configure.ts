@@ -10,13 +10,22 @@ export const packageConfigureSchema = z.object({
   package_type: z.enum(["tar", "deb", "js"]).describe("Type of package system"),
   storage_file: z.string().describe("Path to downloaded file in storage"),
   sha256: z.string().describe("SHA256 hash of the file"),
-  options: z.object({
-    method: z.enum(["auto", "native", "fhs"]).optional().describe("Build method (auto-detected if not specified)"),
-    sandbox: z.boolean().optional().default(false).describe("Enable sandboxing"),
-    audit: z.boolean().optional().default(true).describe("Enable audit logging"),
-    executable: z.string().optional().describe("Explicit executable path (auto-detected if not specified)"),
-    npm_flags: z.array(z.string()).optional().describe("NPM build flags"),
-  }).optional().default({}),
+  options: z
+    .object({
+      method: z
+        .enum(["auto", "native", "fhs"])
+        .optional()
+        .describe("Build method (auto-detected if not specified)"),
+      sandbox: z.boolean().optional().default(false).describe("Enable sandboxing"),
+      audit: z.boolean().optional().default(true).describe("Enable audit logging"),
+      executable: z
+        .string()
+        .optional()
+        .describe("Explicit executable path (auto-detected if not specified)"),
+      npm_flags: z.array(z.string()).optional().describe("NPM build flags"),
+    })
+    .optional()
+    .default({}),
 });
 
 export type PackageConfigureInput = z.infer<typeof packageConfigureSchema>;
@@ -34,7 +43,7 @@ export class PackageConfigureTool {
   async configure(input: PackageConfigureInput): Promise<ConfigureResult> {
     try {
       const options = input.options || {};
-      
+
       // Determine package type specific configuration
       let configContent: string;
       let detectedExecutables: string[] = [];
@@ -112,11 +121,9 @@ export class PackageConfigureTool {
   ): Promise<{ content: string; executables: string[]; method: BuildMethod }> {
     // Extract and inspect tarball
     const inspection = await this.inspectTarball(`${this.workspaceDir}/${storageFile}`);
-    
+
     // Detect executables
-    const executables = options.executable 
-      ? [options.executable] 
-      : inspection.executables;
+    const executables = options.executable ? [options.executable] : inspection.executables;
 
     // Determine build method
     const method = this.selectBuildMethod(
@@ -140,7 +147,7 @@ export class PackageConfigureTool {
 
     # Source configuration
     source = {
-      path = ../storage/${storageFile.split('/').pop()};
+      path = ../storage/${storageFile.split("/").pop()};
       sha256 = "${sha256}";
     };
 
@@ -158,18 +165,18 @@ export class PackageConfigureTool {
     # Sandbox configuration
     sandbox = {
       enable = ${options.sandbox || false};
-      blockHardware = [${options.sandbox ? ' "nvidia" "amdgpu" ' : ''}];
-      allowedPaths = [${options.sandbox ? ' "$HOME" ' : ''}];
+      blockHardware = [${options.sandbox ? ' "nvidia" "amdgpu" ' : ""}];
+      allowedPaths = [${options.sandbox ? ' "$HOME" ' : ""}];
     };
 
     # Audit configuration
     audit = {
       enable = ${options.audit !== false};
-      logLevel = "${options.audit === false ? 'none' : 'info'}";
+      logLevel = "${options.audit === false ? "none" : "info"}";
     };
 
     # Desktop entry (set to null for CLI tools)
-    ${inspection.hasGui ? '# desktopEntry = { name = "' + packageName + '"; ... };' : '# No desktop entry for CLI tool'}
+    ${inspection.hasGui ? '# desktopEntry = { name = "' + packageName + '"; ... };' : "# No desktop entry for CLI tool"}
   };
 }
 `;
@@ -188,14 +195,14 @@ export class PackageConfigureTool {
   ): Promise<{ content: string; dependencies: string[] }> {
     // Inspect package.json if available
     const inspection = await this.inspectNpmPackage(`${this.workspaceDir}/${storageFile}`);
-    
+
     const dependencies: string[] = [];
-    
+
     // Check for common native dependencies
     if (inspection.hasNativeModules) {
       dependencies.push("python313", "pkg-config");
     }
-    
+
     if (inspection.needsLibsecret) {
       dependencies.push("libsecret");
     }
@@ -222,24 +229,32 @@ pkgs.buildNpmPackage {
   # After first build attempt, Nix will provide the expected hash in the error output
   npmDepsHash = ""; # Leave empty initially - will be filled from nix-build error message
 
-  ${dependencies.length > 0 ? `# Native build dependencies
+  ${
+    dependencies.length > 0
+      ? `# Native build dependencies
   nativeBuildInputs = with pkgs; [
-    ${dependencies.filter(d => ["python313", "pkg-config"].includes(d)).join("\n    ")}
+    ${dependencies.filter((d) => ["python313", "pkg-config"].includes(d)).join("\n    ")}
   ];
 
   # Runtime dependencies
   buildInputs = with pkgs; [
-    ${dependencies.filter(d => !["python313", "pkg-config"].includes(d)).join("\n    ")}
-  ];` : ""}
+    ${dependencies.filter((d) => !["python313", "pkg-config"].includes(d)).join("\n    ")}
+  ];`
+      : ""
+  }
 
-  ${inspection.hasBrokenSymlinks ? `# Clean up broken symlinks from monorepo structure
+  ${
+    inspection.hasBrokenSymlinks
+      ? `# Clean up broken symlinks from monorepo structure
   postInstall = ''
     # Remove broken symlinks pointing to missing workspace packages
     find $out -type l ! -exec test -e {} \\; -delete
     
     # Recreate main executable if needed
     # ln -sf $out/lib/node_modules/${packageName}/dist/index.js $out/bin/${packageName}
-  '';` : ""}
+  '';`
+      : ""
+  }
 
   ${options.npm_flags && options.npm_flags.length > 0 ? `npmFlags = [ ${options.npm_flags.map((f: string) => `"${f}"`).join(" ")} ];` : ""}
 
@@ -271,7 +286,7 @@ pkgs.buildNpmPackage {
 
     # Source configuration
     source = {
-      path = ../storage/${storageFile.split('/').pop()};
+      path = ../storage/${storageFile.split("/").pop()};
       sha256 = "${sha256}";
     };
 
@@ -300,9 +315,7 @@ pkgs.buildNpmPackage {
   /**
    * Inspect tarball structure
    */
-  private async inspectTarball(
-    tarPath: string
-  ): Promise<{
+  private async inspectTarball(tarPath: string): Promise<{
     executables: string[];
     hasLibraries: boolean;
     complexity: "simple" | "medium" | "complex";
@@ -311,12 +324,12 @@ pkgs.buildNpmPackage {
   }> {
     // List tarball contents
     const files = await this.listTarballFiles(tarPath);
-    
+
     // Find executables (heuristic: files in bin/ or files without extension)
     const executables: string[] = [];
     let hasLibraries = false;
     let hasGui = false;
-    
+
     for (const file of files) {
       // Check for executables
       if (file.includes("/bin/") || file.match(/\/[^/.]+$/)) {
@@ -325,12 +338,12 @@ pkgs.buildNpmPackage {
           executables.push(execPath);
         }
       }
-      
+
       // Check for libraries
       if (file.includes(".so")) {
         hasLibraries = true;
       }
-      
+
       // Check for GUI indicators
       if (file.includes(".desktop") || file.includes("/share/applications/")) {
         hasGui = true;
@@ -338,11 +351,11 @@ pkgs.buildNpmPackage {
     }
 
     // Determine complexity
-    const libCount = files.filter(f => f.includes(".so")).length;
+    const libCount = files.filter((f) => f.includes(".so")).length;
     const complexity = libCount > 10 ? "complex" : libCount > 3 ? "medium" : "simple";
 
     // Check if needs home directory
-    const needsHome = files.some(f => f.includes("config") || f.includes(".rc"));
+    const needsHome = files.some((f) => f.includes("config") || f.includes(".rc"));
 
     return {
       executables,
@@ -356,9 +369,7 @@ pkgs.buildNpmPackage {
   /**
    * Inspect NPM package
    */
-  private async inspectNpmPackage(
-    tarPath: string
-  ): Promise<{
+  private async inspectNpmPackage(tarPath: string): Promise<{
     hasNativeModules: boolean;
     needsLibsecret: boolean;
     needsGtk: boolean;
@@ -368,25 +379,25 @@ pkgs.buildNpmPackage {
   }> {
     // List tarball contents
     const files = await this.listTarballFiles(tarPath);
-    
+
     // Check for native modules
     const hasNativeModules = files.some(
-      f => f.includes("binding.gyp") || f.includes("node_modules") && f.includes(".node")
+      (f) => f.includes("binding.gyp") || (f.includes("node_modules") && f.includes(".node"))
     );
 
     // Check for specific dependencies
-    const needsLibsecret = files.some(f => f.includes("keytar") || f.includes("libsecret"));
-    const needsGtk = files.some(f => f.includes("gtk") || f.includes("gdk"));
-    
+    const needsLibsecret = files.some((f) => f.includes("keytar") || f.includes("libsecret"));
+    const needsGtk = files.some((f) => f.includes("gtk") || f.includes("gdk"));
+
     // Check for workspace symlinks (monorepo indicator)
-    const hasBrokenSymlinks = files.some(f => f.includes("node_modules/@"));
+    const hasBrokenSymlinks = files.some((f) => f.includes("node_modules/@"));
 
     // Try to extract package.json info
     let description: string | undefined;
     let license: string | undefined;
 
     try {
-      const packageJsonFiles = files.filter(f => f.endsWith("package.json"));
+      const packageJsonFiles = files.filter((f) => f.endsWith("package.json"));
       if (packageJsonFiles.length > 0) {
         // Extract and parse the first package.json
         const pkgJson = await this.extractFileFromTarball(tarPath, packageJsonFiles[0]);
@@ -414,7 +425,7 @@ pkgs.buildNpmPackage {
   private async listTarballFiles(tarPath: string): Promise<string[]> {
     return new Promise((resolve, reject) => {
       const tar = spawn("tar", ["-tzf", tarPath]);
-      
+
       let files = "";
       tar.stdout.on("data", (data) => {
         files += data.toString();
@@ -422,7 +433,7 @@ pkgs.buildNpmPackage {
 
       tar.on("close", (code) => {
         if (code === 0) {
-          resolve(files.split("\n").filter(f => f.length > 0));
+          resolve(files.split("\n").filter((f) => f.length > 0));
         } else {
           reject(new Error("Failed to list tarball files"));
         }
@@ -436,7 +447,7 @@ pkgs.buildNpmPackage {
   private async extractFileFromTarball(tarPath: string, filePath: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const tar = spawn("tar", ["-xzf", tarPath, "-O", filePath]);
-      
+
       let content = "";
       tar.stdout.on("data", (data) => {
         content += data.toString();
@@ -477,14 +488,14 @@ pkgs.buildNpmPackage {
    */
   private mapLicense(license: string): string {
     const mapping: Record<string, string> = {
-      "MIT": "mit",
+      MIT: "mit",
       "Apache-2.0": "asl20",
       "GPL-3.0": "gpl3",
       "GPL-2.0": "gpl2",
       "BSD-3-Clause": "bsd3",
       "BSD-2-Clause": "bsd2",
-      "ISC": "isc",
-      "Unlicense": "unlicense",
+      ISC: "isc",
+      Unlicense: "unlicense",
     };
 
     return mapping[license] || "unfree";

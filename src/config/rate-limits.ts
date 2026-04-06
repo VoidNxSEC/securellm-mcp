@@ -1,18 +1,18 @@
-import { RateLimitConfig } from '../types/middleware/rate-limiter.js';
+import { RateLimitConfig } from "../types/middleware/rate-limiter.js";
 
 /**
  * Rate limit configurations for different API providers and operations
- * 
+ *
  * Adjust these values based on actual API limits and usage patterns.
  * These are conservative defaults to prevent hitting rate limits.
  */
 export const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
   // OpenAI API limits (60 req/min for GPT-4)
   openai: {
-    provider: 'openai',
+    provider: "openai",
     requestsPerMinute: 60,
     burstSize: 10,
-    retryStrategy: 'exponential',
+    retryStrategy: "exponential",
     maxRetries: 3,
     circuitBreaker: {
       failureThreshold: 5,
@@ -22,10 +22,10 @@ export const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
 
   // Anthropic API limits (50 req/min)
   anthropic: {
-    provider: 'anthropic',
+    provider: "anthropic",
     requestsPerMinute: 50,
     burstSize: 8,
-    retryStrategy: 'exponential',
+    retryStrategy: "exponential",
     maxRetries: 3,
     circuitBreaker: {
       failureThreshold: 5,
@@ -35,10 +35,10 @@ export const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
 
   // DeepSeek API limits (60 req/min)
   deepseek: {
-    provider: 'deepseek',
+    provider: "deepseek",
     requestsPerMinute: 60,
     burstSize: 10,
-    retryStrategy: 'exponential',
+    retryStrategy: "exponential",
     maxRetries: 3,
     circuitBreaker: {
       failureThreshold: 5,
@@ -48,10 +48,10 @@ export const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
 
   // Ollama (local) - high limits since it's local
   ollama: {
-    provider: 'ollama',
+    provider: "ollama",
     requestsPerMinute: 300,
     burstSize: 50,
-    retryStrategy: 'exponential',
+    retryStrategy: "exponential",
     maxRetries: 2,
     circuitBreaker: {
       failureThreshold: 10,
@@ -61,10 +61,10 @@ export const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
 
   // Build operations (prevent build spam)
   build: {
-    provider: 'build',
+    provider: "build",
     requestsPerMinute: 10,
     burstSize: 2,
-    retryStrategy: 'exponential',
+    retryStrategy: "exponential",
     maxRetries: 1,
     circuitBreaker: {
       failureThreshold: 3,
@@ -74,10 +74,10 @@ export const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
 
   // Crypto operations (key generation is expensive)
   crypto: {
-    provider: 'crypto',
+    provider: "crypto",
     requestsPerMinute: 5,
     burstSize: 2,
-    retryStrategy: 'exponential',
+    retryStrategy: "exponential",
     maxRetries: 2,
     circuitBreaker: {
       failureThreshold: 3,
@@ -87,10 +87,10 @@ export const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
 
   // Database operations (high limits for local SQLite)
   database: {
-    provider: 'database',
+    provider: "database",
     requestsPerMinute: 1000,
     burstSize: 100,
-    retryStrategy: 'exponential',
+    retryStrategy: "exponential",
     maxRetries: 2,
     circuitBreaker: {
       failureThreshold: 20,
@@ -100,10 +100,10 @@ export const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
 
   // Generic/default limits for unknown providers
   default: {
-    provider: 'default',
+    provider: "default",
     requestsPerMinute: 30,
     burstSize: 5,
-    retryStrategy: 'exponential',
+    retryStrategy: "exponential",
     maxRetries: 3,
     circuitBreaker: {
       failureThreshold: 5,

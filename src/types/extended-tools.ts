@@ -7,25 +7,25 @@
 
 export interface SystemHealthCheckArgs {
   detailed?: boolean;
-  components?: Array<'cpu' | 'memory' | 'disk' | 'network' | 'services'>;
+  components?: Array<"cpu" | "memory" | "disk" | "network" | "services">;
 }
 
 export interface SystemLogAnalyzerArgs {
   service?: string;
   since?: string;
   until?: string;
-  level?: 'error' | 'warning' | 'info' | 'debug';
+  level?: "error" | "warning" | "info" | "debug";
   lines?: number;
   pattern?: string;
 }
 
 export interface SystemServiceManagerArgs {
-  action: 'start' | 'stop' | 'restart' | 'status' | 'enable' | 'disable';
+  action: "start" | "stop" | "restart" | "status" | "enable" | "disable";
   service: string;
 }
 
 export interface SystemBackupManagerArgs {
-  action: 'create' | 'list' | 'restore' | 'verify';
+  action: "create" | "list" | "restore" | "verify";
   paths?: string[];
   backup_id?: string;
   destination?: string;
@@ -34,7 +34,7 @@ export interface SystemBackupManagerArgs {
 export interface SystemResourceMonitorArgs {
   duration_seconds?: number;
   interval_seconds?: number;
-  resources?: Array<'cpu' | 'memory' | 'disk' | 'network'>;
+  resources?: Array<"cpu" | "memory" | "disk" | "network">;
 }
 
 export interface SystemPackageAuditArgs {
@@ -49,7 +49,7 @@ export interface SSHConnectArgs {
   host: string;
   port?: number;
   username: string;
-  auth_method: 'key' | 'password' | 'certificate';
+  auth_method: "key" | "password" | "certificate";
   key_path?: string;
   password?: string;
   certificate_path?: string;
@@ -66,14 +66,14 @@ export interface SSHExecuteArgs {
 
 export interface SSHFileTransferArgs {
   connection_id: string;
-  action: 'upload' | 'download';
+  action: "upload" | "download";
   local_path: string;
   remote_path: string;
 }
 
 export interface SSHMaintenanceCheckArgs {
   connection_id: string;
-  checks: Array<'disk' | 'services' | 'updates' | 'security' | 'logs'>;
+  checks: Array<"disk" | "services" | "updates" | "security" | "logs">;
 }
 
 // ===== BROWSER NAVIGATION TYPES =====
@@ -88,14 +88,14 @@ export interface BrowserLaunchAdvancedArgs {
 
 export interface BrowserExtractDataArgs {
   session_id: string;
-  selectors: Array<{ name: string; selector: string; type: 'text' | 'html' | 'attribute' }>;
+  selectors: Array<{ name: string; selector: string; type: "text" | "html" | "attribute" }>;
   wait_for?: string;
 }
 
 export interface BrowserInteractFormArgs {
   session_id: string;
   actions: Array<{
-    type: 'fill' | 'click' | 'select' | 'check' | 'upload';
+    type: "fill" | "click" | "select" | "check" | "upload";
     selector: string;
     value?: string;
   }>;
@@ -111,7 +111,7 @@ export interface BrowserMonitorChangesArgs {
 
 export interface BrowserSearchAggregateArgs {
   query: string;
-  sources: Array<'google' | 'duckduckgo' | 'github' | 'stackoverflow'>;
+  sources: Array<"google" | "duckduckgo" | "github" | "stackoverflow">;
   max_results?: number;
 }
 
@@ -119,7 +119,7 @@ export interface BrowserSearchAggregateArgs {
 
 export interface DataScanSensitiveArgs {
   paths: string[];
-  patterns?: Array<'email' | 'phone' | 'ssn' | 'credit_card' | 'ip' | 'custom'>;
+  patterns?: Array<"email" | "phone" | "ssn" | "credit_card" | "ip" | "custom">;
   custom_regex?: string[];
   recursive?: boolean;
 }
@@ -128,19 +128,19 @@ export interface DataPseudonymizeArgs {
   input_file: string;
   output_file: string;
   fields: string[];
-  method: 'hash' | 'encrypt' | 'tokenize' | 'mask';
+  method: "hash" | "encrypt" | "tokenize" | "mask";
   preserve_format?: boolean;
 }
 
 export interface DataEncryptSensitiveArgs {
   file_path: string;
-  operation: 'encrypt' | 'decrypt';
+  operation: "encrypt" | "decrypt";
   output_path?: string;
   key_id?: string;
 }
 
 export interface DataAuditAccessArgs {
-  resource_type: 'file' | 'service' | 'secret';
+  resource_type: "file" | "service" | "secret";
   resource_path: string;
   time_range?: { start: string; end: string };
 }
@@ -156,7 +156,7 @@ export interface FilesAnalyzeStructureArgs {
 
 export interface FilesAutoOrganizeArgs {
   source_path: string;
-  strategy: 'by_type' | 'by_date' | 'by_size' | 'by_project' | 'custom';
+  strategy: "by_type" | "by_date" | "by_size" | "by_project" | "custom";
   dry_run?: boolean;
   custom_rules?: Array<{ pattern: string; destination: string }>;
 }
@@ -165,7 +165,7 @@ export interface FilesCreateCatalogArgs {
   paths: string[];
   include_metadata?: boolean;
   include_checksums?: boolean;
-  output_format?: 'json' | 'sqlite' | 'csv';
+  output_format?: "json" | "sqlite" | "csv";
 }
 
 export interface FilesSearchCatalogArgs {
@@ -179,7 +179,7 @@ export interface FilesSearchCatalogArgs {
 }
 
 export interface FilesTagManagerArgs {
-  action: 'add' | 'remove' | 'search' | 'list';
+  action: "add" | "remove" | "search" | "list";
   file_path?: string;
   tags?: string[];
 }
@@ -205,8 +205,8 @@ export interface CleanupExecuteSmartArgs {
 
 export interface CleanupDuplicateResolverArgs {
   paths: string[];
-  strategy: 'keep_newest' | 'keep_largest' | 'keep_oldest' | 'interactive';
-  hash_algorithm?: 'md5' | 'sha256';
+  strategy: "keep_newest" | "keep_largest" | "keep_oldest" | "interactive";
+  hash_algorithm?: "md5" | "sha256";
   min_size_mb?: number;
 }
 

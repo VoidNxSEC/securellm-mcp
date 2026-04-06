@@ -1,14 +1,14 @@
 // Session Summarization with LLM
 
-import type Database from 'better-sqlite3';
-import { logger } from '../utils/logger.js';
-import { createLLMClient, type UnifiedLLMClient } from '../utils/llm-client.js';
+import type Database from "better-sqlite3";
+import { logger } from "../utils/logger.js";
+import { createLLMClient, type UnifiedLLMClient } from "../utils/llm-client.js";
 import type {
   SummarizeSessionInput,
   SummarizeSessionOutput,
   SummaryType,
   KnowledgeSummary,
-} from '../types/compaction.js';
+} from "../types/compaction.js";
 
 export interface SummarizationOptions {
   model?: string;
@@ -35,7 +35,7 @@ export class Summarizer {
   async summarizeSession(input: SummarizeSessionInput): Promise<SummarizeSessionOutput> {
     const {
       session_id,
-      summary_type = 'session',
+      summary_type = "session",
       model,
       max_tokens = 500,
       temperature = 0.3,
@@ -44,13 +44,11 @@ export class Summarizer {
       min_entry_count = 3,
     } = input;
 
-    logger.info({ session_id, summary_type }, 'Starting session summarization');
+    logger.info({ session_id, summary_type }, "Starting session summarization");
 
     try {
       // Get session info
-      const session = this.db
-        .prepare('SELECT * FROM sessions WHERE id = ?')
-        .get(session_id) as any;
+      const session = this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(session_id) as any;
 
       if (!session) {
         return {
@@ -61,7 +59,7 @@ export class Summarizer {
 
       // Get entries for this session
       const entries = this.db
-        .prepare('SELECT * FROM knowledge_entries WHERE session_id = ? ORDER BY timestamp ASC')
+        .prepare("SELECT * FROM knowledge_entries WHERE session_id = ? ORDER BY timestamp ASC")
         .all(session_id) as any[];
 
       if (entries.length < min_entry_count) {
@@ -106,9 +104,7 @@ export class Summarizer {
 
       // Mark entries as summarized
       this.db
-        .prepare(
-          `UPDATE knowledge_entries SET summarized = 1, summary_id = ? WHERE session_id = ?`
-        )
+        .prepare(`UPDATE knowledge_entries SET summarized = 1, summary_id = ? WHERE session_id = ?`)
         .run(summaryId, session_id);
 
       // Get the created summary
@@ -121,7 +117,7 @@ export class Summarizer {
           entry_count: entries.length,
           summary_length: summaryContent.length,
         },
-        'Session summarization completed'
+        "Session summarization completed"
       );
 
       return {
@@ -130,7 +126,7 @@ export class Summarizer {
         summary,
       };
     } catch (err: any) {
-      logger.error({ err, session_id }, 'Session summarization failed');
+      logger.error({ err, session_id }, "Session summarization failed");
       return {
         success: false,
         error: err.message,
@@ -176,18 +172,18 @@ export class Summarizer {
     // Format entries
     const formattedEntries = entries
       .map((entry, idx) => {
-        const tags = include_tags ? JSON.parse(entry.tags || '[]') : [];
+        const tags = include_tags ? JSON.parse(entry.tags || "[]") : [];
         const content = include_code
           ? entry.content
-          : entry.entry_type === 'code'
-          ? '[Code snippet omitted]'
-          : entry.content;
+          : entry.entry_type === "code"
+            ? "[Code snippet omitted]"
+            : entry.content;
 
         return `${idx + 1}. [${entry.entry_type.toUpperCase()}] ${entry.timestamp}\n   ${content}${
-          tags.length > 0 ? `\n   Tags: ${tags.join(', ')}` : ''
+          tags.length > 0 ? `\n   Tags: ${tags.join(", ")}` : ""
         }`;
       })
-      .join('\n\n');
+      .join("\n\n");
 
     // Build prompt based on summary type
     let prompt = `You are a knowledge management assistant summarizing a technical session.
@@ -199,7 +195,7 @@ Session Info:
 - Entry Count: ${entries.length}`;
 
     if (allTags.size > 0) {
-      prompt += `\n- Tags: ${Array.from(allTags).join(', ')}`;
+      prompt += `\n- Tags: ${Array.from(allTags).join(", ")}`;
     }
 
     if (metadata.project) {
@@ -208,7 +204,7 @@ Session Info:
 
     prompt += `\n\nEntries:\n${formattedEntries}\n\n`;
 
-    if (summary_type === 'session') {
+    if (summary_type === "session") {
       prompt += `Generate a concise summary (3-5 sentences) that:
 1. Captures the main theme or objective of this session
 2. Highlights key decisions, insights, or code patterns
@@ -216,11 +212,11 @@ Session Info:
 4. Uses bullet points for distinct topics if needed
 
 Summary:`;
-    } else if (summary_type === 'topic') {
+    } else if (summary_type === "topic") {
       prompt += `Identify the main topics covered in this session and summarize each topic in 1-2 sentences.
 
 Topics and Summaries:`;
-    } else if (summary_type === 'cluster') {
+    } else if (summary_type === "cluster") {
       prompt += `Group related entries together and provide a brief summary of each cluster.
 
 Clusters:`;
@@ -263,7 +259,7 @@ Clusters:`;
    * Get summary by ID
    */
   private async getSummary(id: number): Promise<KnowledgeSummary | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM knowledge_summaries WHERE id = ?');
+    const stmt = this.db.prepare("SELECT * FROM knowledge_summaries WHERE id = ?");
     const row = stmt.get(id) as any;
 
     if (!row) return undefined;
@@ -291,7 +287,7 @@ Clusters:`;
 
     const rows = stmt.all(sessionId) as any[];
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       session_id: row.session_id,
       summary_type: row.summary_type,
@@ -319,7 +315,7 @@ Clusters:`;
 
     const rows = stmt.all(query, limit) as any[];
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       session_id: row.session_id,
       summary_type: row.summary_type,
@@ -336,9 +332,6 @@ Clusters:`;
 /**
  * Factory function
  */
-export function createSummarizer(
-  db: Database.Database,
-  llmClient?: UnifiedLLMClient
-): Summarizer {
+export function createSummarizer(db: Database.Database, llmClient?: UnifiedLLMClient): Summarizer {
   return new Summarizer(db, llmClient);
 }

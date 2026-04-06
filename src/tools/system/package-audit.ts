@@ -3,9 +3,9 @@
  * Audit NixOS packages for updates, vulnerabilities, and orphans
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import type { SystemPackageAuditArgs, ToolResult } from '../../types/extended-tools.js';
+import { exec } from "child_process";
+import { promisify } from "util";
+import type { SystemPackageAuditArgs, ToolResult } from "../../types/extended-tools.js";
 
 const execAsync = promisify(exec);
 
@@ -39,7 +39,7 @@ export class SystemPackageAuditTool {
         results.orphans = await this.checkOrphans();
       }
 
-      const totalIssues = 
+      const totalIssues =
         (results.updates?.count || 0) +
         (results.vulnerabilities?.count || 0) +
         (results.orphans?.count || 0);
@@ -61,15 +61,17 @@ export class SystemPackageAuditTool {
 
   private async checkUpdates(): Promise<any> {
     try {
-      const { stdout } = await execAsync(`cd ${this.projectRoot} && nix flake update --dry-run 2>&1 || true`);
-      
+      const { stdout } = await execAsync(
+        `cd ${this.projectRoot} && nix flake update --dry-run 2>&1 || true`
+      );
+
       // Parse output for package updates
       const updates = stdout.match(/Updated .+:/g) || [];
-      
+
       return {
         count: updates.length,
         updates: updates.slice(0, 20), // Limit to 20
-        message: updates.length > 0 ? 'Updates available' : 'System up to date',
+        message: updates.length > 0 ? "Updates available" : "System up to date",
       };
     } catch (error: any) {
       return {
@@ -89,7 +91,7 @@ export class SystemPackageAuditTool {
       return {
         count: 0, // Simplified - would need proper vulnerability database
         total_packages: packageCount,
-        message: 'Vulnerability scanning not fully implemented',
+        message: "Vulnerability scanning not fully implemented",
       };
     } catch (error: any) {
       return {
@@ -107,8 +109,8 @@ export class SystemPackageAuditTool {
 
       return {
         count: deadPaths,
-        message: deadPaths > 0 ? `${deadPaths} orphaned store paths` : 'No orphans found',
-        recommendation: deadPaths > 0 ? 'Run: nix-collect-garbage -d' : null,
+        message: deadPaths > 0 ? `${deadPaths} orphaned store paths` : "No orphans found",
+        recommendation: deadPaths > 0 ? "Run: nix-collect-garbage -d" : null,
       };
     } catch (error: any) {
       return {
@@ -125,9 +127,18 @@ export const packageAuditSchema = {
   inputSchema: {
     type: "object",
     properties: {
-      check_updates: { type: "boolean", description: "Check for available updates (default: true)" },
-      check_vulnerabilities: { type: "boolean", description: "Check for known vulnerabilities (default: true)" },
-      check_orphans: { type: "boolean", description: "Check for orphaned packages (default: true)" },
+      check_updates: {
+        type: "boolean",
+        description: "Check for available updates (default: true)",
+      },
+      check_vulnerabilities: {
+        type: "boolean",
+        description: "Check for known vulnerabilities (default: true)",
+      },
+      check_orphans: {
+        type: "boolean",
+        description: "Check for orphaned packages (default: true)",
+      },
     },
   },
 };

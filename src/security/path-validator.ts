@@ -5,7 +5,7 @@
  * preventing directory traversal attacks (e.g., ../../etc/passwd).
  */
 
-import * as path from 'path';
+import * as path from "path";
 
 /**
  * Validates that a user-provided path resolves within the allowed root directory.
@@ -34,7 +34,7 @@ export function validatePath(userPath: string, allowedRoot: string): string {
  * @returns Array of resolved absolute paths
  */
 export function validatePaths(paths: string[], allowedRoot: string): string[] {
-  return paths.map(p => validatePath(p, allowedRoot));
+  return paths.map((p) => validatePath(p, allowedRoot));
 }
 
 /**

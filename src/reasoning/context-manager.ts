@@ -1,16 +1,16 @@
 /**
  * Context Manager
- * 
+ *
  * Coordinates all context inference components to provide
  * enriched context for tool execution.
  */
 
-import { InputAnalyzer } from './input-analyzer.js';
-import { ProjectStateTracker } from './project-state-tracker.js';
-import { ProactiveExecutor } from './proactive-executor.js';
-import type { SQLiteKnowledgeDatabase } from '../knowledge/database.js';
-import type { EnrichedContext, InputAnalysis, ProjectState } from '../types/context-inference.js';
-import type { BatchActionResult } from '../types/proactive-actions.js';
+import { InputAnalyzer } from "./input-analyzer.js";
+import { ProjectStateTracker } from "./project-state-tracker.js";
+import { ProactiveExecutor } from "./proactive-executor.js";
+import type { SQLiteKnowledgeDatabase } from "../knowledge/database.js";
+import type { EnrichedContext, InputAnalysis, ProjectState } from "../types/context-inference.js";
+import type { BatchActionResult } from "../types/proactive-actions.js";
 
 /**
  * Context Manager
@@ -59,11 +59,13 @@ export class ContextManager {
   /**
    * Find relevant knowledge from database
    */
-  private async findRelevantKnowledge(input: InputAnalysis): Promise<Array<{ id: number; score: number }>> {
+  private async findRelevantKnowledge(
+    input: InputAnalysis
+  ): Promise<Array<{ id: number; score: number }>> {
     // Simple relevance scoring based on entities and topics
     const searchTerms = [
-      ...input.entities.map(e => e.value),
-      ...input.topics.flatMap(t => t.keywords),
+      ...input.entities.map((e) => e.value),
+      ...input.topics.flatMap((t) => t.keywords),
     ];
 
     const results: Array<{ id: number; score: number }> = [];
@@ -91,8 +93,8 @@ export class ContextManager {
     let score = 0;
 
     // Intent confidence
-    if (input.intentConfidence === 'high') score += 0.3;
-    else if (input.intentConfidence === 'medium') score += 0.2;
+    if (input.intentConfidence === "high") score += 0.3;
+    else if (input.intentConfidence === "medium") score += 0.2;
     else score += 0.1;
 
     // Entity extraction
@@ -121,7 +123,7 @@ export class ContextManager {
     // Execute proactive actions
     const actions = await this.proactiveExecutor.executeActions(
       context,
-      this.stateTracker['projectRoot']
+      this.stateTracker["projectRoot"]
     );
 
     return { context, actions };

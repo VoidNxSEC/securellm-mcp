@@ -137,10 +137,7 @@ export async function getNixOSHosts(flakePath: string): Promise<string[]> {
  * @param hostName - Name of the host to check
  * @returns true if the host exists, false otherwise
  */
-export async function hasNixOSHost(
-  flakePath: string,
-  hostName: string
-): Promise<boolean> {
+export async function hasNixOSHost(flakePath: string, hostName: string): Promise<boolean> {
   const hosts = await getNixOSHosts(flakePath);
   return hosts.includes(hostName);
 }

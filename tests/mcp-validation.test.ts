@@ -6,90 +6,98 @@
  * [MCP-2] No execSync blocks event loop
  */
 
-import { describe, test } from 'node:test';
-import assert from 'node:assert';
-import { spawn } from 'child_process';
-import { writeFileSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { describe, test } from "node:test";
+import assert from "node:assert";
+import { spawn } from "child_process";
+import { writeFileSync, unlinkSync } from "fs";
+import { join } from "path";
 
-const SERVER_PATH = join(process.cwd(), 'build/src/index.js');
+const SERVER_PATH = join(process.cwd(), "build/src/index.js");
 const TIMEOUT = 10000;
 
-describe('[MCP-1] STDIO Protocol Validation', () => {
-  test('Server STDOUT should contain ONLY valid JSON-RPC messages', async () => {
+describe("[MCP-1] STDIO Protocol Validation", () => {
+  test("Server STDOUT should contain ONLY valid JSON-RPC messages", async () => {
     return new Promise((resolve, reject) => {
-      const server = spawn('node', [SERVER_PATH], {
-        stdio: ['pipe', 'pipe', 'pipe'],
+      const server = spawn("node", [SERVER_PATH], {
+        stdio: ["pipe", "pipe", "pipe"],
         env: {
           ...process.env,
-          ENABLE_KNOWLEDGE: 'false', // Disable DB for faster startup
-          LOG_LEVEL: 'error',
+          ENABLE_KNOWLEDGE: "false", // Disable DB for faster startup
+          LOG_LEVEL: "error",
         },
       });
 
-      let stdout = '';
-      let stderr = '';
+      let stdout = "";
+      let stderr = "";
 
-      server.stdout.on('data', (data) => {
+      server.stdout.on("data", (data) => {
         stdout += data.toString();
       });
 
-      server.stderr.on('data', (data) => {
+      server.stderr.on("data", (data) => {
         stderr += data.toString();
       });
 
       // Send initialize request
       setTimeout(() => {
         const initRequest = {
-          jsonrpc: '2.0',
+          jsonrpc: "2.0",
           id: 1,
-          method: 'initialize',
+          method: "initialize",
           params: {
-            protocolVersion: '2024-11-05',
+            protocolVersion: "2024-11-05",
             capabilities: {},
             clientInfo: {
-              name: 'test-client',
-              version: '1.0.0',
+              name: "test-client",
+              version: "1.0.0",
             },
           },
         };
 
-        server.stdin.write(JSON.stringify(initRequest) + '\n');
+        server.stdin.write(JSON.stringify(initRequest) + "\n");
       }, 1000);
 
       setTimeout(() => {
         server.kill();
 
         // CRITICAL: stdout must be valid JSON only
-        const lines = stdout.trim().split('\n').filter(l => l.length > 0);
+        const lines = stdout
+          .trim()
+          .split("\n")
+          .filter((l) => l.length > 0);
 
-        console.log('\n[MCP-1] Validation Results:');
-        console.log('STDOUT lines:', lines.length);
-        console.log('STDERR length:', stderr.length);
+        console.log("\n[MCP-1] Validation Results:");
+        console.log("STDOUT lines:", lines.length);
+        console.log("STDERR length:", stderr.length);
 
         for (const line of lines) {
           try {
             const parsed = JSON.parse(line);
-            assert.ok(parsed.jsonrpc === '2.0', 'Must be JSON-RPC 2.0');
+            assert.ok(parsed.jsonrpc === "2.0", "Must be JSON-RPC 2.0");
           } catch (e) {
-            console.error('Invalid JSON in STDOUT:', line);
-            reject(new Error(`[MCP-1] FAILED: STDOUT contains non-JSON: ${line.substring(0, 100)}`));
+            console.error("Invalid JSON in STDOUT:", line);
+            reject(
+              new Error(`[MCP-1] FAILED: STDOUT contains non-JSON: ${line.substring(0, 100)}`)
+            );
             return;
           }
         }
 
-        console.log('✅ [MCP-1] PASSED: STDOUT is clean JSON-RPC');
-        console.log('📊 Logs written to:', stderr.includes('mcp.log') ? '~/.local/state/securellm-mcp/mcp.log' : 'stderr');
+        console.log("✅ [MCP-1] PASSED: STDOUT is clean JSON-RPC");
+        console.log(
+          "📊 Logs written to:",
+          stderr.includes("mcp.log") ? "~/.local/state/securellm-mcp/mcp.log" : "stderr"
+        );
         resolve();
       }, 3000);
     });
   });
 });
 
-describe('[MCP-2] Async Execution Validation', () => {
-  test('Event loop should not block during async operations', async () => {
+describe("[MCP-2] Async Execution Validation", () => {
+  test("Event loop should not block during async operations", async () => {
     return new Promise((resolve, reject) => {
-      const testFile = join(process.cwd(), 'test-async-exec.js');
+      const testFile = join(process.cwd(), "test-async-exec.js");
 
       // Create test script that simulates async execution
       const testScript = `
@@ -125,39 +133,41 @@ test().catch(console.error);
 
       writeFileSync(testFile, testScript);
 
-      const proc = spawn('node', [testFile], {
+      const proc = spawn("node", [testFile], {
         cwd: process.cwd(),
-        stdio: 'pipe',
+        stdio: "pipe",
       });
 
-      let output = '';
-      proc.stdout.on('data', (data) => {
+      let output = "";
+      proc.stdout.on("data", (data) => {
         output += data.toString();
       });
 
-      proc.on('close', () => {
+      proc.on("close", () => {
         unlinkSync(testFile);
 
         const blockTimeMatch = output.match(/BLOCK_TIME:(\d+\.?\d*)/);
 
         if (!blockTimeMatch) {
-          reject(new Error('[MCP-2] FAILED: Could not measure block time'));
+          reject(new Error("[MCP-2] FAILED: Could not measure block time"));
           return;
         }
 
         const blockTime = parseFloat(blockTimeMatch[1]);
 
-        console.log('\n[MCP-2] Validation Results:');
-        console.log('Event loop block time:', blockTime.toFixed(2), 'ms');
-        console.log('Async call succeeded:', output.includes('ASYNC_SUCCESS'));
+        console.log("\n[MCP-2] Validation Results:");
+        console.log("Event loop block time:", blockTime.toFixed(2), "ms");
+        console.log("Async call succeeded:", output.includes("ASYNC_SUCCESS"));
 
         // Event loop should be free within 50ms (async overhead only)
         if (blockTime > 50) {
-          reject(new Error(`[MCP-2] FAILED: Event loop blocked for ${blockTime}ms (expected <50ms)`));
+          reject(
+            new Error(`[MCP-2] FAILED: Event loop blocked for ${blockTime}ms (expected <50ms)`)
+          );
           return;
         }
 
-        console.log('✅ [MCP-2] PASSED: Event loop non-blocking (<50ms)');
+        console.log("✅ [MCP-2] PASSED: Event loop non-blocking (<50ms)");
         resolve();
       });
     });

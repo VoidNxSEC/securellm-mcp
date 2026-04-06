@@ -1,12 +1,12 @@
 // Knowledge Session Archival and Restoration
 
-import type Database from 'better-sqlite3';
-import { createGzip, createGunzip } from 'zlib';
-import { createReadStream, createWriteStream, existsSync, mkdirSync } from 'fs';
-import { readFile, unlink } from 'fs/promises';
-import { pipeline } from 'stream/promises';
-import { join } from 'path';
-import { logger } from '../utils/logger.js';
+import type Database from "better-sqlite3";
+import { createGzip, createGunzip } from "zlib";
+import { createReadStream, createWriteStream, existsSync, mkdirSync } from "fs";
+import { readFile, unlink } from "fs/promises";
+import { pipeline } from "stream/promises";
+import { join } from "path";
+import { logger } from "../utils/logger.js";
 import type {
   ArchiveOldSessionsInput,
   ArchiveOldSessionsOutput,
@@ -14,7 +14,7 @@ import type {
   RestoreArchivedSessionOutput,
   CompressionType,
   ArchiveData,
-} from '../types/compaction.js';
+} from "../types/compaction.js";
 
 export class Archiver {
   constructor(private db: Database.Database) {}
@@ -25,15 +25,15 @@ export class Archiver {
   async archiveOldSessions(input: ArchiveOldSessionsInput): Promise<ArchiveOldSessionsOutput> {
     const {
       age_threshold_days = 90,
-      archive_path = '/var/lib/mcp-knowledge/archive',
+      archive_path = "/var/lib/mcp-knowledge/archive",
       exclude_high_priority = true,
       exclude_pinned = true,
-      compression = 'gzip',
+      compression = "gzip",
       keep_summaries = true,
       dry_run = true,
     } = input;
 
-    logger.info({ age_threshold_days, dry_run }, 'Starting session archival');
+    logger.info({ age_threshold_days, dry_run }, "Starting session archival");
 
     try {
       // Ensure archive directory exists
@@ -49,7 +49,7 @@ export class Archiver {
       const params: (number | string)[] = [age_threshold_days];
 
       if (exclude_pinned) {
-        query += ' AND COALESCE(s.pinned, 0) = 0';
+        query += " AND COALESCE(s.pinned, 0) = 0";
       }
 
       if (exclude_high_priority) {
@@ -83,7 +83,7 @@ export class Archiver {
         };
       }
 
-      logger.info({ sessions: oldSessions.length }, 'Found sessions to archive');
+      logger.info({ sessions: oldSessions.length }, "Found sessions to archive");
 
       const archiveFiles: string[] = [];
       let totalEntriesArchived = 0;
@@ -114,7 +114,7 @@ export class Archiver {
           entries: totalEntriesArchived,
           space_saved: totalSpaceSaved,
         },
-        'Session archival completed'
+        "Session archival completed"
       );
 
       return {
@@ -126,7 +126,7 @@ export class Archiver {
         archive_files: archiveFiles,
       };
     } catch (err: unknown) {
-      logger.error({ err }, 'Session archival failed');
+      logger.error({ err }, "Session archival failed");
       throw err;
     }
   }
@@ -148,16 +148,16 @@ export class Archiver {
   }> {
     try {
       // Get session data
-      const session = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId) as any;
+      const session = this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as any;
 
       if (!session) {
-        logger.warn({ sessionId }, 'Session not found');
+        logger.warn({ sessionId }, "Session not found");
         return { success: false, entries_archived: 0, space_saved: 0 };
       }
 
       // Get all entries
       const entries = this.db
-        .prepare('SELECT * FROM knowledge_entries WHERE session_id = ?')
+        .prepare("SELECT * FROM knowledge_entries WHERE session_id = ?")
         .all(sessionId) as any[];
 
       // Calculate original size
@@ -165,7 +165,7 @@ export class Archiver {
 
       // Build archive data
       const archiveData: ArchiveData = {
-        version: '1.0',
+        version: "1.0",
         archived_at: new Date().toISOString(),
         session,
         entries,
@@ -188,8 +188,9 @@ export class Archiver {
       }
 
       // Generate archive filename
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const extension = compression === 'gzip' ? 'json.gz' : compression === 'bzip2' ? 'json.bz2' : 'json';
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const extension =
+        compression === "gzip" ? "json.gz" : compression === "bzip2" ? "json.bz2" : "json";
       const archiveFile = join(archivePath, `session_${sessionId}_${timestamp}.${extension}`);
 
       // Write archive file
@@ -210,15 +211,17 @@ export class Archiver {
 
       if (keepSummaries) {
         // Only delete entries, keep session and summaries
-        this.db.prepare('DELETE FROM knowledge_entries WHERE session_id = ?').run(sessionId);
+        this.db.prepare("DELETE FROM knowledge_entries WHERE session_id = ?").run(sessionId);
 
         // Mark session as archived
         this.db
-          .prepare('UPDATE sessions SET tier = ?, metadata = json_set(metadata, \'$.archived\', 1) WHERE id = ?')
-          .run('cold', sessionId);
+          .prepare(
+            "UPDATE sessions SET tier = ?, metadata = json_set(metadata, '$.archived', 1) WHERE id = ?"
+          )
+          .run("cold", sessionId);
       } else {
         // Delete entire session (CASCADE will delete entries)
-        this.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+        this.db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
       }
 
       logger.info(
@@ -230,7 +233,7 @@ export class Archiver {
           compressed_size: compressedSize,
           ratio: archiveData.archive_metadata.compression_ratio.toFixed(2),
         },
-        'Session archived'
+        "Session archived"
       );
 
       return {
@@ -240,7 +243,7 @@ export class Archiver {
         space_saved: originalSize,
       };
     } catch (err: any) {
-      logger.error({ err, sessionId }, 'Failed to archive session');
+      logger.error({ err, sessionId }, "Failed to archive session");
       return { success: false, entries_archived: 0, space_saved: 0 };
     }
   }
@@ -255,17 +258,17 @@ export class Archiver {
   ): Promise<number> {
     const jsonContent = JSON.stringify(data, null, 2);
 
-    if (compression === 'none') {
-      await writeFile(filePath, jsonContent, 'utf-8');
+    if (compression === "none") {
+      await writeFile(filePath, jsonContent, "utf-8");
       return jsonContent.length;
     }
 
     // Create temporary uncompressed file
-    const tempFile = filePath + '.tmp';
-    await writeFile(tempFile, jsonContent, 'utf-8');
+    const tempFile = filePath + ".tmp";
+    await writeFile(tempFile, jsonContent, "utf-8");
 
     // Compress
-    if (compression === 'bzip2') {
+    if (compression === "bzip2") {
       throw new Error('bzip2 compression is not yet supported. Use "gzip" or "none" instead.');
     }
 
@@ -287,21 +290,25 @@ export class Archiver {
   /**
    * Restore archived session
    */
-  async restoreArchivedSession(input: RestoreArchivedSessionInput): Promise<RestoreArchivedSessionOutput> {
+  async restoreArchivedSession(
+    input: RestoreArchivedSessionInput
+  ): Promise<RestoreArchivedSessionOutput> {
     const {
       session_id,
-      restore_mode = 'full',
+      restore_mode = "full",
       archive_path,
       force = false,
-      restore_tier = 'warm',
+      restore_tier = "warm",
     } = input;
 
-    logger.info({ session_id, restore_mode }, 'Restoring archived session');
+    logger.info({ session_id, restore_mode }, "Restoring archived session");
 
     try {
       // Get archive metadata
       const archiveMeta = this.db
-        .prepare('SELECT * FROM archive_metadata WHERE session_id = ? ORDER BY archived_at DESC LIMIT 1')
+        .prepare(
+          "SELECT * FROM archive_metadata WHERE session_id = ? ORDER BY archived_at DESC LIMIT 1"
+        )
         .get(session_id) as any;
 
       if (!archiveMeta) {
@@ -325,7 +332,9 @@ export class Archiver {
       }
 
       // Check if session already exists
-      const existingSession = this.db.prepare('SELECT id FROM sessions WHERE id = ?').get(session_id);
+      const existingSession = this.db
+        .prepare("SELECT id FROM sessions WHERE id = ?")
+        .get(session_id);
 
       if (existingSession && !force) {
         return {
@@ -339,9 +348,9 @@ export class Archiver {
       // Read and decompress archive
       const archiveData = await this.readArchiveFile(archiveFile);
 
-      if (restore_mode === 'summary_only') {
+      if (restore_mode === "summary_only") {
         // Only restore summaries (if they exist in the archive)
-        logger.info({ session_id }, 'Restoring session with summaries only');
+        logger.info({ session_id }, "Restoring session with summaries only");
 
         // Session should already exist if we're doing summary_only
         // Just update the metadata to mark as restored
@@ -358,16 +367,18 @@ export class Archiver {
       // Full restore
       if (existingSession && force) {
         // Delete existing session
-        this.db.prepare('DELETE FROM sessions WHERE id = ?').run(session_id);
+        this.db.prepare("DELETE FROM sessions WHERE id = ?").run(session_id);
       }
 
       // Restore session
       const session = archiveData.session;
       this.db
-        .prepare(`
+        .prepare(
+          `
           INSERT INTO sessions (id, created_at, last_active, summary, entry_count, metadata, tier)
           VALUES (?, ?, ?, ?, ?, ?, ?)
-        `)
+        `
+        )
         .run(
           session.id,
           session.created_at,
@@ -406,7 +417,7 @@ export class Archiver {
           session_id,
           entries_restored: archiveData.entries.length,
         },
-        'Session restored successfully'
+        "Session restored successfully"
       );
 
       return {
@@ -415,7 +426,7 @@ export class Archiver {
         entries_restored: archiveData.entries.length,
       };
     } catch (err: any) {
-      logger.error({ err, session_id }, 'Failed to restore session');
+      logger.error({ err, session_id }, "Failed to restore session");
       return {
         success: false,
         session_id,
@@ -429,10 +440,10 @@ export class Archiver {
    * Read and decompress archive file
    */
   private async readArchiveFile(filePath: string): Promise<ArchiveData> {
-    const isCompressed = filePath.endsWith('.gz') || filePath.endsWith('.bz2');
+    const isCompressed = filePath.endsWith(".gz") || filePath.endsWith(".bz2");
 
     if (!isCompressed) {
-      const content = await readFile(filePath, 'utf-8');
+      const content = await readFile(filePath, "utf-8");
       return JSON.parse(content);
     }
 
@@ -442,12 +453,12 @@ export class Archiver {
       const input = createReadStream(filePath);
       const decompressor = createGunzip();
 
-      decompressor.on('data', chunk => chunks.push(chunk));
-      decompressor.on('end', () => {
-        const content = Buffer.concat(chunks).toString('utf-8');
+      decompressor.on("data", (chunk) => chunks.push(chunk));
+      decompressor.on("end", () => {
+        const content = Buffer.concat(chunks).toString("utf-8");
         resolve(JSON.parse(content));
       });
-      decompressor.on('error', reject);
+      decompressor.on("error", reject);
 
       input.pipe(decompressor);
     });
@@ -464,10 +475,12 @@ export class Archiver {
     compressed_size: number;
   }): Promise<void> {
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO archive_metadata (session_id, archive_file, entry_count, original_size, compressed_size, metadata)
         VALUES (?, ?, ?, ?, ?, '{}')
-      `)
+      `
+      )
       .run(
         input.session_id,
         input.archive_file,
@@ -482,24 +495,26 @@ export class Archiver {
    */
   private async updateArchiveRestore(sessionId: string): Promise<void> {
     this.db
-      .prepare(`
+      .prepare(
+        `
         UPDATE archive_metadata
         SET restore_count = restore_count + 1,
             last_restored = datetime('now')
         WHERE session_id = ?
-      `)
+      `
+      )
       .run(sessionId);
   }
 }
 
 // Helper to import Node.js fs/promises functions
 async function writeFile(path: string, data: string, encoding: BufferEncoding): Promise<void> {
-  const { writeFile: fsWriteFile } = await import('fs/promises');
+  const { writeFile: fsWriteFile } = await import("fs/promises");
   return fsWriteFile(path, data, encoding);
 }
 
 async function stat(path: string): Promise<{ size: number }> {
-  const { stat: fsStat } = await import('fs/promises');
+  const { stat: fsStat } = await import("fs/promises");
   const stats = await fsStat(path);
   return { size: stats.size };
 }

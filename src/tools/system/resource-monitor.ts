@@ -4,14 +4,14 @@
  */
 
 // @ts-ignore
-import * as si from 'systeminformation';
-import type { SystemResourceMonitorArgs, ToolResult } from '../../types/extended-tools.js';
+import * as si from "systeminformation";
+import type { SystemResourceMonitorArgs, ToolResult } from "../../types/extended-tools.js";
 
 export class SystemResourceMonitorTool {
   async execute(args: SystemResourceMonitorArgs): Promise<ToolResult> {
     const duration = args.duration_seconds || 60;
     const interval = args.interval_seconds || 5;
-    const resources = args.resources || ['cpu', 'memory', 'disk', 'network'];
+    const resources = args.resources || ["cpu", "memory", "disk", "network"];
 
     try {
       const samples = [];
@@ -20,22 +20,22 @@ export class SystemResourceMonitorTool {
       for (let i = 0; i < iterations; i++) {
         const sample: any = { timestamp: new Date().toISOString() };
 
-        if (resources.includes('cpu')) {
+        if (resources.includes("cpu")) {
           const cpu = await si.currentLoad();
           sample.cpu = Math.round(cpu.currentLoad);
         }
 
-        if (resources.includes('memory')) {
+        if (resources.includes("memory")) {
           const mem = await si.mem();
           sample.memory = Math.round((mem.used / mem.total) * 100);
         }
 
-        if (resources.includes('disk')) {
+        if (resources.includes("disk")) {
           const disk = await si.fsSize();
           sample.disk = disk[0] ? Math.round(disk[0].use) : 0;
         }
 
-        if (resources.includes('network')) {
+        if (resources.includes("network")) {
           const net = await si.networkStats();
           sample.network = { rx_sec: net[0]?.rx_sec || 0, tx_sec: net[0]?.tx_sec || 0 };
         }
@@ -43,7 +43,7 @@ export class SystemResourceMonitorTool {
         samples.push(sample);
 
         if (i < iterations - 1) {
-          await new Promise(resolve => setTimeout(resolve, interval * 1000));
+          await new Promise((resolve) => setTimeout(resolve, interval * 1000));
         }
       }
 

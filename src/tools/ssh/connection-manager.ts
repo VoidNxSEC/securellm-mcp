@@ -4,10 +4,10 @@
  */
 
 // @ts-ignore - ssh2 types are in @types/ssh2
-import { Client } from 'ssh2';
-import * as fs from 'fs/promises';
-import { validatePath } from '../../security/path-validator.js';
-import type { SSHConnectArgs, SSHConnectionResult, SSHConfig } from '../../types/extended-tools.js';
+import { Client } from "ssh2";
+import * as fs from "fs/promises";
+import { validatePath } from "../../security/path-validator.js";
+import type { SSHConnectArgs, SSHConnectionResult, SSHConfig } from "../../types/extended-tools.js";
 
 export interface Connection {
   id: string;
@@ -21,7 +21,7 @@ export interface Connection {
   created_at: Date;
   last_used: Date;
   error_count: number;
-  health_status: 'healthy' | 'degraded' | 'failed';
+  health_status: "healthy" | "degraded" | "failed";
   bytes_sent: number;
   bytes_received: number;
   commands_executed: number;
@@ -35,7 +35,7 @@ export interface ConnectionPoolConfig {
 
 export interface HealthStatus {
   connection_id: string;
-  status: 'healthy' | 'degraded' | 'failed';
+  status: "healthy" | "degraded" | "failed";
   latency_ms: number;
   uptime_seconds: number;
   last_check: Date;
@@ -55,14 +55,14 @@ export class SSHConnectionManager {
   private healthCheckInterval?: NodeJS.Timeout;
 
   constructor(
-    allowedHosts: string[] = ['localhost', '127.0.0.1'],
+    allowedHosts: string[] = ["localhost", "127.0.0.1"],
     config?: Partial<ConnectionPoolConfig>
   ) {
     this.allowedHosts = allowedHosts;
     this.config = {
       max_connections: config?.max_connections || 10,
       max_idle_time_ms: config?.max_idle_time_ms || 300000, // 5 min
-      health_check_interval_ms: config?.health_check_interval_ms || 60000
+      health_check_interval_ms: config?.health_check_interval_ms || 60000,
     };
     this.startHealthMonitoring();
   }
@@ -108,7 +108,7 @@ export class SSHConnectionManager {
       const connectPromise = new Promise<SSHConnectionResult>((resolve, reject) => {
         const onReady = () => {
           // Clean up error listener
-          client.removeListener('error', onError);
+          client.removeListener("error", onError);
 
           const conn: Connection = {
             id: connectionId,
@@ -121,10 +121,10 @@ export class SSHConnectionManager {
             created_at: new Date(),
             last_used: new Date(),
             error_count: 0,
-            health_status: 'healthy',
+            health_status: "healthy",
             bytes_sent: 0,
             bytes_received: 0,
-            commands_executed: 0
+            commands_executed: 0,
           };
           this.connections.set(connectionId, conn);
 
@@ -145,13 +145,13 @@ export class SSHConnectionManager {
 
         const onError = (err: any) => {
           // Clean up ready listener
-          client.removeListener('ready', onReady);
+          client.removeListener("ready", onReady);
           client.end();
           reject(new Error(`SSH connection failed: ${err.message}`));
         };
 
-        client.once('ready', onReady);
-        client.once('error', onError);
+        client.once("ready", onReady);
+        client.once("error", onError);
 
         // Configure connection
         const config: any = {
@@ -161,25 +161,27 @@ export class SSHConnectionManager {
           readyTimeout: 30000,
         };
 
-        if (auth_method === 'key' && key_path) {
+        if (auth_method === "key" && key_path) {
           // Validate key_path stays within home directory
-          const homeDir = process.env.HOME || '/root';
+          const homeDir = process.env.HOME || "/root";
           validatePath(key_path, homeDir);
-          fs.readFile(key_path).then(privateKey => {
-            config.privateKey = privateKey;
-            client.connect(config);
-          }).catch((err) => {
-            client.removeListener('ready', onReady);
-            client.removeListener('error', onError);
-            reject(err);
-          });
-        } else if (auth_method === 'password' && password) {
+          fs.readFile(key_path)
+            .then((privateKey) => {
+              config.privateKey = privateKey;
+              client.connect(config);
+            })
+            .catch((err) => {
+              client.removeListener("ready", onReady);
+              client.removeListener("error", onError);
+              reject(err);
+            });
+        } else if (auth_method === "password" && password) {
           config.password = password;
           client.connect(config);
         } else {
-          client.removeListener('ready', onReady);
-          client.removeListener('error', onError);
-          reject(new Error('Invalid authentication method or missing credentials'));
+          client.removeListener("ready", onReady);
+          client.removeListener("error", onError);
+          reject(new Error("Invalid authentication method or missing credentials"));
         }
       });
 
@@ -205,8 +207,8 @@ export class SSHConnectionManager {
     if (!/^\d{6}$/.test(mfaCode)) {
       return {
         success: false,
-        error: 'Invalid MFA code format',
-        timestamp: new Date().toISOString()
+        error: "Invalid MFA code format",
+        timestamp: new Date().toISOString(),
       };
     }
 
@@ -217,7 +219,7 @@ export class SSHConnectionManager {
       const connectPromise = new Promise<SSHConnectionResult>((resolve, reject) => {
         const onReady = () => {
           // Clean up error listener
-          client.removeListener('error', onError);
+          client.removeListener("error", onError);
 
           const conn: Connection = {
             id: connectionId,
@@ -230,10 +232,10 @@ export class SSHConnectionManager {
             created_at: new Date(),
             last_used: new Date(),
             error_count: 0,
-            health_status: 'healthy',
+            health_status: "healthy",
             bytes_sent: 0,
             bytes_received: 0,
-            commands_executed: 0
+            commands_executed: 0,
           };
           this.connections.set(connectionId, conn);
 
@@ -243,25 +245,28 @@ export class SSHConnectionManager {
               connection_id: connectionId,
               host: config.host,
               username: config.username,
-              connected: true
+              connected: true,
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           });
         };
 
         const onError = (err: any) => {
           // Clean up ready listener
-          client.removeListener('ready', onReady);
+          client.removeListener("ready", onReady);
           client.end();
           reject(err);
         };
 
-        client.on('keyboard-interactive', (name: any, instructions: any, lang: any, prompts: any, finish: any) => {
-          finish([mfaCode]);
-        });
+        client.on(
+          "keyboard-interactive",
+          (name: any, instructions: any, lang: any, prompts: any, finish: any) => {
+            finish([mfaCode]);
+          }
+        );
 
-        client.once('ready', onReady);
-        client.once('error', onError);
+        client.once("ready", onReady);
+        client.once("error", onError);
 
         client.connect({
           host: config.host,
@@ -285,7 +290,7 @@ export class SSHConnectionManager {
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -304,11 +309,11 @@ export class SSHConnectionManager {
 
   async getOrCreateConnection(args: SSHConnectArgs): Promise<Connection> {
     const key = this.generateConnectionKey(args);
-    
+
     // Check pool/existing connections
     // Note: This implementation treats 'pool' and 'connections' a bit synonymously for simplicity
     // Ideally, 'pool' would map keys to connection IDs or objects
-    
+
     let existing: Connection | undefined;
     for (const conn of this.connections.values()) {
       if (this.generateConnectionKey(conn.config) === key && conn.connected) {
@@ -325,12 +330,12 @@ export class SSHConnectionManager {
     // Create new connection
     const result = await this.connect(args);
     if (!result.success || !result.data) {
-      throw new Error(result.error || 'Failed to create connection');
+      throw new Error(result.error || "Failed to create connection");
     }
 
     const connection = this.connections.get(result.data.connection_id);
     if (!connection) {
-      throw new Error('Connection created but not found in map');
+      throw new Error("Connection created but not found in map");
     }
 
     return connection;
@@ -357,21 +362,21 @@ export class SSHConnectionManager {
     try {
       // Send keepalive packet (executing simple command like 'true' or 'echo')
       const start = Date.now();
-      // Using a simple exec to test responsiveness. 
+      // Using a simple exec to test responsiveness.
       // Ideally client.ping() should be used if available, ssh2 client doesn't expose it directly easily?
       // Actually ssh2 types might not show it but it might exist, or we rely on exec.
       // Let's use a lightweight exec.
-      
+
       await new Promise<void>((resolve, reject) => {
-        conn.client.exec('true', (err, stream) => {
+        conn.client.exec("true", (err, stream) => {
           if (err) return reject(err);
-          stream.on('close', () => resolve()).on('data', () => {});
+          stream.on("close", () => resolve()).on("data", () => {});
         });
       });
 
       const latency = Date.now() - start;
-      const status = latency < 1000 ? 'healthy' : 'degraded';
-      
+      const status = latency < 1000 ? "healthy" : "degraded";
+
       conn.health_status = status;
 
       return {
@@ -380,20 +385,20 @@ export class SSHConnectionManager {
         latency_ms: latency,
         uptime_seconds: (Date.now() - conn.created_at.getTime()) / 1000,
         last_check: new Date(),
-        issues: latency > 1000 ? ['High latency'] : [],
+        issues: latency > 1000 ? ["High latency"] : [],
         metrics: {
-          success_rate: 1 - (conn.error_count / Math.max(conn.commands_executed, 1)),
+          success_rate: 1 - conn.error_count / Math.max(conn.commands_executed, 1),
           avg_latency_ms: latency,
-          error_count: conn.error_count
-        }
+          error_count: conn.error_count,
+        },
       };
     } catch (error: any) {
-      conn.health_status = 'failed';
+      conn.health_status = "failed";
       conn.error_count++;
-      
+
       return {
         connection_id: conn.id,
-        status: 'failed',
+        status: "failed",
         latency_ms: 0,
         uptime_seconds: 0,
         last_check: new Date(),
@@ -401,8 +406,8 @@ export class SSHConnectionManager {
         metrics: {
           success_rate: 0,
           avg_latency_ms: 0,
-          error_count: conn.error_count
-        }
+          error_count: conn.error_count,
+        },
       };
     }
   }
@@ -422,20 +427,26 @@ export class SSHConnectionManager {
       clearInterval(this.healthCheckInterval);
     }
     for (const conn of this.connections.values()) {
-      if (conn.client && typeof conn.client.end === 'function') {
+      if (conn.client && typeof conn.client.end === "function") {
         conn.client.end();
       }
     }
     this.connections.clear();
   }
 
-  listConnections(): Array<{ id: string; host: string; username: string; uptime: number; health: string }> {
-    return Array.from(this.connections.values()).map(conn => ({
+  listConnections(): Array<{
+    id: string;
+    host: string;
+    username: string;
+    uptime: number;
+    health: string;
+  }> {
+    return Array.from(this.connections.values()).map((conn) => ({
       id: conn.id,
       host: conn.host,
       username: conn.username,
       uptime: Date.now() - conn.created.getTime(),
-      health: conn.health_status || 'unknown'
+      health: conn.health_status || "unknown",
     }));
   }
 }

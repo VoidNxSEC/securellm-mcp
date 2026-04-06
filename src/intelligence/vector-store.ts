@@ -1,22 +1,22 @@
-import Database from 'better-sqlite3';
-import * as path from 'path';
+import Database from "better-sqlite3";
+import * as path from "path";
 
-import { LRUCache } from 'lru-cache';
-import { logger } from '../utils/logger.js';
+import { LRUCache } from "lru-cache";
+import { logger } from "../utils/logger.js";
 
 /**
  * Vector Store with Intelligent Summarization
- * 
+ *
  * Uses llama.cpp for:
  * - Local embeddings (no API cost)
  * - Intelligent summarization (reduce token waste)
  * - Semantic search (fast retrieval)
- * 
+ *
  * Cost Efficiency:
  * - Embeddings locally = FREE
- * - Summarization locally = FREE  
+ * - Summarization locally = FREE
  * - Only send relevant summarized context to API = 80% token savings
- * 
+ *
  * Optimization:
  * - LRU Caching for Embeddings and Summaries (Memory speed)
  */
@@ -38,15 +38,15 @@ interface SearchResult {
 export class VectorStore {
   private db: Database.Database;
   private llamaCppServer: string;
-  
+
   // Caches for performance
   private embeddingCache: LRUCache<string, Float32Array>;
   private summaryCache: LRUCache<string, string>;
-  
-  constructor(dbPath: string, llamaCppServer: string = 'http://localhost:8081') {
+
+  constructor(dbPath: string, llamaCppServer: string = "http://localhost:8081") {
     this.db = new Database(dbPath);
     this.llamaCppServer = llamaCppServer;
-    
+
     // Initialize caches
     this.embeddingCache = new LRUCache({
       max: 1000, // Store up to 1000 embeddings in memory
@@ -101,8 +101,8 @@ export class VectorStore {
 
     try {
       const response = await fetch(`${this.llamaCppServer}/embedding`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: text }),
       });
 
@@ -112,13 +112,13 @@ export class VectorStore {
 
       const data = await response.json();
       const embedding = new Float32Array(data.embedding);
-      
+
       // Store in cache
       this.embeddingCache.set(cacheKey, embedding);
-      
+
       return embedding;
     } catch (error) {
-      logger.warn({ err: error }, '[VectorStore] Local embedding failed');
+      logger.warn({ err: error }, "[VectorStore] Local embedding failed");
       // Fallback: use simple hash-based embedding
       return this.fallbackEmbedding(text);
     }
@@ -136,7 +136,7 @@ export class VectorStore {
     }
     // Normalize
     const norm = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-    return embedding.map(val => val / (norm || 1)) as any;
+    return embedding.map((val) => val / (norm || 1)) as any;
   }
 
   /**
@@ -158,13 +158,13 @@ export class VectorStore {
 
     try {
       const response = await fetch(`${this.llamaCppServer}/completion`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: `Summarize the following in ${maxTokens} tokens, keeping technical details:\n\n${content}\n\nSummary:`,
           n_predict: maxTokens,
           temperature: 0.1,
-          stop: ['\n\n'],
+          stop: ["\n\n"],
         }),
       });
 
@@ -174,32 +174,28 @@ export class VectorStore {
 
       const data = await response.json();
       const summary = data.content.trim();
-      
+
       // Store in cache
       this.summaryCache.set(cacheKey, summary);
-      
+
       return summary;
     } catch (error) {
-      logger.warn({ err: error }, '[VectorStore] Local summarization failed');
+      logger.warn({ err: error }, "[VectorStore] Local summarization failed");
       // Fallback: simple truncation
-      return content.substring(0, maxTokens * 4) + '...';
+      return content.substring(0, maxTokens * 4) + "...";
     }
   }
 
   /**
    * Store document with automatic embedding and summarization
    */
-  async store(
-    id: string,
-    content: string,
-    metadata: Record<string, any> = {}
-  ): Promise<void> {
+  async store(id: string, content: string, metadata: Record<string, any> = {}): Promise<void> {
     // Generate summary locally (FREE)
     const summary = await this.summarize(content);
-    
+
     // Generate embedding locally (FREE)
     const embedding = await this.generateEmbedding(content);
-    
+
     // Store in database
     const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO vector_documents 
@@ -221,7 +217,7 @@ export class VectorStore {
       INSERT OR REPLACE INTO vector_fts (id, content, summary, metadata)
       VALUES (?, ?, ?, ?)
     `);
-    
+
     ftsStmt.run(id, content, summary, JSON.stringify(metadata));
   }
 
@@ -235,19 +231,23 @@ export class VectorStore {
   ): Promise<SearchResult[]> {
     // Generate query embedding locally (FREE)
     const queryEmbedding = await this.generateEmbedding(query);
-    
+
     // Get all documents
-    const stmt = this.db.prepare('SELECT * FROM vector_documents');
+    const stmt = this.db.prepare("SELECT * FROM vector_documents");
     const documents = stmt.all() as any[];
-    
+
     // Calculate similarities
     const results: SearchResult[] = [];
-    
+
     for (const doc of documents) {
       const embeddingBuf = doc.embedding as Buffer;
-      const embedding = new Float32Array(embeddingBuf.buffer, embeddingBuf.byteOffset, embeddingBuf.byteLength / Float32Array.BYTES_PER_ELEMENT);
+      const embedding = new Float32Array(
+        embeddingBuf.buffer,
+        embeddingBuf.byteOffset,
+        embeddingBuf.byteLength / Float32Array.BYTES_PER_ELEMENT
+      );
       const similarity = this.cosineSimilarity(queryEmbedding, embedding);
-      
+
       if (similarity >= threshold) {
         results.push({
           document: {
@@ -255,48 +255,43 @@ export class VectorStore {
             content: doc.content,
             summary: doc.summary,
             embedding,
-            metadata: JSON.parse(doc.metadata || '{}'),
+            metadata: JSON.parse(doc.metadata || "{}"),
             timestamp: doc.timestamp,
           },
           similarity,
         });
       }
     }
-    
+
     // Sort by similarity and limit
-    return results
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, limit);
+    return results.sort((a, b) => b.similarity - a.similarity).slice(0, limit);
   }
 
   /**
    * Hybrid search: semantic + full-text
    */
-  async hybridSearch(
-    query: string,
-    limit: number = 10
-  ): Promise<SearchResult[]> {
+  async hybridSearch(query: string, limit: number = 10): Promise<SearchResult[]> {
     // Semantic search
     const semanticResults = await this.search(query, limit);
-    
+
     // Full-text search
     const ftsStmt = this.db.prepare(`
       SELECT id FROM vector_fts 
       WHERE vector_fts MATCH ?
       LIMIT ?
     `);
-    
+
     const ftsResults = ftsStmt.all(query, limit) as any[];
-    const ftsIds = new Set(ftsResults.map(r => r.id));
-    
+    const ftsIds = new Set(ftsResults.map((r) => r.id));
+
     // Merge results, boosting FTS matches
-    const merged = semanticResults.map(result => ({
+    const merged = semanticResults.map((result) => ({
       ...result,
       similarity: ftsIds.has(result.document.id)
         ? result.similarity * 1.2 // Boost if also FTS match
         : result.similarity,
     }));
-    
+
     return merged.sort((a, b) => b.similarity - a.similarity).slice(0, limit);
   }
 
@@ -304,27 +299,24 @@ export class VectorStore {
    * Get summarized context for API call
    * Returns only relevant summaries to minimize token usage
    */
-  async getRelevantContext(
-    query: string,
-    maxTokens: number = 1000
-  ): Promise<string> {
+  async getRelevantContext(query: string, maxTokens: number = 1000): Promise<string> {
     const results = await this.hybridSearch(query, 5);
-    
-    let context = '';
+
+    let context = "";
     let tokens = 0;
-    
+
     for (const result of results) {
       const summaryTokens = result.document.summary.length / 4; // Rough estimate
-      
+
       if (tokens + summaryTokens > maxTokens) {
         break;
       }
-      
+
       context += `[Relevance: ${(result.similarity * 100).toFixed(0)}%]\n`;
-      context += result.document.summary + '\n\n';
+      context += result.document.summary + "\n\n";
       tokens += summaryTokens;
     }
-    
+
     return context.trim();
   }
 
@@ -333,17 +325,17 @@ export class VectorStore {
    */
   private cosineSimilarity(a: Float32Array, b: Float32Array): number {
     if (a.length !== b.length) return 0;
-    
+
     let dotProduct = 0;
     let normA = 0;
     let normB = 0;
-    
+
     for (let i = 0; i < a.length; i++) {
       dotProduct += a[i] * b[i];
       normA += a[i] * a[i];
       normB += b[i] * b[i];
     }
-    
+
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
@@ -351,12 +343,14 @@ export class VectorStore {
    * Get storage statistics
    */
   getStats() {
-    const countStmt = this.db.prepare('SELECT COUNT(*) as count FROM vector_documents');
+    const countStmt = this.db.prepare("SELECT COUNT(*) as count FROM vector_documents");
     const count = (countStmt.get() as any).count;
-    
-    const sizeStmt = this.db.prepare("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()");
+
+    const sizeStmt = this.db.prepare(
+      "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()"
+    );
     const size = (sizeStmt.get() as any).size;
-    
+
     return {
       documentCount: count,
       databaseSize: size,
@@ -378,17 +372,17 @@ export class VectorStore {
  */
 export class IntelligentContextBuilder {
   private vectorStore: VectorStore;
-  
+
   constructor(vectorStore: VectorStore) {
     this.vectorStore = vectorStore;
   }
 
   /**
    * Build context for API call with minimal tokens
-   * 
+   *
    * Traditional approach: Send ALL context (10,000+ tokens)
    * Intelligent approach: Send ONLY relevant summaries (500 tokens)
-   * 
+   *
    * Token savings: 95%!
    */
   async buildContext(
@@ -401,12 +395,12 @@ export class IntelligentContextBuilder {
   }> {
     const relevantContext = await this.vectorStore.getRelevantContext(query, maxTokens);
     const tokensUsed = relevantContext.length / 4; // Rough estimate
-    
+
     // Estimate tokens saved vs sending all documents
     const stats = this.vectorStore.getStats();
     const estimatedFullTokens = stats.documentCount * 2000; // Avg doc size
     const tokensSaved = estimatedFullTokens - tokensUsed;
-    
+
     return {
       context: relevantContext,
       tokensUsed: Math.round(tokensUsed),

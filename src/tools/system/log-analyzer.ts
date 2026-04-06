@@ -3,9 +3,9 @@
  * Analyze systemd journal logs with intelligent filtering
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import type { SystemLogAnalyzerArgs, ToolResult } from '../../types/extended-tools.js';
+import { exec } from "child_process";
+import { promisify } from "util";
+import type { SystemLogAnalyzerArgs, ToolResult } from "../../types/extended-tools.js";
 
 const execAsync = promisify(exec);
 
@@ -13,14 +13,14 @@ export class SystemLogAnalyzerTool {
   async execute(args: SystemLogAnalyzerArgs): Promise<ToolResult> {
     try {
       const service = args.service;
-      const since = args.since || '1 hour ago';
+      const since = args.since || "1 hour ago";
       const until = args.until;
       const level = args.level;
       const lines = args.lines || 100;
       const pattern = args.pattern;
 
       let cmd = `journalctl --no-pager -n ${lines}`;
-      
+
       if (service) cmd += ` -u ${service}`;
       if (since) cmd += ` --since "${since}"`;
       if (until) cmd += ` --until "${until}"`;
@@ -28,29 +28,32 @@ export class SystemLogAnalyzerTool {
       if (pattern) cmd += ` | grep -i "${pattern}"`;
 
       const { stdout, stderr } = await execAsync(cmd);
-      
+
       // Parse log entries
-      const logEntries = stdout.split('\n').filter(l => l.trim()).map(line => {
-        const match = line.match(/^(\w+\s+\d+\s+\d+:\d+:\d+)\s+(\S+)\s+(.+)$/);
-        if (match) {
-          return {
-            timestamp: match[1],
-            host: match[2],
-            message: match[3],
-          };
-        }
-        return { raw: line };
-      });
+      const logEntries = stdout
+        .split("\n")
+        .filter((l) => l.trim())
+        .map((line) => {
+          const match = line.match(/^(\w+\s+\d+\s+\d+:\d+:\d+)\s+(\S+)\s+(.+)$/);
+          if (match) {
+            return {
+              timestamp: match[1],
+              host: match[2],
+              message: match[3],
+            };
+          }
+          return { raw: line };
+        });
 
       // Analyze patterns
-      const errorCount = logEntries.filter(e => 
-        e.message?.toLowerCase().includes('error') || 
-        e.message?.toLowerCase().includes('failed')
+      const errorCount = logEntries.filter(
+        (e) =>
+          e.message?.toLowerCase().includes("error") || e.message?.toLowerCase().includes("failed")
       ).length;
 
-      const warningCount = logEntries.filter(e => 
-        e.message?.toLowerCase().includes('warning') ||
-        e.message?.toLowerCase().includes('warn')
+      const warningCount = logEntries.filter(
+        (e) =>
+          e.message?.toLowerCase().includes("warning") || e.message?.toLowerCase().includes("warn")
       ).length;
 
       return {

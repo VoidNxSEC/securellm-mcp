@@ -27,7 +27,7 @@ export interface SemanticCacheEntry {
 export interface SemanticCacheMetadata {
   tokensSaved?: number;
   originalLatency?: number;
-  cacheTier?: 'hot' | 'warm' | 'cold';
+  cacheTier?: "hot" | "warm" | "cold";
   tags?: string[];
   [key: string]: any;
 }
@@ -82,13 +82,13 @@ export interface CacheStoreOptions {
 }
 
 export const DEFAULT_SEMANTIC_CACHE_CONFIG: SemanticCacheConfig = {
-  enabled: process.env.ENABLE_SEMANTIC_CACHE !== 'false',
-  similarityThreshold: parseFloat(process.env.SEMANTIC_CACHE_THRESHOLD || '0.85'),
-  ttlSeconds: parseInt(process.env.SEMANTIC_CACHE_TTL || '3600', 10),
-  maxEntries: parseInt(process.env.SEMANTIC_CACHE_MAX_ENTRIES || '1000', 10),
-  minQueryLength: parseInt(process.env.SEMANTIC_CACHE_MIN_QUERY_LENGTH || '10', 10),
-  llamaCppUrl: process.env.LLAMA_CPP_URL || 'http://localhost:8081',
-  embeddingTimeout: parseInt(process.env.EMBEDDING_TIMEOUT || '5000', 10),
-  excludeTools: process.env.SEMANTIC_CACHE_EXCLUDE_TOOLS?.split(',').map(t => t.trim()) || [],
-  phantomUrl: process.env.PHANTOM_URL ?? 'http://localhost:8008',
+  enabled: process.env.ENABLE_SEMANTIC_CACHE !== "false",
+  similarityThreshold: parseFloat(process.env.SEMANTIC_CACHE_THRESHOLD || "0.85"),
+  ttlSeconds: parseInt(process.env.SEMANTIC_CACHE_TTL || "3600", 10),
+  maxEntries: parseInt(process.env.SEMANTIC_CACHE_MAX_ENTRIES || "1000", 10),
+  minQueryLength: parseInt(process.env.SEMANTIC_CACHE_MIN_QUERY_LENGTH || "10", 10),
+  llamaCppUrl: process.env.LLAMA_CPP_URL || "http://localhost:8081",
+  embeddingTimeout: parseInt(process.env.EMBEDDING_TIMEOUT || "5000", 10),
+  excludeTools: process.env.SEMANTIC_CACHE_EXCLUDE_TOOLS?.split(",").map((t) => t.trim()) || [],
+  phantomUrl: process.env.PHANTOM_URL ?? "http://localhost:8008",
 };

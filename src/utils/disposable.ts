@@ -6,7 +6,7 @@
  * themselves and get cleaned up in reverse order (LIFO).
  */
 
-import { logger } from './logger.js';
+import { logger } from "./logger.js";
 
 type CleanupFn = () => void | Promise<void>;
 
@@ -25,7 +25,7 @@ export class DisposableRegistry {
    */
   register(name: string, cleanup: CleanupFn): void {
     if (this.disposed) {
-      logger.warn({ name }, 'Attempted to register resource after disposal');
+      logger.warn({ name }, "Attempted to register resource after disposal");
       return;
     }
     this.resources.push({ name, cleanup });
@@ -35,7 +35,10 @@ export class DisposableRegistry {
    * Dispose all registered resources in reverse order.
    * Safe to call multiple times - subsequent calls are no-ops.
    */
-  async disposeAll(): Promise<{ succeeded: string[]; failed: Array<{ name: string; error: unknown }> }> {
+  async disposeAll(): Promise<{
+    succeeded: string[];
+    failed: Array<{ name: string; error: unknown }>;
+  }> {
     if (this.disposed) {
       return { succeeded: [], failed: [] };
     }
@@ -50,10 +53,10 @@ export class DisposableRegistry {
       try {
         await cleanup();
         succeeded.push(name);
-        logger.debug({ name }, 'Resource disposed');
+        logger.debug({ name }, "Resource disposed");
       } catch (error) {
         failed.push({ name, error });
-        logger.error({ name, err: error }, 'Failed to dispose resource');
+        logger.error({ name, err: error }, "Failed to dispose resource");
       }
     }
 
@@ -62,10 +65,10 @@ export class DisposableRegistry {
     if (failed.length > 0) {
       logger.warn(
         { succeeded: succeeded.length, failed: failed.length },
-        'Some resources failed to dispose'
+        "Some resources failed to dispose"
       );
     } else {
-      logger.info({ count: succeeded.length }, 'All resources disposed');
+      logger.info({ count: succeeded.length }, "All resources disposed");
     }
 
     return { succeeded, failed };

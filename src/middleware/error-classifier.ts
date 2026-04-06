@@ -1,6 +1,6 @@
 /**
  * Error Classification System - Phase 1.5
- * 
+ *
  * Intelligent error classification to distinguish between:
  * - Transient errors (should retry)
  * - Permanent errors (fail fast)
@@ -14,19 +14,19 @@
  */
 export enum ErrorCategory {
   /** Temporary errors that should be retried (network glitches, timeouts) */
-  TRANSIENT = 'transient',
-  
+  TRANSIENT = "transient",
+
   /** Rate limit errors (429, quota exceeded) */
-  RATE_LIMIT = 'rate_limit',
-  
+  RATE_LIMIT = "rate_limit",
+
   /** Permanent errors that should not be retried (400, 401, 403, 404) */
-  PERMANENT = 'permanent',
-  
+  PERMANENT = "permanent",
+
   /** Server errors that might be temporary (500, 502, 503) */
-  SERVER_ERROR = 'server_error',
-  
+  SERVER_ERROR = "server_error",
+
   /** Unknown errors (default to transient for safety) */
-  UNKNOWN = 'unknown',
+  UNKNOWN = "unknown",
 }
 
 export interface ErrorClassification {
@@ -47,7 +47,7 @@ export class ErrorClassifier {
       return {
         category: ErrorCategory.UNKNOWN,
         shouldRetry: false,
-        message: 'Unknown error (null/undefined)',
+        message: "Unknown error (null/undefined)",
       };
     }
 
@@ -60,7 +60,7 @@ export class ErrorClassifier {
       return {
         category: ErrorCategory.RATE_LIMIT,
         shouldRetry: true,
-        message: 'Rate limit exceeded',
+        message: "Rate limit exceeded",
         httpStatus: this.extractHttpStatus(err),
         errorCode: this.extractErrorCode(err),
       };
@@ -71,7 +71,7 @@ export class ErrorClassifier {
       return {
         category: ErrorCategory.TRANSIENT,
         shouldRetry: true,
-        message: 'Transient network error',
+        message: "Transient network error",
         httpStatus: this.extractHttpStatus(err),
       };
     }
@@ -81,7 +81,7 @@ export class ErrorClassifier {
       return {
         category: ErrorCategory.PERMANENT,
         shouldRetry: false,
-        message: 'Permanent error (invalid request)',
+        message: "Permanent error (invalid request)",
         httpStatus: this.extractHttpStatus(err),
         errorCode: this.extractErrorCode(err),
       };
@@ -92,7 +92,7 @@ export class ErrorClassifier {
       return {
         category: ErrorCategory.SERVER_ERROR,
         shouldRetry: true,
-        message: 'Server error (may be temporary)',
+        message: "Server error (may be temporary)",
         httpStatus: this.extractHttpStatus(err),
       };
     }
@@ -101,7 +101,7 @@ export class ErrorClassifier {
     return {
       category: ErrorCategory.UNKNOWN,
       shouldRetry: false,
-      message: err.message || 'Unknown error',
+      message: err.message || "Unknown error",
     };
   }
 
@@ -110,20 +110,20 @@ export class ErrorClassifier {
    */
   private static isRateLimitError(err: Error, message: string): boolean {
     const httpStatus = this.extractHttpStatus(err);
-    
+
     // HTTP 429 Too Many Requests
     if (httpStatus === 429) return true;
-    
+
     // Common rate limit keywords
     const rateLimitKeywords = [
-      'rate limit',
-      'too many requests',
-      'quota exceeded',
-      'throttled',
-      'rate_limit_exceeded',
+      "rate limit",
+      "too many requests",
+      "quota exceeded",
+      "throttled",
+      "rate_limit_exceeded",
     ];
-    
-    return rateLimitKeywords.some(keyword => message.includes(keyword));
+
+    return rateLimitKeywords.some((keyword) => message.includes(keyword));
   }
 
   /**
@@ -131,26 +131,26 @@ export class ErrorClassifier {
    */
   private static isTransientError(err: Error, message: string): boolean {
     const httpStatus = this.extractHttpStatus(err);
-    
+
     // Network/timeout errors
     const transientKeywords = [
-      'timeout',
-      'timed out',
-      'network',
-      'connection',
-      'econnrefused',
-      'enotfound',
-      'econnreset',
-      'etimedout',
-      'socket hang up',
+      "timeout",
+      "timed out",
+      "network",
+      "connection",
+      "econnrefused",
+      "enotfound",
+      "econnreset",
+      "etimedout",
+      "socket hang up",
     ];
-    
+
     // HTTP status codes that indicate transient issues
     const transientStatuses = [408, 504]; // Request Timeout, Gateway Timeout
-    
+
     return (
       transientStatuses.includes(httpStatus || 0) ||
-      transientKeywords.some(keyword => message.includes(keyword))
+      transientKeywords.some((keyword) => message.includes(keyword))
     );
   }
 
@@ -159,7 +159,7 @@ export class ErrorClassifier {
    */
   private static isPermanentError(err: Error, message: string): boolean {
     const httpStatus = this.extractHttpStatus(err);
-    
+
     // Client errors that should NOT be retried
     const permanentStatuses = [
       400, // Bad Request
@@ -169,21 +169,21 @@ export class ErrorClassifier {
       405, // Method Not Allowed
       422, // Unprocessable Entity
     ];
-    
+
     // Keywords indicating permanent errors
     const permanentKeywords = [
-      'invalid',
-      'unauthorized',
-      'forbidden',
-      'not found',
-      'bad request',
-      'authentication failed',
-      'permission denied',
+      "invalid",
+      "unauthorized",
+      "forbidden",
+      "not found",
+      "bad request",
+      "authentication failed",
+      "permission denied",
     ];
-    
+
     return (
       permanentStatuses.includes(httpStatus || 0) ||
-      permanentKeywords.some(keyword => message.includes(keyword))
+      permanentKeywords.some((keyword) => message.includes(keyword))
     );
   }
 
@@ -192,21 +192,21 @@ export class ErrorClassifier {
    */
   private static isServerError(err: Error, message: string): boolean {
     const httpStatus = this.extractHttpStatus(err);
-    
+
     // Server errors (5xx) - may be temporary
     if (httpStatus && httpStatus >= 500 && httpStatus < 600) {
       return true;
     }
-    
+
     // Common server error keywords
     const serverErrorKeywords = [
-      'internal server error',
-      'service unavailable',
-      'bad gateway',
-      'gateway timeout',
+      "internal server error",
+      "service unavailable",
+      "bad gateway",
+      "gateway timeout",
     ];
-    
-    return serverErrorKeywords.some(keyword => message.includes(keyword));
+
+    return serverErrorKeywords.some((keyword) => message.includes(keyword));
   }
 
   /**
@@ -214,10 +214,10 @@ export class ErrorClassifier {
    */
   private static extractHttpStatus(err: any): number | undefined {
     // Check common properties where status might be stored
-    if (typeof err.status === 'number') return err.status;
-    if (typeof err.statusCode === 'number') return err.statusCode;
-    if (typeof err.response?.status === 'number') return err.response.status;
-    
+    if (typeof err.status === "number") return err.status;
+    if (typeof err.statusCode === "number") return err.statusCode;
+    if (typeof err.response?.status === "number") return err.response.status;
+
     // Try to parse from message
     const match = err.message?.match(/\b(4\d{2}|5\d{2})\b/);
     return match ? parseInt(match[1], 10) : undefined;
@@ -227,9 +227,9 @@ export class ErrorClassifier {
    * Extract error code from error
    */
   private static extractErrorCode(err: any): string | undefined {
-    if (typeof err.code === 'string') return err.code;
-    if (typeof err.errorCode === 'string') return err.errorCode;
-    if (typeof err.response?.code === 'string') return err.response.code;
+    if (typeof err.code === "string") return err.code;
+    if (typeof err.errorCode === "string") return err.errorCode;
+    if (typeof err.response?.code === "string") return err.response.code;
     return undefined;
   }
 }

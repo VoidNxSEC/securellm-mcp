@@ -5,7 +5,8 @@ import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 export const knowledgeTools: ExtendedTool[] = [
   {
     name: "create_session",
-    description: "Create a new knowledge session to organize your work. Sessions help group related knowledge entries together.",
+    description:
+      "Create a new knowledge session to organize your work. Sessions help group related knowledge entries together.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -23,20 +24,22 @@ export const knowledgeTools: ExtendedTool[] = [
   },
   {
     name: "save_knowledge",
-    description: "Save important information to the knowledge base. This could be an insight, code snippet, decision, or reference that you want to remember.",
+    description:
+      "Save important information to the knowledge base. This could be an insight, code snippet, decision, or reference that you want to remember.",
     defer_loading: true,
     input_examples: [
       {
-        content: "The project uses flake.nix for package management with nixos-rebuild for system configuration",
+        content:
+          "The project uses flake.nix for package management with nixos-rebuild for system configuration",
         type: "insight",
         tags: ["nixos", "architecture"],
-        priority: "high"
+        priority: "high",
       },
       {
         content: "function processData(input) { return input.map(x => x * 2); }",
         type: "code",
-        tags: ["javascript", "data-processing"]
-      }
+        tags: ["javascript", "data-processing"],
+      },
     ],
     inputSchema: {
       type: "object",
@@ -74,7 +77,8 @@ export const knowledgeTools: ExtendedTool[] = [
   },
   {
     name: "search_knowledge",
-    description: "Search the knowledge base using full-text search. Finds relevant entries based on content and tags.",
+    description:
+      "Search the knowledge base using full-text search. Finds relevant entries based on content and tags.",
     defer_loading: true,
     allowed_callers: ["code_execution_20250825"],
     inputSchema: {
@@ -103,7 +107,8 @@ export const knowledgeTools: ExtendedTool[] = [
   },
   {
     name: "load_session",
-    description: "Load a previous knowledge session to restore context. Returns all entries from that session.",
+    description:
+      "Load a previous knowledge session to restore context. Returns all entries from that session.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -142,16 +147,16 @@ export const knowledgeTools: ExtendedTool[] = [
       type: "object",
       properties: {
         session_id: { type: "string" },
-        limit: { type: "number", default: 20 }
-      }
-    }
+        limit: { type: "number", default: 20 },
+      },
+    },
   },
   {
     name: "knowledge_maintenance",
     description: "Run maintenance tasks on knowledge database (VACUUM, ANALYZE)",
     inputSchema: {
       type: "object",
-      properties: {}
-    }
-  }
+      properties: {},
+    },
+  },
 ];

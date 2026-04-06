@@ -13,7 +13,7 @@
  *   POST /vectors/search — query params: ?query=...&top_k=N
  */
 
-import { logger } from './logger.js';
+import { logger } from "./logger.js";
 
 export interface PhantomSearchResult {
   text: string;
@@ -28,10 +28,10 @@ export class PhantomClient {
   private readonly timeoutMs: number;
 
   constructor(
-    baseUrl: string = process.env.PHANTOM_URL ?? 'http://localhost:8008',
-    timeoutMs = 5_000,
+    baseUrl: string = process.env.PHANTOM_URL ?? "http://localhost:8008",
+    timeoutMs = 5_000
   ) {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.baseUrl = baseUrl.replace(/\/$/, "");
     this.timeoutMs = timeoutMs;
   }
 
@@ -46,11 +46,11 @@ export class PhantomClient {
   async indexQuery(entryId: string, queryText: string): Promise<void> {
     try {
       const formData = new FormData();
-      const blob = new Blob([queryText], { type: 'text/plain; charset=utf-8' });
-      formData.append('file', blob, `cache_${entryId}.txt`);
+      const blob = new Blob([queryText], { type: "text/plain; charset=utf-8" });
+      formData.append("file", blob, `cache_${entryId}.txt`);
 
       const response = await fetch(`${this.baseUrl}/vectors/index`, {
-        method: 'POST',
+        method: "POST",
         body: formData,
         signal: AbortSignal.timeout(this.timeoutMs),
       });
@@ -58,13 +58,13 @@ export class PhantomClient {
       if (!response.ok) {
         logger.warn(
           { entryId, status: response.status, statusText: response.statusText },
-          '[PHANTOM] Failed to index cache entry',
+          "[PHANTOM] Failed to index cache entry"
         );
       } else {
-        logger.debug({ entryId }, '[PHANTOM] Cache entry indexed');
+        logger.debug({ entryId }, "[PHANTOM] Cache entry indexed");
       }
     } catch (error) {
-      logger.warn({ err: error, entryId }, '[PHANTOM] indexQuery error (non-fatal)');
+      logger.warn({ err: error, entryId }, "[PHANTOM] indexQuery error (non-fatal)");
     }
   }
 
@@ -79,27 +79,29 @@ export class PhantomClient {
    */
   async findSimilar(queryText: string, topK = 5): Promise<PhantomSearchResult[]> {
     const url = new URL(`${this.baseUrl}/vectors/search`);
-    url.searchParams.set('query', queryText);
-    url.searchParams.set('top_k', String(topK));
+    url.searchParams.set("query", queryText);
+    url.searchParams.set("top_k", String(topK));
 
     const response = await fetch(url.toString(), {
-      method: 'POST',
+      method: "POST",
       signal: AbortSignal.timeout(this.timeoutMs),
     });
 
     if (!response.ok) {
-      throw new Error(`[PHANTOM] /vectors/search returned ${response.status}: ${response.statusText}`);
+      throw new Error(
+        `[PHANTOM] /vectors/search returned ${response.status}: ${response.statusText}`
+      );
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       query: string;
       results: Array<{ text: string; score: number; metadata: Record<string, unknown> }>;
       total_results: number;
     };
 
-    return (data.results ?? []).map(r => {
+    return (data.results ?? []).map((r) => {
       // Source filename format: cache_<uuid>.txt
-      const source = String(r.metadata?.source ?? '');
+      const source = String(r.metadata?.source ?? "");
       const match = /^cache_([a-f0-9-]+)\.txt$/i.exec(source);
       return {
         text: r.text,

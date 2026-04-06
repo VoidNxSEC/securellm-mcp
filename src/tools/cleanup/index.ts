@@ -3,12 +3,12 @@
  * Intelligent cleanup with complex criteria
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as crypto from 'crypto';
-import { validatePaths } from '../../security/path-validator.js';
+import { exec } from "child_process";
+import { promisify } from "util";
+import * as fs from "fs/promises";
+import * as path from "path";
+import * as crypto from "crypto";
+import { validatePaths } from "../../security/path-validator.js";
 import type {
   CleanupAnalyzeWasteArgs,
   CleanupExecuteSmartArgs,
@@ -16,7 +16,7 @@ import type {
   CleanupLogRotationArgs,
   ToolResult,
   CleanupAnalysisResult,
-} from '../../types/extended-tools.js';
+} from "../../types/extended-tools.js";
 
 const execAsync = promisify(exec);
 
@@ -29,12 +29,12 @@ export class CleanupAnalyzeWasteTool {
     const {
       age_days = 30,
       min_size_mb = 10,
-      file_patterns = ['*.log', '*.tmp', '*.cache'],
-      exclude_patterns = []
+      file_patterns = ["*.log", "*.tmp", "*.cache"],
+      exclude_patterns = [],
     } = criteria;
 
     try {
-      validatePaths(paths, '/');
+      validatePaths(paths, "/");
 
       const recommendations: Array<{
         path: string;
@@ -48,7 +48,7 @@ export class CleanupAnalyzeWasteTool {
 
       for (const basePath of paths) {
         const files = await this.scanDirectory(basePath, file_patterns, exclude_patterns);
-        
+
         for (const file of files) {
           try {
             const stats = await fs.stat(file);
@@ -59,20 +59,20 @@ export class CleanupAnalyzeWasteTool {
 
             // Analyze if file is waste
             let isWaste = false;
-            let reason = '';
+            let reason = "";
             let confidence = 0;
 
             if (ageDays > age_days && sizeMB > min_size_mb) {
               isWaste = true;
               reason = `Old file (${Math.floor(ageDays)} days) and large (${sizeMB.toFixed(2)} MB)`;
               confidence = 0.9;
-            } else if (file.includes('.tmp') || file.includes('.cache')) {
+            } else if (file.includes(".tmp") || file.includes(".cache")) {
               isWaste = true;
-              reason = 'Temporary/cache file';
+              reason = "Temporary/cache file";
               confidence = 0.8;
             } else if (file.match(/\.log\.\d+$/)) {
               isWaste = true;
-              reason = 'Rotated log file';
+              reason = "Rotated log file";
               confidence = 0.7;
             }
 
@@ -104,7 +104,10 @@ export class CleanupAnalyzeWasteTool {
           files_analyzed: filesAnalyzed,
           recommendations: recommendations.slice(0, 100), // Limit to top 100
         },
-        warnings: totalWasteMB > 1000 ? [`Large amount of waste detected: ${totalWasteMB.toFixed(2)} MB`] : undefined,
+        warnings:
+          totalWasteMB > 1000
+            ? [`Large amount of waste detected: ${totalWasteMB.toFixed(2)} MB`]
+            : undefined,
         timestamp: new Date().toISOString(),
       };
     } catch (error: any) {
@@ -116,25 +119,29 @@ export class CleanupAnalyzeWasteTool {
     }
   }
 
-  private async scanDirectory(basePath: string, patterns: string[], excludePatterns: string[]): Promise<string[]> {
+  private async scanDirectory(
+    basePath: string,
+    patterns: string[],
+    excludePatterns: string[]
+  ): Promise<string[]> {
     const files: string[] = [];
-    
+
     try {
       const entries = await fs.readdir(basePath, { withFileTypes: true });
-      
+
       for (const entry of entries) {
         const fullPath = path.join(basePath, entry.name);
-        
+
         // Check exclude patterns
-        if (excludePatterns.some(p => fullPath.includes(p))) {
+        if (excludePatterns.some((p) => fullPath.includes(p))) {
           continue;
         }
 
         if (entry.isDirectory()) {
-          files.push(...await this.scanDirectory(fullPath, patterns, excludePatterns));
+          files.push(...(await this.scanDirectory(fullPath, patterns, excludePatterns)));
         } else if (entry.isFile()) {
           // Check if matches pattern
-          if (patterns.some(p => this.matchPattern(entry.name, p))) {
+          if (patterns.some((p) => this.matchPattern(entry.name, p))) {
             files.push(fullPath);
           }
         }
@@ -149,10 +156,10 @@ export class CleanupAnalyzeWasteTool {
   private matchPattern(filename: string, pattern: string): boolean {
     // Escape regex metacharacters first, then convert glob wildcards
     const escaped = pattern
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-      .replace(/\*/g, '.*')
-      .replace(/\?/g, '.');
-    const regex = new RegExp('^' + escaped + '$');
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, ".*")
+      .replace(/\?/g, ".");
+    const regex = new RegExp("^" + escaped + "$");
     return regex.test(filename);
   }
 }
@@ -170,11 +177,11 @@ export class CleanupExecuteSmartTool {
       data: {
         analysis_id,
         dry_run,
-        files_deleted: dry_run ? 0 : 'N/A',
+        files_deleted: dry_run ? 0 : "N/A",
         space_freed_mb: 0,
-        message: dry_run ? 'Dry run - no files deleted' : 'Cleanup executed',
+        message: dry_run ? "Dry run - no files deleted" : "Cleanup executed",
       },
-      warnings: ['Smart cleanup requires stored analysis - simplified implementation'],
+      warnings: ["Smart cleanup requires stored analysis - simplified implementation"],
       timestamp: new Date().toISOString(),
     };
   }
@@ -185,15 +192,20 @@ export class CleanupExecuteSmartTool {
  */
 export class CleanupDuplicateResolverTool {
   async execute(args: CleanupDuplicateResolverArgs): Promise<ToolResult> {
-    const { paths, strategy, hash_algorithm = 'sha256', min_size_mb = 1 } = args;
+    const { paths, strategy, hash_algorithm = "sha256", min_size_mb = 1 } = args;
 
     try {
-      validatePaths(paths, '/');
+      validatePaths(paths, "/");
       const fileHashes = new Map<string, string[]>(); // hash -> [paths]
       let filesScanned = 0;
 
       for (const basePath of paths) {
-        await this.scanForDuplicates(basePath, fileHashes, hash_algorithm, min_size_mb * 1024 * 1024);
+        await this.scanForDuplicates(
+          basePath,
+          fileHashes,
+          hash_algorithm,
+          min_size_mb * 1024 * 1024
+        );
         filesScanned++;
       }
 
@@ -201,9 +213,9 @@ export class CleanupDuplicateResolverTool {
         .filter(([hash, files]) => files.length > 1)
         .map(([hash, files]) => ({ hash, files, count: files.length }));
 
-      let resolution: any = { message: 'Duplicates found', groups: duplicateGroups.length };
+      let resolution: any = { message: "Duplicates found", groups: duplicateGroups.length };
 
-      if (strategy !== 'interactive' && duplicateGroups.length > 0) {
+      if (strategy !== "interactive" && duplicateGroups.length > 0) {
         resolution = await this.resolveDuplicates(duplicateGroups, strategy);
       }
 
@@ -243,7 +255,7 @@ export class CleanupDuplicateResolverTool {
           await this.scanForDuplicates(fullPath, fileHashes, algorithm, minSize);
         } else if (entry.isFile()) {
           const stats = await fs.stat(fullPath);
-          
+
           if (stats.size >= minSize) {
             const hash = await this.hashFile(fullPath, algorithm);
             const existing = fileHashes.get(hash) || [];
@@ -259,7 +271,7 @@ export class CleanupDuplicateResolverTool {
 
   private async hashFile(filePath: string, algorithm: string): Promise<string> {
     const content = await fs.readFile(filePath);
-    return crypto.createHash(algorithm).update(content).digest('hex');
+    return crypto.createHash(algorithm).update(content).digest("hex");
   }
 
   private async resolveDuplicates(groups: any[], strategy: string): Promise<any> {
@@ -276,7 +288,7 @@ export class CleanupDuplicateResolverTool {
       strategy,
       files_kept: keptFiles,
       files_marked_for_removal: removedFiles,
-      message: 'Dry run - no files actually removed',
+      message: "Dry run - no files actually removed",
     };
   }
 
@@ -289,12 +301,16 @@ export class CleanupDuplicateResolverTool {
     );
 
     switch (strategy) {
-      case 'keep_newest':
-        return filesWithStats.sort((a, b) => b.stats.mtime.getTime() - a.stats.mtime.getTime()).map(f => f.path);
-      case 'keep_oldest':
-        return filesWithStats.sort((a, b) => a.stats.mtime.getTime() - b.stats.mtime.getTime()).map(f => f.path);
-      case 'keep_largest':
-        return filesWithStats.sort((a, b) => b.stats.size - a.stats.size).map(f => f.path);
+      case "keep_newest":
+        return filesWithStats
+          .sort((a, b) => b.stats.mtime.getTime() - a.stats.mtime.getTime())
+          .map((f) => f.path);
+      case "keep_oldest":
+        return filesWithStats
+          .sort((a, b) => a.stats.mtime.getTime() - b.stats.mtime.getTime())
+          .map((f) => f.path);
+      case "keep_largest":
+        return filesWithStats.sort((a, b) => b.stats.size - a.stats.size).map((f) => f.path);
       default:
         return files;
     }
@@ -306,7 +322,13 @@ export class CleanupDuplicateResolverTool {
  */
 export class CleanupLogRotationTool {
   async execute(args: CleanupLogRotationArgs): Promise<ToolResult> {
-    const { log_paths, max_size_mb = 100, max_age_days = 30, compress = true, keep_files = 5 } = args;
+    const {
+      log_paths,
+      max_size_mb = 100,
+      max_age_days = 30,
+      compress = true,
+      keep_files = 5,
+    } = args;
 
     try {
       const results = [];
@@ -317,18 +339,18 @@ export class CleanupLogRotationTool {
           const sizeMB = stats.size / (1024 * 1024);
           const ageDays = (Date.now() - stats.mtime.getTime()) / (1000 * 60 * 60 * 24);
 
-          let action = 'no_action';
-          let reason = '';
+          let action = "no_action";
+          let reason = "";
 
           if (sizeMB > max_size_mb) {
-            action = 'rotate';
+            action = "rotate";
             reason = `File exceeds ${max_size_mb}MB (${sizeMB.toFixed(2)}MB)`;
-            
+
             if (compress) {
               await this.rotateAndCompress(logPath, keep_files);
             }
           } else if (ageDays > max_age_days) {
-            action = 'archive';
+            action = "archive";
             reason = `File older than ${max_age_days} days`;
           }
 
@@ -351,8 +373,8 @@ export class CleanupLogRotationTool {
         success: true,
         data: {
           logs_processed: results.length,
-          logs_rotated: results.filter(r => r.action === 'rotate').length,
-          logs_archived: results.filter(r => r.action === 'archive').length,
+          logs_rotated: results.filter((r) => r.action === "rotate").length,
+          logs_archived: results.filter((r) => r.action === "archive").length,
           results,
         },
         timestamp: new Date().toISOString(),
@@ -369,12 +391,12 @@ export class CleanupLogRotationTool {
   private async rotateAndCompress(logPath: string, keepFiles: number): Promise<void> {
     const dir = path.dirname(logPath);
     const base = path.basename(logPath);
-    
+
     // Rotate existing files
     for (let i = keepFiles - 1; i >= 1; i--) {
       const oldFile = path.join(dir, `${base}.${i}.gz`);
       const newFile = path.join(dir, `${base}.${i + 1}.gz`);
-      
+
       try {
         await fs.rename(oldFile, newFile);
       } catch {
@@ -383,10 +405,12 @@ export class CleanupLogRotationTool {
     }
 
     // Compress current log (use quoted paths to prevent injection)
-    const { stdout } = await execAsync(`gzip -c "${logPath.replace(/"/g, '\\"')}" > "${logPath.replace(/"/g, '\\"')}".1.gz`);
-    
+    const { stdout } = await execAsync(
+      `gzip -c "${logPath.replace(/"/g, '\\"')}" > "${logPath.replace(/"/g, '\\"')}".1.gz`
+    );
+
     // Truncate original log
-    await fs.writeFile(logPath, '');
+    await fs.writeFile(logPath, "");
   }
 }
 
@@ -403,8 +427,16 @@ export const cleanupAnalyzeWasteSchema = {
         properties: {
           age_days: { type: "number", description: "Min age in days (default: 30)" },
           min_size_mb: { type: "number", description: "Min size in MB (default: 10)" },
-          file_patterns: { type: "array", items: { type: "string" }, description: "File patterns to match" },
-          exclude_patterns: { type: "array", items: { type: "string" }, description: "Patterns to exclude" },
+          file_patterns: {
+            type: "array",
+            items: { type: "string" },
+            description: "File patterns to match",
+          },
+          exclude_patterns: {
+            type: "array",
+            items: { type: "string" },
+            description: "Patterns to exclude",
+          },
         },
       },
     },
@@ -434,7 +466,10 @@ export const cleanupDuplicateResolverSchema = {
     type: "object",
     properties: {
       paths: { type: "array", items: { type: "string" }, description: "Directories to scan" },
-      strategy: { type: "string", enum: ["keep_newest", "keep_largest", "keep_oldest", "interactive"] },
+      strategy: {
+        type: "string",
+        enum: ["keep_newest", "keep_largest", "keep_oldest", "interactive"],
+      },
       hash_algorithm: { type: "string", enum: ["md5", "sha256"], description: "Default: sha256" },
       min_size_mb: { type: "number", description: "Min file size to check (default: 1 MB)" },
     },

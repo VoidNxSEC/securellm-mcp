@@ -1,6 +1,6 @@
 /**
  * Context Inference Types
- * 
+ *
  * Types for analyzing user input and project state to provide
  * environmental awareness and intelligent context enrichment.
  */
@@ -8,29 +8,29 @@
 /**
  * User input intent classification
  */
-export type Intent = 
-  | 'query'           // Question or information request
-  | 'command'         // Action to execute
-  | 'edit'            // Code modification
-  | 'create'          // New file/project creation
-  | 'debug'           // Problem investigation
-  | 'refactor'        // Code improvement
-  | 'test'            // Testing operations
-  | 'build'           // Build/compile operations
-  | 'deploy'          // Deployment operations
-  | 'unknown';        // Unclear intent
+export type Intent =
+  | "query" // Question or information request
+  | "command" // Action to execute
+  | "edit" // Code modification
+  | "create" // New file/project creation
+  | "debug" // Problem investigation
+  | "refactor" // Code improvement
+  | "test" // Testing operations
+  | "build" // Build/compile operations
+  | "deploy" // Deployment operations
+  | "unknown"; // Unclear intent
 
 /**
  * Confidence level for classifications
  */
-export type Confidence = 'high' | 'medium' | 'low';
+export type Confidence = "high" | "medium" | "low";
 
 /**
  * Entity extracted from input
  */
 export interface Entity {
   /** Entity type */
-  type: 'file' | 'function' | 'module' | 'variable' | 'error' | 'package' | 'command';
+  type: "file" | "function" | "module" | "variable" | "error" | "package" | "command";
   /** Entity value/name */
   value: string;
   /** Position in input text */
@@ -128,7 +128,7 @@ export interface Pattern {
   /** Pattern ID */
   id: string;
   /** Pattern type */
-  type: 'workflow' | 'command_sequence' | 'error_recovery' | 'refactor';
+  type: "workflow" | "command_sequence" | "error_recovery" | "refactor";
   /** Pattern description */
   description: string;
   /** Frequency of occurrence */

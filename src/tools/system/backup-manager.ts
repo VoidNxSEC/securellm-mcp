@@ -3,18 +3,18 @@
  * Manage system backups (simplified implementation)
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import type { SystemBackupManagerArgs, ToolResult } from '../../types/extended-tools.js';
+import { exec } from "child_process";
+import { promisify } from "util";
+import * as fs from "fs/promises";
+import * as path from "path";
+import type { SystemBackupManagerArgs, ToolResult } from "../../types/extended-tools.js";
 
 const execAsync = promisify(exec);
 
 export class SystemBackupManagerTool {
   private backupRoot: string;
 
-  constructor(backupRoot: string = '/var/backups/mcp') {
+  constructor(backupRoot: string = "/var/backups/mcp") {
     this.backupRoot = backupRoot;
   }
 
@@ -23,13 +23,13 @@ export class SystemBackupManagerTool {
 
     try {
       switch (action) {
-        case 'create':
+        case "create":
           return await this.createBackup(paths || [], destination);
-        case 'list':
+        case "list":
           return await this.listBackups();
-        case 'restore':
+        case "restore":
           return await this.restoreBackup(backup_id!);
-        case 'verify':
+        case "verify":
           return await this.verifyBackup(backup_id!);
         default:
           throw new Error(`Unknown action: ${action}`);
@@ -52,10 +52,12 @@ export class SystemBackupManagerTool {
     const results = [];
     for (const srcPath of paths) {
       try {
-        const { stdout } = await execAsync(`tar -czf ${backupPath}/${path.basename(srcPath)}.tar.gz ${srcPath}`);
-        results.push({ path: srcPath, status: 'success' });
+        const { stdout } = await execAsync(
+          `tar -czf ${backupPath}/${path.basename(srcPath)}.tar.gz ${srcPath}`
+        );
+        results.push({ path: srcPath, status: "success" });
       } catch (error: any) {
-        results.push({ path: srcPath, status: 'failed', error: error.message });
+        results.push({ path: srcPath, status: "failed", error: error.message });
       }
     }
 
@@ -64,7 +66,7 @@ export class SystemBackupManagerTool {
       data: {
         backup_id: backupId,
         backup_path: backupPath,
-        files_backed_up: results.filter(r => r.status === 'success').length,
+        files_backed_up: results.filter((r) => r.status === "success").length,
         total_files: results.length,
         results,
       },
@@ -113,20 +115,20 @@ export class SystemBackupManagerTool {
       success: true,
       data: {
         backup_id: backupId,
-        message: 'Restore functionality not fully implemented - stub only',
+        message: "Restore functionality not fully implemented - stub only",
       },
-      warnings: ['This is a simplified implementation'],
+      warnings: ["This is a simplified implementation"],
       timestamp: new Date().toISOString(),
     };
   }
 
   private async verifyBackup(backupId: string): Promise<ToolResult> {
     const backupPath = path.join(this.backupRoot, backupId);
-    
+
     try {
       await fs.access(backupPath);
       const stats = await fs.stat(backupPath);
-      
+
       return {
         success: true,
         data: {

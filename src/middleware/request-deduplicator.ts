@@ -1,28 +1,28 @@
-import crypto from 'crypto';
-import { logger } from '../utils/logger.js';
+import crypto from "crypto";
+import { logger } from "../utils/logger.js";
 
 export function stableStringify(value: unknown): string {
   if (value === null || value === undefined) return String(value);
-  if (typeof value !== 'object') return JSON.stringify(value);
+  if (typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) {
-    return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+    return `[${value.map((v) => stableStringify(v)).join(",")}]`;
   }
 
   const obj = value as Record<string, unknown>;
   const keys = Object.keys(obj).sort();
   const parts = keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`);
-  return `{${parts.join(',')}}`;
+  return `{${parts.join(",")}}`;
 }
 
 /**
  * Request Deduplication System
- * 
+ *
  * Prevents duplicate API calls by:
  * 1. Hashing request content to create unique key
  * 2. Checking if identical request is already in-flight
  * 3. Returning existing promise if duplicate found
  * 4. Clearing cache when request completes
- * 
+ *
  * Cost Savings: Eliminates ~30-40% of duplicate requests
  */
 
@@ -51,7 +51,7 @@ export class RequestDeduplicator {
         try {
           this.cleanupStale(this.staleTimeoutMs);
         } catch (error) {
-          logger.error({ err: error }, 'Request deduplicator stale cleanup failed');
+          logger.error({ err: error }, "Request deduplicator stale cleanup failed");
         }
       }, cleanupEveryMs);
       this.cleanupInterval.unref();
@@ -66,18 +66,14 @@ export class RequestDeduplicator {
       provider,
       data: requestData,
     });
-    return crypto.createHash('sha256').update(content).digest('hex');
+    return crypto.createHash("sha256").update(content).digest("hex");
   }
 
   /**
    * Execute request with deduplication
    * Returns existing promise if identical request is in-flight
    */
-  async deduplicate<T>(
-    provider: string,
-    requestData: any,
-    fn: () => Promise<T>
-  ): Promise<T> {
+  async deduplicate<T>(provider: string, requestData: any, fn: () => Promise<T>): Promise<T> {
     this.stats.total++;
 
     // Generate unique key for this request
@@ -94,7 +90,7 @@ export class RequestDeduplicator {
           total: this.stats.total,
           inFlightCount: this.inFlight.size,
         },
-        'Request deduplicated (in-flight cache hit)'
+        "Request deduplicated (in-flight cache hit)"
       );
       return existing.promise as Promise<T>;
     }
@@ -120,9 +116,10 @@ export class RequestDeduplicator {
    * Get deduplication statistics
    */
   getStats() {
-    const savingsPercent = this.stats.total > 0
-      ? ((this.stats.deduplicated / this.stats.total) * 100).toFixed(1)
-      : '0.0';
+    const savingsPercent =
+      this.stats.total > 0
+        ? ((this.stats.deduplicated / this.stats.total) * 100).toFixed(1)
+        : "0.0";
 
     return {
       ...this.stats,
@@ -158,7 +155,7 @@ export class RequestDeduplicator {
       }
     }
 
-    stale.forEach(key => this.inFlight.delete(key));
+    stale.forEach((key) => this.inFlight.delete(key));
 
     if (stale.length > 0) {
       logger.info(
@@ -167,7 +164,7 @@ export class RequestDeduplicator {
           timeoutMs,
           inFlightCount: this.inFlight.size,
         },
-        'Cleaned up stale in-flight requests'
+        "Cleaned up stale in-flight requests"
       );
     }
   }

@@ -1,21 +1,21 @@
 /**
  * Nix Development Tools Types
- * 
+ *
  * Types for Nix flake operations, build analysis, and package management.
  */
 
 /**
  * Flake operation type
  */
-export type FlakeOperation = 
-  | 'build'
-  | 'check'
-  | 'update'
-  | 'show'
-  | 'eval'
-  | 'develop'
-  | 'run'
-  | 'search';
+export type FlakeOperation =
+  | "build"
+  | "check"
+  | "update"
+  | "show"
+  | "eval"
+  | "develop"
+  | "run"
+  | "search";
 
 /**
  * Flake build result

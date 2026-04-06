@@ -1,7 +1,7 @@
-import { execa } from 'execa';
-import * as path from 'path';
-import { logger } from '../utils/logger.js';
-import { validatePath } from './path-validator.js';
+import { execa } from "execa";
+import * as path from "path";
+import { logger } from "../utils/logger.js";
+import { validatePath } from "./path-validator.js";
 
 export interface SandboxOptions {
   packages?: string[]; // List of packages e.g. ['git', 'rustc']
@@ -23,12 +23,11 @@ export interface SandboxResult {
 
 /**
  * Sandbox Manager
- * 
+ *
  * Provides ephemeral isolation for executing commands.
  * Uses 'nix shell' to create temporary environments with restricted dependencies.
  */
 export class SandboxManager {
-  
   /**
    * Execute a command inside a Nix Sandbox
    */
@@ -39,43 +38,46 @@ export class SandboxManager {
       cwd = process.cwd(),
       timeout = 60000,
       ignoreEnvironment = true, // Default to pure execution for safety
-      env = {}
+      env = {},
     } = options;
 
-    const nixArgs = ['shell'];
+    const nixArgs = ["shell"];
 
     // If using inputs from a flake (e.g. local project)
     if (inputsFrom) {
       // Validate inputsFrom is within the current working directory
       validatePath(path.resolve(cwd, inputsFrom), cwd);
-      nixArgs.push('--inputs-from', inputsFrom);
+      nixArgs.push("--inputs-from", inputsFrom);
     }
 
     // Explicit packages from nixpkgs
-    packages.forEach(pkg => {
+    packages.forEach((pkg) => {
       // Handle "nixpkgs#pkg" or just "pkg"
-      const pkgRef = pkg.includes('#') ? pkg : `nixpkgs#${pkg}`;
+      const pkgRef = pkg.includes("#") ? pkg : `nixpkgs#${pkg}`;
       nixArgs.push(pkgRef);
     });
 
     if (ignoreEnvironment) {
-      nixArgs.push('--ignore-environment');
+      nixArgs.push("--ignore-environment");
     }
 
     // The command execution part
-    nixArgs.push('--command', 'bash', '-c', command);
+    nixArgs.push("--command", "bash", "-c", command);
 
     const startTime = Date.now();
-    logger.info({
-      type: 'SANDBOX_EXEC_START',
-      command,
-      packages,
-      inputsFrom,
-      cwd
-    }, "Starting sandboxed execution");
+    logger.info(
+      {
+        type: "SANDBOX_EXEC_START",
+        command,
+        packages,
+        inputsFrom,
+        cwd,
+      },
+      "Starting sandboxed execution"
+    );
 
     try {
-      const result = await execa('nix', nixArgs, {
+      const result = await execa("nix", nixArgs, {
         cwd,
         timeout,
         reject: false,
@@ -84,18 +86,21 @@ export class SandboxManager {
           // Minimal PATH if ignored, but we usually want basic tools
           // When --ignore-environment is used, env vars are cleared.
           // We might need to pass specific ones back in.
-          TERM: 'xterm-256color' 
-        }
+          TERM: "xterm-256color",
+        },
       });
 
       const duration = Date.now() - startTime;
-      
-      logger.info({
-        type: 'SANDBOX_EXEC_COMPLETE',
-        exitCode: result.exitCode,
-        durationMs: duration,
-        failed: result.failed
-      }, "Sandboxed execution finished");
+
+      logger.info(
+        {
+          type: "SANDBOX_EXEC_COMPLETE",
+          exitCode: result.exitCode,
+          durationMs: duration,
+          failed: result.failed,
+        },
+        "Sandboxed execution finished"
+      );
 
       return {
         stdout: result.stdout,
@@ -103,25 +108,27 @@ export class SandboxManager {
         exitCode: result.exitCode ?? -1,
         failed: result.failed,
         timedOut: result.timedOut,
-        command: `nix ${nixArgs.join(' ')}`
+        command: `nix ${nixArgs.join(" ")}`,
       };
-
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      
-      logger.error({
-        type: 'SANDBOX_EXEC_ERROR',
-        error: error.message,
-        durationMs: duration
-      }, "Sandboxed execution crashed");
+
+      logger.error(
+        {
+          type: "SANDBOX_EXEC_ERROR",
+          error: error.message,
+          durationMs: duration,
+        },
+        "Sandboxed execution crashed"
+      );
 
       return {
-        stdout: '',
+        stdout: "",
         stderr: error.message,
         exitCode: -1,
         failed: true,
         timedOut: error.timedOut || false,
-        command: command
+        command: command,
       };
     }
   }
@@ -131,12 +138,12 @@ export class SandboxManager {
    * Uses word-boundary matching to prevent prefix bypasses like "ls-malicious"
    */
   isSafeCommand(command: string): boolean {
-    const safePrefixes = ['ls', 'echo', 'cat', 'grep', 'rg', 'git status', 'git log'];
-    return safePrefixes.some(prefix => {
+    const safePrefixes = ["ls", "echo", "cat", "grep", "rg", "git status", "git log"];
+    return safePrefixes.some((prefix) => {
       if (!command.startsWith(prefix)) return false;
       // Ensure the prefix is followed by end-of-string, space, or a flag
       const nextChar = command[prefix.length];
-      return nextChar === undefined || nextChar === ' ' || nextChar === '\t';
+      return nextChar === undefined || nextChar === " " || nextChar === "\t";
     });
   }
 }

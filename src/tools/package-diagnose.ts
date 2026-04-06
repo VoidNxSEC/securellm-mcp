@@ -7,9 +7,19 @@ import type { DiagnoseResult, DiagnoseIssue, BuildStatus } from "../types/packag
 
 // Input schema for package_diagnose tool
 export const packageDiagnoseSchema = z.object({
-  package_path: z.string().describe("Path to the package .nix file (e.g., modules/packages/tar-packages/packages/lynis.nix)"),
-  package_type: z.enum(["tar", "deb", "js"]).describe("Type of package system (tar-packages, deb-packages, js-packages)"),
-  build_test: z.boolean().optional().default(true).describe("Whether to perform a test build to detect issues"),
+  package_path: z
+    .string()
+    .describe(
+      "Path to the package .nix file (e.g., modules/packages/tar-packages/packages/lynis.nix)"
+    ),
+  package_type: z
+    .enum(["tar", "deb", "js"])
+    .describe("Type of package system (tar-packages, deb-packages, js-packages)"),
+  build_test: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe("Whether to perform a test build to detect issues"),
 });
 
 export type PackageDiagnoseInput = z.infer<typeof packageDiagnoseSchema>;
@@ -234,10 +244,14 @@ export class PackageDiagnoseTool {
       const packageName = this.extractPackageName(path);
       const attrPath = this.getAttributePath(packageType, packageName);
 
-      const buildProcess = spawn("nix", ["build", `${this.workspaceDir}#${attrPath}`, "--no-link"], {
-        cwd: this.workspaceDir,
-        shell: true,
-      });
+      const buildProcess = spawn(
+        "nix",
+        ["build", `${this.workspaceDir}#${attrPath}`, "--no-link"],
+        {
+          cwd: this.workspaceDir,
+          shell: true,
+        }
+      );
 
       let stderr = "";
       let stdout = "";
@@ -269,13 +283,16 @@ export class PackageDiagnoseTool {
       });
 
       // Set a timeout of 5 minutes
-      setTimeout(() => {
-        buildProcess.kill();
-        resolve({
-          status: "failed",
-          errors: "Build timed out after 5 minutes",
-        });
-      }, 5 * 60 * 1000);
+      setTimeout(
+        () => {
+          buildProcess.kill();
+          resolve({
+            status: "failed",
+            errors: "Build timed out after 5 minutes",
+          });
+        },
+        5 * 60 * 1000
+      );
     });
   }
 

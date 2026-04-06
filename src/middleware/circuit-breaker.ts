@@ -1,17 +1,20 @@
-import type { CircuitBreakerState, CircuitBreakerMetrics } from '../types/middleware/rate-limiter.js';
-import { CircuitBreakerError } from '../types/middleware/rate-limiter.js';
-import { logger } from '../utils/logger.js';
+import type {
+  CircuitBreakerState,
+  CircuitBreakerMetrics,
+} from "../types/middleware/rate-limiter.js";
+import { CircuitBreakerError } from "../types/middleware/rate-limiter.js";
+import { logger } from "../utils/logger.js";
 
 /**
  * Circuit Breaker - Phase 1.2 Implementation
- * 
+ *
  * Implements the Circuit Breaker pattern to prevent cascading failures.
- * 
+ *
  * States:
  * - closed: Normal operation, requests pass through
  * - open: Circuit tripped, requests fail fast
  * - half-open: Testing if service recovered
- * 
+ *
  * State Transitions:
  * - closed → open: After failureThreshold consecutive failures
  * - open → half-open: After resetTimeout milliseconds
@@ -19,7 +22,7 @@ import { logger } from '../utils/logger.js';
  * - half-open → open: On any failure during half-open
  */
 export class CircuitBreaker {
-  private state: CircuitBreakerState = 'closed';
+  private state: CircuitBreakerState = "closed";
   private failureCount: number = 0;
   private successCount: number = 0;
   private lastFailureTime: number = 0;
@@ -31,34 +34,34 @@ export class CircuitBreaker {
     private halfOpenMaxAttempts: number = 3
   ) {
     if (failureThreshold < 1) {
-      throw new Error('failureThreshold must be at least 1');
+      throw new Error("failureThreshold must be at least 1");
     }
     if (resetTimeout < 1000) {
-      throw new Error('resetTimeout must be at least 1000ms');
+      throw new Error("resetTimeout must be at least 1000ms");
     }
     if (halfOpenMaxAttempts < 1) {
-      throw new Error('halfOpenMaxAttempts must be at least 1');
+      throw new Error("halfOpenMaxAttempts must be at least 1");
     }
   }
 
   /**
    * Execute a function with circuit breaker protection
-   * 
+   *
    * @param fn - The async function to execute
    * @returns Promise resolving to the function result
    * @throws CircuitBreakerError if circuit is open
    */
   async execute<T>(fn: () => Promise<T>): Promise<T> {
     // Check if we should attempt to reset the circuit
-    if (this.state === 'open' && this.shouldAttemptReset()) {
-      this.transitionTo('half-open');
+    if (this.state === "open" && this.shouldAttemptReset()) {
+      this.transitionTo("half-open");
     }
 
     // If circuit is open, fail fast
-    if (this.state === 'open') {
+    if (this.state === "open") {
       throw new CircuitBreakerError(
         `Circuit breaker is open. Service unavailable until ${new Date(this.nextAttemptTime).toISOString()}`,
-        'unknown', // Provider will be set by caller
+        "unknown", // Provider will be set by caller
         this.nextAttemptTime
       );
     }
@@ -84,14 +87,14 @@ export class CircuitBreaker {
    * Handle successful request
    */
   private onSuccess(): void {
-    if (this.state === 'half-open') {
+    if (this.state === "half-open") {
       this.successCount++;
 
       // If we've had enough successful requests in half-open, close the circuit
       if (this.successCount >= this.halfOpenMaxAttempts) {
-        this.transitionTo('closed');
+        this.transitionTo("closed");
       }
-    } else if (this.state === 'closed') {
+    } else if (this.state === "closed") {
       // Reset failure count on success in closed state
       this.failureCount = 0;
     }
@@ -104,13 +107,13 @@ export class CircuitBreaker {
     this.failureCount++;
     this.lastFailureTime = Date.now();
 
-    if (this.state === 'half-open') {
+    if (this.state === "half-open") {
       // Any failure in half-open state reopens the circuit
-      this.transitionTo('open');
-    } else if (this.state === 'closed') {
+      this.transitionTo("open");
+    } else if (this.state === "closed") {
       // If we've reached the failure threshold, open the circuit
       if (this.failureCount >= this.failureThreshold) {
-        this.transitionTo('open');
+        this.transitionTo("open");
       }
     }
   }
@@ -123,13 +126,13 @@ export class CircuitBreaker {
     this.state = newState;
 
     // Reset counters based on new state
-    if (newState === 'open') {
+    if (newState === "open") {
       this.nextAttemptTime = Date.now() + this.resetTimeout;
       this.successCount = 0;
-    } else if (newState === 'half-open') {
+    } else if (newState === "half-open") {
       this.successCount = 0;
       this.failureCount = 0;
-    } else if (newState === 'closed') {
+    } else if (newState === "closed") {
       this.failureCount = 0;
       this.successCount = 0;
       this.nextAttemptTime = 0;
@@ -143,7 +146,7 @@ export class CircuitBreaker {
    * Check if we should attempt to reset the circuit
    */
   private shouldAttemptReset(): boolean {
-    return this.state === 'open' && Date.now() >= this.nextAttemptTime;
+    return this.state === "open" && Date.now() >= this.nextAttemptTime;
   }
 
   /**
@@ -170,7 +173,7 @@ export class CircuitBreaker {
    * Reset the circuit breaker to initial state (for testing/manual intervention)
    */
   reset(): void {
-    this.state = 'closed';
+    this.state = "closed";
     this.failureCount = 0;
     this.successCount = 0;
     this.lastFailureTime = 0;

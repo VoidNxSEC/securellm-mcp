@@ -4,7 +4,7 @@
  * jump hosts, session management, MFA, and connection pooling.
  */
 
-import { ToolResult } from './extended-tools.js';
+import { ToolResult } from "./extended-tools.js";
 
 // ===== CORE SSH TYPES =====
 
@@ -15,22 +15,22 @@ export interface SSHConfig {
   readonly host: string;
   readonly port?: number;
   readonly username: string;
-  readonly auth_method: 'key' | 'password' | 'certificate';
-  
+  readonly auth_method: "key" | "password" | "certificate";
+
   // Authentication credentials
   readonly key_path?: string;
   readonly password?: string;
   readonly certificate_path?: string;
-  
+
   // Connection options
   readonly timeout_ms?: number;
   readonly keep_alive_interval?: number;
   readonly keep_alive_count?: number;
-  
+
   // Security options
   readonly strict_host_key_checking?: boolean;
   readonly known_hosts_path?: string;
-  
+
   // Advanced options
   readonly compression?: boolean;
   readonly algorithms?: {
@@ -50,14 +50,14 @@ export interface SSHConnection {
   connected: boolean;
   readonly created_at: Date;
   last_used: Date;
-  
+
   // Metrics
   bytes_sent: number;
   bytes_received: number;
   commands_executed: number;
-  
+
   // State
-  health_status: 'healthy' | 'degraded' | 'failed';
+  health_status: "healthy" | "degraded" | "failed";
   error_count: number;
   last_error?: string;
 }
@@ -67,7 +67,7 @@ export interface SSHConnection {
  */
 export interface ConnectionHealthStatus {
   readonly connection_id: string;
-  readonly status: 'healthy' | 'degraded' | 'failed';
+  readonly status: "healthy" | "degraded" | "failed";
   readonly latency_ms: number;
   readonly uptime_seconds: number;
   readonly last_check: Date;
@@ -84,7 +84,7 @@ export interface ConnectionHealthStatus {
 /**
  * SSH tunnel types
  */
-export type TunnelType = 'local' | 'remote' | 'dynamic';
+export type TunnelType = "local" | "remote" | "dynamic";
 
 /**
  * Base tunnel configuration
@@ -92,12 +92,12 @@ export type TunnelType = 'local' | 'remote' | 'dynamic';
 export interface BaseTunnelConfig {
   readonly connection_id: string;
   readonly type: TunnelType;
-  
+
   // Options
   readonly bind_address?: string; // default: 'localhost'
   readonly keep_alive?: boolean; // auto-reconnect on failure
   readonly timeout_seconds?: number;
-  
+
   // Monitoring
   readonly monitor_interval?: number; // seconds between health checks
   readonly auto_restart?: boolean;
@@ -108,7 +108,7 @@ export interface BaseTunnelConfig {
  * Forwards local port to remote destination through SSH server
  */
 export interface LocalTunnelConfig extends BaseTunnelConfig {
-  readonly type: 'local';
+  readonly type: "local";
   readonly local_port: number;
   readonly remote_host: string;
   readonly remote_port: number;
@@ -119,7 +119,7 @@ export interface LocalTunnelConfig extends BaseTunnelConfig {
  * Forwards remote port back to local destination
  */
 export interface RemoteTunnelConfig extends BaseTunnelConfig {
-  readonly type: 'remote';
+  readonly type: "remote";
   readonly remote_port: number;
   readonly local_host: string;
   readonly local_port: number;
@@ -130,7 +130,7 @@ export interface RemoteTunnelConfig extends BaseTunnelConfig {
  * Creates a SOCKS5 proxy on local port
  */
 export interface DynamicTunnelConfig extends BaseTunnelConfig {
-  readonly type: 'dynamic';
+  readonly type: "dynamic";
   readonly socks_port: number;
   readonly socks_version?: 4 | 5; // default: 5
 }
@@ -138,10 +138,7 @@ export interface DynamicTunnelConfig extends BaseTunnelConfig {
 /**
  * Union type for all tunnel configurations (discriminated union)
  */
-export type TunnelConfig = 
-  | LocalTunnelConfig 
-  | RemoteTunnelConfig 
-  | DynamicTunnelConfig;
+export type TunnelConfig = LocalTunnelConfig | RemoteTunnelConfig | DynamicTunnelConfig;
 
 /**
  * Tunnel instance state
@@ -150,22 +147,22 @@ export interface Tunnel {
   readonly id: string;
   readonly config: TunnelConfig;
   readonly connection_id: string;
-  
+
   // State
-  status: 'active' | 'establishing' | 'failed' | 'closed';
+  status: "active" | "establishing" | "failed" | "closed";
   readonly created_at: Date;
   closed_at?: Date;
-  
+
   // Endpoints
   readonly local_endpoint: string; // e.g., "localhost:8080"
   readonly remote_endpoint: string; // e.g., "db.internal:5432"
-  
+
   // Metrics
   bytes_transferred: number;
   connections_count: number;
   errors_count: number;
   last_error?: string;
-  
+
   // Recovery
   reconnect_attempts: number;
   readonly max_reconnect_attempts?: number;
@@ -182,7 +179,7 @@ export interface TunnelMetrics {
   readonly active_connections: number;
   readonly total_connections: number;
   readonly errors: number;
-  readonly health: 'healthy' | 'degraded' | 'failed';
+  readonly health: "healthy" | "degraded" | "failed";
 }
 
 /**
@@ -191,7 +188,7 @@ export interface TunnelMetrics {
 export interface TunnelStatus {
   readonly tunnel_id: string;
   readonly type: TunnelType;
-  readonly status: 'active' | 'establishing' | 'failed' | 'closed';
+  readonly status: "active" | "establishing" | "failed" | "closed";
   readonly local_endpoint: string;
   readonly remote_endpoint: string;
   readonly uptime_seconds: number;
@@ -221,8 +218,8 @@ export interface PortForwardRule {
   readonly local_port: number;
   readonly remote_host: string;
   readonly remote_port: number;
-  readonly protocol?: 'tcp' | 'udp'; // default: 'tcp'
-  
+  readonly protocol?: "tcp" | "udp"; // default: 'tcp'
+
   // Options
   readonly bind_address?: string;
   readonly description?: string;
@@ -234,11 +231,11 @@ export interface PortForwardRule {
 export interface PortForwardConfig {
   readonly connection_id: string;
   readonly forwards: readonly PortForwardRule[];
-  
+
   // Options
   readonly auto_reconnect?: boolean;
   readonly validate_ports?: boolean; // check port availability before setup
-  readonly conflict_resolution?: 'fail' | 'auto_assign' | 'force'; // default: 'fail'
+  readonly conflict_resolution?: "fail" | "auto_assign" | "force"; // default: 'fail'
 }
 
 /**
@@ -248,15 +245,15 @@ export interface PortForward {
   readonly id: string;
   readonly rule: PortForwardRule;
   readonly connection_id: string;
-  
+
   // State
-  status: 'active' | 'failed' | 'closed';
+  status: "active" | "failed" | "closed";
   readonly created_at: Date;
-  
+
   // Actual endpoints (may differ if auto-assigned)
   readonly actual_local_port: number;
   readonly actual_remote_endpoint: string;
-  
+
   // Metrics
   bytes_transferred: number;
   active_connections: number;
@@ -283,7 +280,7 @@ export interface PortForwardResult extends ToolResult {
     readonly forwards: ReadonlyArray<{
       readonly rule: PortForwardRule;
       readonly actual_port: number;
-      readonly status: 'active' | 'failed';
+      readonly status: "active" | "failed";
       readonly error?: string;
     }>;
     readonly connection_id: string;
@@ -295,10 +292,10 @@ export interface PortForwardResult extends ToolResult {
 /**
  * Jump strategy for multi-hop connections
  */
-export type JumpStrategy = 
-  | 'sequential'  // Connect through each jump in order
-  | 'optimal'     // Find fastest path automatically
-  | 'failover';   // Try alternative paths on failure
+export type JumpStrategy =
+  | "sequential" // Connect through each jump in order
+  | "optimal" // Find fastest path automatically
+  | "failover"; // Try alternative paths on failure
 
 /**
  * Jump host configuration
@@ -317,12 +314,12 @@ export interface JumpChainConfig {
   readonly target: SSHConfig;
   readonly jumps: readonly JumpHostConfig[];
   readonly strategy?: JumpStrategy; // default: 'sequential'
-  
+
   // Options
   readonly max_total_latency_ms?: number; // fail if total latency exceeds
   readonly timeout_per_hop_ms?: number;
   readonly parallel_probe?: boolean; // probe multiple paths simultaneously
-  
+
   // Caching
   readonly cache_successful_path?: boolean;
   readonly cache_duration_minutes?: number;
@@ -334,11 +331,11 @@ export interface JumpChainConfig {
 export interface JumpChain {
   readonly id: string;
   readonly config: JumpChainConfig;
-  
+
   // State
-  status: 'connecting' | 'connected' | 'failed' | 'closed';
+  status: "connecting" | "connected" | "failed" | "closed";
   readonly connection_id: string; // final connection to target
-  
+
   // Path information
   readonly actual_path: ReadonlyArray<{
     readonly host: string;
@@ -346,7 +343,7 @@ export interface JumpChain {
     readonly connected_at: Date;
   }>;
   readonly total_latency_ms: number;
-  
+
   // Metrics
   readonly hop_count: number;
   readonly created_at: Date;
@@ -363,7 +360,7 @@ export interface JumpChainStatus {
   readonly path: readonly string[]; // ["bastion1.com", "bastion2.com", "target.internal"]
   readonly total_latency_ms: number;
   readonly uptime_seconds: number;
-  readonly health: 'healthy' | 'degraded' | 'failed';
+  readonly health: "healthy" | "degraded" | "failed";
 }
 
 /**
@@ -390,12 +387,12 @@ export interface SessionConfig {
   readonly connection_id: string;
   readonly persist: boolean; // save to disk
   readonly auto_recover: boolean; // auto-reconnect on failure
-  
+
   // Recovery options
   readonly max_recovery_attempts?: number; // default: 3
   readonly recovery_backoff_ms?: number; // delay between attempts
-  readonly recovery_strategy?: 'immediate' | 'exponential' | 'linear';
-  
+  readonly recovery_strategy?: "immediate" | "exponential" | "linear";
+
   // State management
   readonly save_tunnel_state?: boolean;
   readonly save_port_forwards?: boolean;
@@ -408,7 +405,7 @@ export interface SessionConfig {
 export interface SessionData {
   readonly session_id: string;
   readonly connection_config: SSHConfig;
-  
+
   // State
   readonly created_at: string; // ISO timestamp
   readonly last_active: string;
@@ -417,16 +414,16 @@ export interface SessionData {
     readonly bytes_received: number;
     readonly commands_executed: number;
   };
-  
+
   // Active resources
   readonly tunnels?: readonly TunnelConfig[];
   readonly port_forwards?: readonly PortForwardRule[];
   readonly jump_chain?: JumpChainConfig;
-  
+
   // Recovery
   recovery_count: number;
   last_recovery_attempt?: string;
-  recovery_state: 'stable' | 'recovering' | 'failed';
+  recovery_state: "stable" | "recovering" | "failed";
 }
 
 /**
@@ -435,15 +432,15 @@ export interface SessionData {
 export interface SessionInfo {
   readonly session_id: string;
   readonly connection_id?: string; // undefined if not currently connected
-  readonly status: 'active' | 'disconnected' | 'persisted';
+  readonly status: "active" | "disconnected" | "persisted";
   readonly created_at: Date;
   readonly last_active: Date;
-  
+
   // Persistence
   readonly persisted: boolean;
   readonly auto_recover: boolean;
   readonly recovery_count: number;
-  
+
   // Resources
   readonly has_tunnels: boolean;
   readonly has_port_forwards: boolean;
@@ -473,7 +470,7 @@ export interface SessionRecoveryResult extends ToolResult {
 export interface SessionState {
   readonly session_id: string;
   readonly timestamp: Date;
-  readonly connection_state: 'connected' | 'disconnected';
+  readonly connection_state: "connected" | "disconnected";
   readonly active_tunnels: readonly string[];
   readonly active_port_forwards: readonly string[];
   readonly jump_chain_id?: string;
@@ -489,12 +486,12 @@ export interface SessionState {
 /**
  * MFA methods supported
  */
-export type MFAMethod = 
-  | 'totp'      // Time-based One-Time Password (Google Authenticator, etc.)
-  | 'hardware'  // Hardware token (YubiKey, etc.)
-  | 'sms'       // SMS code
-  | 'email'     // Email code
-  | 'push';     // Push notification
+export type MFAMethod =
+  | "totp" // Time-based One-Time Password (Google Authenticator, etc.)
+  | "hardware" // Hardware token (YubiKey, etc.)
+  | "sms" // SMS code
+  | "email" // Email code
+  | "push"; // Push notification
 
 /**
  * MFA configuration
@@ -502,23 +499,23 @@ export type MFAMethod =
 export interface MFAConfig {
   enabled: boolean;
   readonly methods: readonly MFAMethod[];
-  readonly required_for: ReadonlyArray<'connection' | 'sudo_commands' | 'sensitive_operations'>;
-  
+  readonly required_for: ReadonlyArray<"connection" | "sudo_commands" | "sensitive_operations">;
+
   // TOTP settings
   readonly totp?: {
     readonly secret_key?: string;
     readonly issuer?: string;
-    readonly algorithm?: 'SHA1' | 'SHA256' | 'SHA512';
+    readonly algorithm?: "SHA1" | "SHA256" | "SHA512";
     readonly digits?: 6 | 8;
     readonly period?: number; // seconds, default 30
   };
-  
+
   // Hardware token settings
   readonly hardware?: {
     readonly device_path?: string;
     readonly challenge_response?: boolean;
   };
-  
+
   // Backup codes
   readonly backup_codes?: readonly string[];
   backup_codes_remaining?: number;
@@ -531,7 +528,7 @@ export interface MFAAuthArgs {
   readonly connection_id: string;
   readonly method: MFAMethod;
   readonly code: string;
-  
+
   // Optional context
   readonly operation?: string; // what operation requires MFA
   readonly timestamp?: number;
@@ -569,11 +566,11 @@ export interface ConnectionPoolConfig {
   readonly max_connections: number; // max concurrent connections
   readonly max_idle_time_ms: number; // time before idle connection is closed
   readonly max_connection_age_ms?: number; // max age before forced refresh
-  
+
   // Health checks
   readonly health_check_interval_ms?: number;
   readonly health_check_timeout_ms?: number;
-  
+
   // Resource limits
   readonly max_memory_mb?: number;
   readonly max_bandwidth_mbps?: number;
@@ -587,15 +584,15 @@ export interface PoolStatistics {
   readonly active_connections: number;
   readonly idle_connections: number;
   readonly failed_connections: number;
-  
+
   // Performance
   readonly avg_connection_time_ms: number;
   readonly avg_latency_ms: number;
-  
+
   // Resource usage
   readonly total_bytes_transferred: number;
   readonly memory_usage_mb: number;
-  
+
   // Health
   readonly health_check_failures: number;
   readonly last_health_check: Date;
@@ -609,11 +606,11 @@ export interface PoolStatus {
   readonly connections: ReadonlyArray<{
     readonly id: string;
     readonly host: string;
-    readonly status: 'active' | 'idle' | 'failed';
+    readonly status: "active" | "idle" | "failed";
     readonly age_seconds: number;
     readonly last_used: Date;
   }>;
-  readonly health: 'healthy' | 'degraded' | 'critical';
+  readonly health: "healthy" | "degraded" | "critical";
   readonly warnings: readonly string[];
 }
 
@@ -630,7 +627,7 @@ export interface SSHMetrics {
     readonly failed: number;
     readonly success_rate: number;
   };
-  
+
   // Tunnel metrics
   readonly tunnels: {
     readonly total: number;
@@ -638,7 +635,7 @@ export interface SSHMetrics {
     readonly bytes_transferred: number;
     readonly avg_throughput_mbps: number;
   };
-  
+
   // Performance metrics
   readonly performance: {
     readonly avg_connection_time_ms: number;
@@ -646,7 +643,7 @@ export interface SSHMetrics {
     readonly p95_latency_ms: number;
     readonly p99_latency_ms: number;
   };
-  
+
   // Error metrics
   readonly errors: {
     readonly authentication_failures: number;
@@ -654,7 +651,7 @@ export interface SSHMetrics {
     readonly tunnel_failures: number;
     readonly command_rejections: number;
   };
-  
+
   // Resource metrics
   readonly resources: {
     readonly memory_usage_mb: number;
@@ -667,8 +664,8 @@ export interface SSHMetrics {
  * Alert configuration
  */
 export interface SSHAlert {
-  readonly type: 'connection_failure' | 'high_latency' | 'resource_limit' | 'security';
-  readonly severity: 'info' | 'warning' | 'critical';
+  readonly type: "connection_failure" | "high_latency" | "resource_limit" | "security";
+  readonly severity: "info" | "warning" | "critical";
   readonly message: string;
   readonly timestamp: Date;
   readonly metadata?: Readonly<Record<string, any>>;
@@ -682,19 +679,19 @@ export interface SSHAlert {
 export interface SSHTunnelArgs {
   readonly type: TunnelType;
   readonly connection_id: string;
-  
+
   // Local tunnel specific
   readonly local_port?: number;
   readonly remote_host?: string;
   readonly remote_port?: number;
-  
+
   // Remote tunnel specific
   readonly local_host?: string;
-  
+
   // Dynamic tunnel specific
   readonly socks_port?: number;
   readonly socks_version?: 4 | 5;
-  
+
   // Common options
   readonly bind_address?: string;
   readonly keep_alive?: boolean;
@@ -711,7 +708,7 @@ export interface SSHPortForwardArgs {
   readonly forwards: readonly PortForwardRule[];
   readonly auto_reconnect?: boolean;
   readonly validate_ports?: boolean;
-  readonly conflict_resolution?: 'fail' | 'auto_assign' | 'force';
+  readonly conflict_resolution?: "fail" | "auto_assign" | "force";
 }
 
 /**
@@ -731,7 +728,7 @@ export interface SSHJumpHostArgs {
  * SSH session manager tool arguments
  */
 export interface SSHSessionArgs {
-  readonly action: 'save' | 'restore' | 'list' | 'cleanup' | 'status';
+  readonly action: "save" | "restore" | "list" | "cleanup" | "status";
   readonly session_id?: string;
   readonly connection_id?: string;
   readonly persist?: boolean;
@@ -743,7 +740,7 @@ export interface SSHSessionArgs {
  * SSH connection pool tool arguments
  */
 export interface SSHConnectionPoolArgs {
-  readonly action: 'status' | 'prune' | 'stats' | 'health';
+  readonly action: "status" | "prune" | "stats" | "health";
   readonly max_idle_time_ms?: number;
   readonly connection_id?: string;
 }
@@ -761,21 +758,21 @@ export interface SSHMFAArgs extends MFAAuthArgs {
  * Type guard for local tunnel configuration
  */
 export function isLocalTunnelConfig(config: TunnelConfig): config is LocalTunnelConfig {
-  return config.type === 'local';
+  return config.type === "local";
 }
 
 /**
  * Type guard for remote tunnel configuration
  */
 export function isRemoteTunnelConfig(config: TunnelConfig): config is RemoteTunnelConfig {
-  return config.type === 'remote';
+  return config.type === "remote";
 }
 
 /**
  * Type guard for dynamic tunnel configuration
  */
 export function isDynamicTunnelConfig(config: TunnelConfig): config is DynamicTunnelConfig {
-  return config.type === 'dynamic';
+  return config.type === "dynamic";
 }
 
 /**

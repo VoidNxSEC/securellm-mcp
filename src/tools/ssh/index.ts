@@ -4,21 +4,21 @@
  */
 
 // @ts-ignore
-import { Client } from 'ssh2';
-import { SSHConnectionManager } from './connection-manager.js';
-import { SSHTunnelManager } from './tunnel-manager.js';
-import { SSHJumpHostManager } from './jump-host-manager.js';
-import { SSHSessionManager } from './session-manager.js';
+import { Client } from "ssh2";
+import { SSHConnectionManager } from "./connection-manager.js";
+import { SSHTunnelManager } from "./tunnel-manager.js";
+import { SSHJumpHostManager } from "./jump-host-manager.js";
+import { SSHSessionManager } from "./session-manager.js";
 import type {
   SSHExecuteArgs,
   SSHFileTransferArgs,
   SSHMaintenanceCheckArgs,
   ToolResult,
-} from '../../types/extended-tools.js';
-import path from 'path';
-import os from 'os';
+} from "../../types/extended-tools.js";
+import path from "path";
+import os from "os";
 
-export { SSHConnectionManager, sshConnectSchema } from './connection-manager.js';
+export { SSHConnectionManager, sshConnectSchema } from "./connection-manager.js";
 
 // Global connection manager instance
 // In a real app, these would be initialized with config
@@ -28,8 +28,9 @@ const jumpHostManager = new SSHJumpHostManager(connectionManager);
 
 // Use XDG_DATA_HOME or ~/.local/share to avoid polluting cwd.
 // Falls back to in-memory DB if no persistent path is configured.
-const _xdgData = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
-const DB_PATH = process.env.SSH_SESSION_DB_PATH || path.join(_xdgData, 'securellm-mcp', 'ssh_sessions.db');
+const _xdgData = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
+const DB_PATH =
+  process.env.SSH_SESSION_DB_PATH || path.join(_xdgData, "securellm-mcp", "ssh_sessions.db");
 const sessionManager = new SSHSessionManager(
   DB_PATH,
   connectionManager,
@@ -42,8 +43,19 @@ const sessionManager = new SSHSessionManager(
  */
 export class SSHExecuteTool {
   private allowedCommands = [
-    'ls', 'cat', 'grep', 'find', 'df', 'du', 'free', 'uptime',
-    'systemctl status', 'journalctl', 'ps aux', 'netstat', 'ss'
+    "ls",
+    "cat",
+    "grep",
+    "find",
+    "df",
+    "du",
+    "free",
+    "uptime",
+    "systemctl status",
+    "journalctl",
+    "ps aux",
+    "netstat",
+    "ss",
   ];
 
   async execute(args: SSHExecuteArgs): Promise<ToolResult> {
@@ -53,26 +65,26 @@ export class SSHExecuteTool {
     if (!conn || !conn.connected) {
       return {
         success: false,
-        error: 'Connection not found or not connected',
+        error: "Connection not found or not connected",
         timestamp: new Date().toISOString(),
       };
     }
 
     // Security: whitelist commands
-    const isAllowed = this.allowedCommands.some(allowed => command.startsWith(allowed));
+    const isAllowed = this.allowedCommands.some((allowed) => command.startsWith(allowed));
     if (!isAllowed && !sudo) {
       return {
         success: false,
         error: `Command '${command}' not in whitelist`,
-        warnings: ['Only whitelisted commands are allowed for security'],
+        warnings: ["Only whitelisted commands are allowed for security"],
         timestamp: new Date().toISOString(),
       };
     }
 
     return new Promise((resolve) => {
       const fullCommand = sudo ? `sudo ${command}` : command;
-      let stdout = '';
-      let stderr = '';
+      let stdout = "";
+      let stderr = "";
 
       conn.client.exec(fullCommand, (err: any, stream: any) => {
         if (err) {
@@ -84,15 +96,15 @@ export class SSHExecuteTool {
           return;
         }
 
-        stream.on('data', (data: Buffer) => {
+        stream.on("data", (data: Buffer) => {
           stdout += data.toString();
         });
 
-        stream.stderr.on('data', (data: Buffer) => {
+        stream.stderr.on("data", (data: Buffer) => {
           stderr += data.toString();
         });
 
-        stream.on('close', (code: number) => {
+        stream.on("close", (code: number) => {
           resolve({
             success: code === 0,
             data: {
@@ -121,7 +133,7 @@ export class SSHFileTransferTool {
     if (!conn || !conn.connected) {
       return {
         success: false,
-        error: 'Connection not found or not connected',
+        error: "Connection not found or not connected",
         timestamp: new Date().toISOString(),
       };
     }
@@ -137,7 +149,7 @@ export class SSHFileTransferTool {
           return;
         }
 
-        if (action === 'upload') {
+        if (action === "upload") {
           sftp.fastPut(local_path, remote_path, (err: any) => {
             sftp.end();
             if (err) {
@@ -150,7 +162,7 @@ export class SSHFileTransferTool {
               resolve({
                 success: true,
                 data: {
-                  action: 'upload',
+                  action: "upload",
                   local_path,
                   remote_path,
                   connection_id,
@@ -172,7 +184,7 @@ export class SSHFileTransferTool {
               resolve({
                 success: true,
                 data: {
-                  action: 'download',
+                  action: "download",
                   local_path,
                   remote_path,
                   connection_id,
@@ -198,7 +210,7 @@ export class SSHMaintenanceCheckTool {
     if (!conn || !conn.connected) {
       return {
         success: false,
-        error: 'Connection not found or not connected',
+        error: "Connection not found or not connected",
         timestamp: new Date().toISOString(),
       };
     }
@@ -226,22 +238,22 @@ export class SSHMaintenanceCheckTool {
 
   private runCheck(client: Client, check: string): Promise<any> {
     return new Promise((resolve, reject) => {
-      let command = '';
+      let command = "";
       switch (check) {
-        case 'disk':
-          command = 'df -h';
+        case "disk":
+          command = "df -h";
           break;
-        case 'services':
-          command = 'systemctl list-units --state=failed';
+        case "services":
+          command = "systemctl list-units --state=failed";
           break;
-        case 'updates':
-          command = 'apt list --upgradable 2>/dev/null || yum check-update || true';
+        case "updates":
+          command = "apt list --upgradable 2>/dev/null || yum check-update || true";
           break;
-        case 'security':
-          command = 'last -n 10';
+        case "security":
+          command = "last -n 10";
           break;
-        case 'logs':
-          command = 'journalctl -p err -n 20 --no-pager';
+        case "logs":
+          command = "journalctl -p err -n 20 --no-pager";
           break;
       }
 
@@ -251,13 +263,13 @@ export class SSHMaintenanceCheckTool {
           return;
         }
 
-        let output = '';
-        stream.on('data', (data: Buffer) => {
+        let output = "";
+        stream.on("data", (data: Buffer) => {
           output += data.toString();
         });
 
-        stream.on('close', () => {
-          resolve({ check, output, status: 'completed' });
+        stream.on("close", () => {
+          resolve({ check, output, status: "completed" });
         });
       });
     });
@@ -274,13 +286,13 @@ export class SSHTunnelTool {
       return {
         success: true,
         data: result.data,
-        timestamp: result.timestamp
+        timestamp: result.timestamp,
       };
     } catch (error: any) {
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -297,13 +309,13 @@ export class SSHJumpHostTool {
         success: result.success,
         data: result.data,
         error: result.error,
-        timestamp: result.timestamp
+        timestamp: result.timestamp,
       };
     } catch (error: any) {
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -315,33 +327,33 @@ export class SSHJumpHostTool {
 export class SSHSessionTool {
   async execute(args: any): Promise<ToolResult> {
     try {
-      if (args.action === 'save') {
+      if (args.action === "save") {
         const result = await sessionManager.persistSession(args);
         return {
           success: true,
           data: result,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
-      } else if (args.action === 'restore') {
+      } else if (args.action === "restore") {
         const result = await sessionManager.restoreSession(args.session_id);
         return {
           success: result.success,
           data: result.data,
           error: result.error,
-          timestamp: result.timestamp
+          timestamp: result.timestamp,
         };
       } else {
         return {
           success: false,
           error: `Unknown action: ${args.action}`,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
       }
     } catch (error: any) {
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }
@@ -409,10 +421,10 @@ export const sshTunnelSchema = {
       socks_port: { type: "number" },
       bind_address: { type: "string" },
       keep_alive: { type: "boolean" },
-      auto_restart: { type: "boolean" }
+      auto_restart: { type: "boolean" },
     },
-    required: ["type", "connection_id"]
-  }
+    required: ["type", "connection_id"],
+  },
 };
 
 export const sshJumpHostSchema = {
@@ -424,10 +436,10 @@ export const sshJumpHostSchema = {
       target: { type: "object" }, // Full schema in types
       jumps: { type: "array", items: { type: "object" } },
       strategy: { type: "string", enum: ["sequential", "optimal"] },
-      cache_successful_path: { type: "boolean" }
+      cache_successful_path: { type: "boolean" },
     },
-    required: ["target", "jumps"]
-  }
+    required: ["target", "jumps"],
+  },
 };
 
 export const sshSessionSchema = {
@@ -440,10 +452,10 @@ export const sshSessionSchema = {
       connection_id: { type: "string" }, // for save
       session_id: { type: "string" }, // for restore
       persist: { type: "boolean" },
-      auto_recover: { type: "boolean" }
+      auto_recover: { type: "boolean" },
     },
-    required: ["action"]
-  }
+    required: ["action"],
+  },
 };
 
 // Export tool instances
@@ -453,5 +465,5 @@ export const sshTools = [
   new SSHMaintenanceCheckTool(),
   new SSHTunnelTool(),
   new SSHJumpHostTool(),
-  new SSHSessionTool()
+  new SSHSessionTool(),
 ];

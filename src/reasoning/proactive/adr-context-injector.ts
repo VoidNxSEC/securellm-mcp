@@ -58,10 +58,7 @@ export class ADRContextInjector {
    * Enrich a tool call with relevant ADR context.
    * Returns a context string if relevant ADRs found, null otherwise.
    */
-  async enrichWithADRContext(
-    toolName: string,
-    args: any
-  ): Promise<string | null> {
+  async enrichWithADRContext(toolName: string, args: any): Promise<string | null> {
     if (!CONTEXT_WORTHY_TOOLS.has(toolName)) {
       return null;
     }
@@ -95,9 +92,7 @@ export class ADRContextInjector {
     if (!existsSync(proposedDir)) return [];
 
     const files = await readdir(proposedDir);
-    const adrFiles = files.filter(
-      (f) => f.startsWith("ADR-") && f.endsWith(".md")
-    );
+    const adrFiles = files.filter((f) => f.startsWith("ADR-") && f.endsWith(".md"));
 
     const adrs: CachedADR[] = [];
 
@@ -128,9 +123,7 @@ export class ADRContextInjector {
     if (!id || !title) return null;
 
     // Extract keywords from multiple sources
-    const keywordsBlock = content.match(
-      /keywords:\s*\n((?:\s*-\s*"[^"]+"\s*\n?)*)/m
-    );
+    const keywordsBlock = content.match(/keywords:\s*\n((?:\s*-\s*"[^"]+"\s*\n?)*)/m);
     const parsedKeywords: string[] = [];
 
     if (keywordsBlock) {
@@ -148,9 +141,7 @@ export class ADRContextInjector {
     parsedKeywords.push(...titleWords);
 
     // Extract project names from scope
-    const projects = content.match(
-      /projects:\s*\n((?:\s*-\s*\w+\s*\n?)*)/m
-    );
+    const projects = content.match(/projects:\s*\n((?:\s*-\s*\w+\s*\n?)*)/m);
     if (projects) {
       const matches = projects[1].matchAll(/-\s*(\w+)/g);
       for (const m of matches) {
@@ -159,19 +150,12 @@ export class ADRContextInjector {
     }
 
     // Build a short summary from the first sentence of Context section
-    const contextSection = content.match(
-      /## Context\s*\n+([\s\S]*?)(?=\n## |\n---|\Z)/
-    );
+    const contextSection = content.match(/## Context\s*\n+([\s\S]*?)(?=\n## |\n---|\Z)/);
     let summary = "";
     if (contextSection) {
-      const firstSentence = contextSection[1]
-        .replace(/\n/g, " ")
-        .trim()
-        .split(/\.\s/)[0];
+      const firstSentence = contextSection[1].replace(/\n/g, " ").trim().split(/\.\s/)[0];
       summary =
-        firstSentence.length > 120
-          ? firstSentence.slice(0, 117) + "..."
-          : firstSentence + ".";
+        firstSentence.length > 120 ? firstSentence.slice(0, 117) + "..." : firstSentence + ".";
     }
 
     return {
@@ -193,9 +177,7 @@ export class ADRContextInjector {
     const argsStr = JSON.stringify(args || {}).toLowerCase();
 
     // Extract file paths — split into meaningful parts
-    const pathMatches = argsStr.match(
-      /[\w-]+\.(ts|js|py|nix|toml|rs|go|sol)/g
-    );
+    const pathMatches = argsStr.match(/[\w-]+\.(ts|js|py|nix|toml|rs|go|sol)/g);
     if (pathMatches) {
       for (const p of pathMatches) {
         keywords.push(...p.replace(/\.\w+$/, "").split(/[-_]/));
@@ -214,9 +196,26 @@ export class ADRContextInjector {
     const wordMatches = argsStr.match(/\b[a-z][a-z-]{3,}\b/g);
     if (wordMatches) {
       const stopWords = new Set([
-        "true", "false", "null", "undefined", "function", "return",
-        "const", "this", "that", "from", "import", "export", "with",
-        "file", "path", "name", "type", "data", "string", "number",
+        "true",
+        "false",
+        "null",
+        "undefined",
+        "function",
+        "return",
+        "const",
+        "this",
+        "that",
+        "from",
+        "import",
+        "export",
+        "with",
+        "file",
+        "path",
+        "name",
+        "type",
+        "data",
+        "string",
+        "number",
       ]);
       keywords.push(...wordMatches.filter((w) => !stopWords.has(w)));
     }
@@ -230,15 +229,10 @@ export class ADRContextInjector {
   /**
    * Find ADRs with keyword overlap above threshold
    */
-  private findRelevant(
-    adrs: CachedADR[],
-    inputKeywords: string[]
-  ): CachedADR[] {
+  private findRelevant(adrs: CachedADR[], inputKeywords: string[]): CachedADR[] {
     const scored = adrs.map((adr) => {
       const overlap = adr.keywords.filter((k) =>
-        inputKeywords.some(
-          (ik) => ik.includes(k) || k.includes(ik)
-        )
+        inputKeywords.some((ik) => ik.includes(k) || k.includes(ik))
       ).length;
       return { adr, overlap };
     });
@@ -261,10 +255,7 @@ export class ADRContextInjector {
       if (adr.summary) {
         lines.push(`    → ${adr.summary}`);
       }
-      if (
-        adr.reviewDeadline &&
-        new Date(adr.reviewDeadline) < new Date()
-      ) {
+      if (adr.reviewDeadline && new Date(adr.reviewDeadline) < new Date()) {
         lines.push(`    ⚠ Review deadline expired: ${adr.reviewDeadline}`);
       }
     }

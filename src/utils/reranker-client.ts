@@ -13,13 +13,13 @@
  *   GET  /health    — liveness probe
  */
 
-import { logger } from './logger.js';
+import { logger } from "./logger.js";
 
 export interface RerankItem {
   document: string;
-  score: number;       // 0.0–1.0 semantic relevance
-  model: string;       // 'fast' | 'accurate' | 'cloud'
-  confidence: number;  // 0.0–1.0 confidence in the ranking
+  score: number; // 0.0–1.0 semantic relevance
+  model: string; // 'fast' | 'accurate' | 'cloud'
+  confidence: number; // 0.0–1.0 confidence in the ranking
 }
 
 export interface RerankResponse {
@@ -29,7 +29,7 @@ export interface RerankResponse {
   latency_ms: number;
 }
 
-export type RerankMode = 'auto' | 'fast' | 'accurate' | 'cloud';
+export type RerankMode = "auto" | "fast" | "accurate" | "cloud";
 
 export class CerebroRerankerClient {
   private readonly baseUrl: string;
@@ -37,10 +37,10 @@ export class CerebroRerankerClient {
   private readonly timeoutMs: number;
 
   constructor(
-    baseUrl: string = process.env.CEREBRO_RERANKER_URL ?? 'http://localhost:8016',
-    timeoutMs = 15_000,
+    baseUrl: string = process.env.CEREBRO_RERANKER_URL ?? "http://localhost:8016",
+    timeoutMs = 15_000
   ) {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.baseUrl = baseUrl.replace(/\/$/, "");
     this.timeoutMs = timeoutMs;
   }
 
@@ -61,13 +61,13 @@ export class CerebroRerankerClient {
     query: string,
     documents: string[],
     topK: number,
-    mode: RerankMode = 'auto',
+    mode: RerankMode = "auto"
   ): Promise<RerankItem[]> {
     if (documents.length === 0) return [];
 
     const response = await fetch(`${this.baseUrl}/v1/rerank`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         query,
         documents,
@@ -82,7 +82,7 @@ export class CerebroRerankerClient {
       throw new Error(`[Reranker] /v1/rerank returned ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json() as RerankResponse;
+    const data = (await response.json()) as RerankResponse;
 
     logger.debug(
       {
@@ -91,7 +91,7 @@ export class CerebroRerankerClient {
         cache_hit: data.cache_hit,
         count: data.results.length,
       },
-      '[Reranker] Rerank completed',
+      "[Reranker] Rerank completed"
     );
 
     return data.results ?? [];

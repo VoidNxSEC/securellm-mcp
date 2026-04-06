@@ -1,8 +1,8 @@
 // Knowledge Entry Deduplication
 
-import type Database from 'better-sqlite3';
-import { logger } from '../utils/logger.js';
-import { createLLMClient, type UnifiedLLMClient } from '../utils/llm-client.js';
+import type Database from "better-sqlite3";
+import { logger } from "../utils/logger.js";
+import { createLLMClient, type UnifiedLLMClient } from "../utils/llm-client.js";
 import {
   cosineSimilarity,
   textHash,
@@ -10,13 +10,13 @@ import {
   normalizeText,
   findSimilarPairs,
   type SimilarPair,
-} from '../utils/embeddings.js';
+} from "../utils/embeddings.js";
 import type {
   DeduplicateEntriesInput,
   DeduplicateEntriesOutput,
   DeduplicationMethod,
   DuplicatePair,
-} from '../types/compaction.js';
+} from "../types/compaction.js";
 
 export class Deduplicator {
   private llmClient: UnifiedLLMClient;
@@ -34,21 +34,21 @@ export class Deduplicator {
   async deduplicate(input: DeduplicateEntriesInput): Promise<DeduplicateEntriesOutput> {
     const {
       similarity_threshold = 0.85,
-      method = 'embedding',
+      method = "embedding",
       session_id,
       auto_merge = false,
       dry_run = true,
     } = input;
 
-    logger.info({ method, threshold: similarity_threshold, dry_run }, 'Starting deduplication');
+    logger.info({ method, threshold: similarity_threshold, dry_run }, "Starting deduplication");
 
     try {
       // Get entries to check
-      let query = 'SELECT * FROM knowledge_entries';
+      let query = "SELECT * FROM knowledge_entries";
       const params: any[] = [];
 
       if (session_id) {
-        query += ' WHERE session_id = ?';
+        query += " WHERE session_id = ?";
         params.push(session_id);
       }
 
@@ -65,21 +65,21 @@ export class Deduplicator {
         };
       }
 
-      logger.debug({ entry_count: entries.length }, 'Checking entries for duplicates');
+      logger.debug({ entry_count: entries.length }, "Checking entries for duplicates");
 
       // Find duplicates based on method
       let duplicatePairs: DuplicatePair[];
 
-      if (method === 'exact') {
+      if (method === "exact") {
         duplicatePairs = await this.findExactDuplicates(entries);
-      } else if (method === 'fuzzy') {
+      } else if (method === "fuzzy") {
         duplicatePairs = await this.findFuzzyDuplicates(entries, similarity_threshold);
       } else {
         // embedding method
         duplicatePairs = await this.findEmbeddingDuplicates(entries, similarity_threshold);
       }
 
-      logger.info({ duplicates_found: duplicatePairs.length }, 'Duplicates detected');
+      logger.info({ duplicates_found: duplicatePairs.length }, "Duplicates detected");
 
       // Merge duplicates if not dry run and auto_merge enabled
       let mergedCount = 0;
@@ -100,7 +100,7 @@ export class Deduplicator {
         space_saved_bytes: spaceSaved,
       };
     } catch (err: any) {
-      logger.error({ err }, 'Deduplication failed');
+      logger.error({ err }, "Deduplication failed");
       throw err;
     }
   }
@@ -145,10 +145,7 @@ export class Deduplicator {
   /**
    * Find fuzzy duplicates (Levenshtein similarity)
    */
-  private async findFuzzyDuplicates(
-    entries: any[],
-    threshold: number
-  ): Promise<DuplicatePair[]> {
+  private async findFuzzyDuplicates(entries: any[], threshold: number): Promise<DuplicatePair[]> {
     const pairs: DuplicatePair[] = [];
 
     for (let i = 0; i < entries.length; i++) {
@@ -179,9 +176,9 @@ export class Deduplicator {
     threshold: number
   ): Promise<DuplicatePair[]> {
     // Generate embeddings for all entries
-    const texts = entries.map(e => e.content);
+    const texts = entries.map((e) => e.content);
 
-    logger.debug({ count: texts.length }, 'Generating embeddings');
+    logger.debug({ count: texts.length }, "Generating embeddings");
 
     const embeddings = (await this.llmClient.embed(texts)) as number[][];
 
@@ -194,9 +191,9 @@ export class Deduplicator {
     // Find similar pairs
     const similarPairs = findSimilarPairs(items, threshold);
 
-    logger.debug({ pairs_found: similarPairs.length }, 'Similar pairs found');
+    logger.debug({ pairs_found: similarPairs.length }, "Similar pairs found");
 
-    return similarPairs.map(pair => ({
+    return similarPairs.map((pair) => ({
       entry1: pair.item1,
       entry2: pair.item2,
       similarity: pair.similarity,
@@ -253,7 +250,7 @@ export class Deduplicator {
       }
     }
 
-    logger.debug({ components: components.length }, 'Duplicate components found');
+    logger.debug({ components: components.length }, "Duplicate components found");
 
     // Merge each component
     for (const component of components) {
@@ -263,7 +260,7 @@ export class Deduplicator {
 
       // Calculate space saved
       const deleteEntries = this.db
-        .prepare(`SELECT content FROM knowledge_entries WHERE id IN (${deleteIds.join(',')})`)
+        .prepare(`SELECT content FROM knowledge_entries WHERE id IN (${deleteIds.join(",")})`)
         .all() as any[];
 
       spaceSaved += deleteEntries.reduce((sum, e) => sum + e.content.length, 0);
@@ -274,14 +271,12 @@ export class Deduplicator {
           entry_id_1: keepId,
           entry_id_2: deleteId,
           similarity: 1.0, // Approximation
-          action: 'merged',
+          action: "merged",
         });
       }
 
       // Delete duplicate entries
-      this.db
-        .prepare(`DELETE FROM knowledge_entries WHERE id IN (${deleteIds.join(',')})`)
-        .run();
+      this.db.prepare(`DELETE FROM knowledge_entries WHERE id IN (${deleteIds.join(",")})`).run();
 
       mergedCount += deleteIds.length;
 
@@ -291,7 +286,7 @@ export class Deduplicator {
       }
     }
 
-    logger.info({ merged_count: mergedCount, space_saved: spaceSaved }, 'Duplicates merged');
+    logger.info({ merged_count: mergedCount, space_saved: spaceSaved }, "Duplicates merged");
 
     return { merged_count: mergedCount, space_saved: spaceSaved };
   }

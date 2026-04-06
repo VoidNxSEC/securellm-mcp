@@ -4,9 +4,9 @@
  * MCP tools for emergency response and system recovery
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import type { ExtendedTool } from '../../types/mcp-tool-extensions.js';
+import { exec } from "child_process";
+import { promisify } from "util";
+import type { ExtendedTool } from "../../types/mcp-tool-extensions.js";
 
 const execAsync = promisify(exec);
 
@@ -95,7 +95,7 @@ export const emergencyTools: ExtendedTool[] = [
 ];
 
 interface EmergencyStatusResult {
-  status: 'ok' | 'warning' | 'critical' | 'emergency';
+  status: "ok" | "warning" | "critical" | "emergency";
   timestamp: string;
   metrics: {
     cpu: { load: number; cores: number; thermal: number; governor: string };
@@ -114,11 +114,11 @@ interface EmergencyAbortResult {
 }
 
 interface SystemHealthResult {
-  verdict: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+  verdict: "HEALTHY" | "WARNING" | "CRITICAL";
   score: number;
   checks: Array<{
     category: string;
-    status: 'pass' | 'warning' | 'fail';
+    status: "pass" | "warning" | "fail";
     message: string;
   }>;
   timestamp: string;
@@ -126,14 +126,14 @@ interface SystemHealthResult {
 
 export async function handleEmergencyStatus(): Promise<EmergencyStatusResult> {
   try {
-    const { stdout } = await execAsync('bash /etc/nixos/scripts/nix-emergency.sh status');
+    const { stdout } = await execAsync("bash /etc/nixos/scripts/nix-emergency.sh status");
 
     // Parse output to extract metrics
     const result: EmergencyStatusResult = {
-      status: 'ok',
+      status: "ok",
       timestamp: new Date().toISOString(),
       metrics: {
-        cpu: { load: 0, cores: 0, thermal: 0, governor: 'unknown' },
+        cpu: { load: 0, cores: 0, thermal: 0, governor: "unknown" },
         memory: { used_gb: 0, available_gb: 0, percentage: 0 },
         swap: { used_gb: 0, total_gb: 0, percentage: 0 },
         disk: { used_percentage: 0, available_gb: 0 },
@@ -169,30 +169,32 @@ export async function handleEmergencyStatus(): Promise<EmergencyStatusResult> {
     if (swapMatch) {
       result.metrics.swap.used_gb = parseFloat(swapMatch[1]);
       result.metrics.swap.total_gb = parseFloat(swapMatch[2]);
-      result.metrics.swap.percentage = Math.round((result.metrics.swap.used_gb / result.metrics.swap.total_gb) * 100);
+      result.metrics.swap.percentage = Math.round(
+        (result.metrics.swap.used_gb / result.metrics.swap.total_gb) * 100
+      );
     }
 
     // Determine status
     if (result.metrics.cpu.thermal > 90 || result.metrics.swap.percentage > 90) {
-      result.status = 'emergency';
-      result.alerts.push('EMERGENCY: Critical system conditions detected!');
+      result.status = "emergency";
+      result.alerts.push("EMERGENCY: Critical system conditions detected!");
     } else if (result.metrics.cpu.thermal > 80 || result.metrics.swap.percentage > 70) {
-      result.status = 'critical';
-      result.alerts.push('CRITICAL: System under severe stress');
+      result.status = "critical";
+      result.alerts.push("CRITICAL: System under severe stress");
     } else if (result.metrics.cpu.thermal > 75 || result.metrics.swap.percentage > 50) {
-      result.status = 'warning';
-      result.alerts.push('WARNING: System under moderate stress');
+      result.status = "warning";
+      result.alerts.push("WARNING: System under moderate stress");
     }
 
     // Add recommendations
     if (result.metrics.cpu.thermal > 75) {
-      result.recommendations.push('Consider running: emergency_cooldown');
+      result.recommendations.push("Consider running: emergency_cooldown");
     }
     if (result.metrics.swap.percentage > 50) {
-      result.recommendations.push('Consider running: emergency_swap');
+      result.recommendations.push("Consider running: emergency_swap");
     }
     if (result.metrics.cpu.load > 20) {
-      result.recommendations.push('Consider running: emergency_abort to kill heavy builds');
+      result.recommendations.push("Consider running: emergency_abort to kill heavy builds");
     }
 
     return result;
@@ -203,7 +205,7 @@ export async function handleEmergencyStatus(): Promise<EmergencyStatusResult> {
 
 export async function handleEmergencyAbort(force: boolean = false): Promise<EmergencyAbortResult> {
   try {
-    const { stdout, stderr } = await execAsync('bash /etc/nixos/scripts/nix-emergency.sh abort');
+    const { stdout, stderr } = await execAsync("bash /etc/nixos/scripts/nix-emergency.sh abort");
 
     // Parse output to count killed processes
     const killCount = (stdout.match(/killed/gi) || []).length;
@@ -224,11 +226,11 @@ export async function handleEmergencyAbort(force: boolean = false): Promise<Emer
 
 export async function handleEmergencyCooldown(): Promise<{ success: boolean; message: string }> {
   try {
-    const { stdout } = await execAsync('bash /etc/nixos/scripts/nix-emergency.sh cooldown');
+    const { stdout } = await execAsync("bash /etc/nixos/scripts/nix-emergency.sh cooldown");
 
     return {
       success: true,
-      message: stdout.trim() || 'CPU cooldown activated (powersave governor, turbo disabled)',
+      message: stdout.trim() || "CPU cooldown activated (powersave governor, turbo disabled)",
     };
   } catch (error: any) {
     return {
@@ -243,12 +245,12 @@ export async function handleEmergencyNuke(confirm: boolean): Promise<EmergencyAb
     return {
       success: false,
       processes_killed: 0,
-      message: 'Nuke operation requires confirm=true (safety check)',
+      message: "Nuke operation requires confirm=true (safety check)",
     };
   }
 
   try {
-    const { stdout } = await execAsync('bash /etc/nixos/scripts/nix-emergency.sh nuke');
+    const { stdout } = await execAsync("bash /etc/nixos/scripts/nix-emergency.sh nuke");
     const killCount = (stdout.match(/killed/gi) || []).length;
 
     return {
@@ -265,9 +267,13 @@ export async function handleEmergencyNuke(confirm: boolean): Promise<EmergencyAb
   }
 }
 
-export async function handleEmergencySwap(): Promise<{ success: boolean; freed_mb: number; message: string }> {
+export async function handleEmergencySwap(): Promise<{
+  success: boolean;
+  freed_mb: number;
+  message: string;
+}> {
   try {
-    const { stdout } = await execAsync('bash /etc/nixos/scripts/nix-emergency.sh swap-emergency');
+    const { stdout } = await execAsync("bash /etc/nixos/scripts/nix-emergency.sh swap-emergency");
 
     // Try to extract freed memory from output
     const freedMatch = stdout.match(/freed\s+(\d+)\s*MB/i);
@@ -276,7 +282,7 @@ export async function handleEmergencySwap(): Promise<{ success: boolean; freed_m
     return {
       success: true,
       freed_mb: freedMb,
-      message: stdout.trim() || 'SWAP emergency cleanup complete',
+      message: stdout.trim() || "SWAP emergency cleanup complete",
     };
   } catch (error: any) {
     return {
@@ -287,64 +293,114 @@ export async function handleEmergencySwap(): Promise<{ success: boolean; freed_m
   }
 }
 
-export async function handleSystemHealthCheck(detailed: boolean = false): Promise<SystemHealthResult> {
+export async function handleSystemHealthCheck(
+  detailed: boolean = false
+): Promise<SystemHealthResult> {
   try {
     // Use emergency status + additional checks
     const status = await handleEmergencyStatus();
 
-    const checks: SystemHealthResult['checks'] = [];
+    const checks: SystemHealthResult["checks"] = [];
     let score = 100;
 
     // Thermal check
     if (status.metrics.cpu.thermal < 75) {
-      checks.push({ category: 'Thermal', status: 'pass', message: `CPU: ${status.metrics.cpu.thermal}°C (healthy)` });
+      checks.push({
+        category: "Thermal",
+        status: "pass",
+        message: `CPU: ${status.metrics.cpu.thermal}°C (healthy)`,
+      });
     } else if (status.metrics.cpu.thermal < 85) {
-      checks.push({ category: 'Thermal', status: 'warning', message: `CPU: ${status.metrics.cpu.thermal}°C (warm)` });
+      checks.push({
+        category: "Thermal",
+        status: "warning",
+        message: `CPU: ${status.metrics.cpu.thermal}°C (warm)`,
+      });
       score -= 20;
     } else {
-      checks.push({ category: 'Thermal', status: 'fail', message: `CPU: ${status.metrics.cpu.thermal}°C (critical!)` });
+      checks.push({
+        category: "Thermal",
+        status: "fail",
+        message: `CPU: ${status.metrics.cpu.thermal}°C (critical!)`,
+      });
       score -= 40;
     }
 
     // Memory check
     if (status.metrics.memory.percentage < 80) {
-      checks.push({ category: 'Memory', status: 'pass', message: `${status.metrics.memory.percentage}% used (healthy)` });
+      checks.push({
+        category: "Memory",
+        status: "pass",
+        message: `${status.metrics.memory.percentage}% used (healthy)`,
+      });
     } else if (status.metrics.memory.percentage < 90) {
-      checks.push({ category: 'Memory', status: 'warning', message: `${status.metrics.memory.percentage}% used (high)` });
+      checks.push({
+        category: "Memory",
+        status: "warning",
+        message: `${status.metrics.memory.percentage}% used (high)`,
+      });
       score -= 15;
     } else {
-      checks.push({ category: 'Memory', status: 'fail', message: `${status.metrics.memory.percentage}% used (critical!)` });
+      checks.push({
+        category: "Memory",
+        status: "fail",
+        message: `${status.metrics.memory.percentage}% used (critical!)`,
+      });
       score -= 30;
     }
 
     // SWAP check
     if (status.metrics.swap.percentage < 50) {
-      checks.push({ category: 'SWAP', status: 'pass', message: `${status.metrics.swap.percentage}% used (healthy)` });
+      checks.push({
+        category: "SWAP",
+        status: "pass",
+        message: `${status.metrics.swap.percentage}% used (healthy)`,
+      });
     } else if (status.metrics.swap.percentage < 80) {
-      checks.push({ category: 'SWAP', status: 'warning', message: `${status.metrics.swap.percentage}% used (high)` });
+      checks.push({
+        category: "SWAP",
+        status: "warning",
+        message: `${status.metrics.swap.percentage}% used (high)`,
+      });
       score -= 15;
     } else {
-      checks.push({ category: 'SWAP', status: 'fail', message: `${status.metrics.swap.percentage}% used (critical!)` });
+      checks.push({
+        category: "SWAP",
+        status: "fail",
+        message: `${status.metrics.swap.percentage}% used (critical!)`,
+      });
       score -= 30;
     }
 
     // Load check
     const loadPerCore = status.metrics.cpu.load / status.metrics.cpu.cores;
     if (loadPerCore < 2) {
-      checks.push({ category: 'CPU Load', status: 'pass', message: `${status.metrics.cpu.load} (${loadPerCore.toFixed(1)}/core - healthy)` });
+      checks.push({
+        category: "CPU Load",
+        status: "pass",
+        message: `${status.metrics.cpu.load} (${loadPerCore.toFixed(1)}/core - healthy)`,
+      });
     } else if (loadPerCore < 4) {
-      checks.push({ category: 'CPU Load', status: 'warning', message: `${status.metrics.cpu.load} (${loadPerCore.toFixed(1)}/core - high)` });
+      checks.push({
+        category: "CPU Load",
+        status: "warning",
+        message: `${status.metrics.cpu.load} (${loadPerCore.toFixed(1)}/core - high)`,
+      });
       score -= 10;
     } else {
-      checks.push({ category: 'CPU Load', status: 'fail', message: `${status.metrics.cpu.load} (${loadPerCore.toFixed(1)}/core - critical!)` });
+      checks.push({
+        category: "CPU Load",
+        status: "fail",
+        message: `${status.metrics.cpu.load} (${loadPerCore.toFixed(1)}/core - critical!)`,
+      });
       score -= 20;
     }
 
     // Determine verdict
-    let verdict: SystemHealthResult['verdict'];
-    if (score >= 80) verdict = 'HEALTHY';
-    else if (score >= 60) verdict = 'WARNING';
-    else verdict = 'CRITICAL';
+    let verdict: SystemHealthResult["verdict"];
+    if (score >= 80) verdict = "HEALTHY";
+    else if (score >= 60) verdict = "WARNING";
+    else verdict = "CRITICAL";
 
     return {
       verdict,
@@ -357,7 +413,11 @@ export async function handleSystemHealthCheck(detailed: boolean = false): Promis
   }
 }
 
-export async function handleSafeRebuildCheck(): Promise<{ safe: boolean; reason: string; metrics: any }> {
+export async function handleSafeRebuildCheck(): Promise<{
+  safe: boolean;
+  reason: string;
+  metrics: any;
+}> {
   try {
     const status = await handleEmergencyStatus();
 
@@ -390,7 +450,7 @@ export async function handleSafeRebuildCheck(): Promise<{ safe: boolean; reason:
 
     return {
       safe,
-      reason: safe ? 'All checks passed - safe to rebuild' : reasons.join('; '),
+      reason: safe ? "All checks passed - safe to rebuild" : reasons.join("; "),
       metrics: status.metrics,
     };
   } catch (error: any) {

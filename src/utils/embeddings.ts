@@ -1,14 +1,14 @@
 // Embedding Utilities for Deduplication
 
-import { createHash } from 'crypto';
-import { logger } from './logger.js';
+import { createHash } from "crypto";
+import { logger } from "./logger.js";
 
 /**
  * Calculate cosine similarity between two embeddings
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) {
-    throw new Error('Embeddings must have the same dimensions');
+    throw new Error("Embeddings must have the same dimensions");
   }
 
   let dotProduct = 0;
@@ -35,7 +35,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  * Calculate SHA256 hash of text (for exact matching)
  */
 export function textHash(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
+  return createHash("sha256").update(text).digest("hex");
 }
 
 /**
@@ -61,8 +61,8 @@ export function levenshteinDistance(a: string, b: string): number {
       } else {
         matrix[i][j] = Math.min(
           matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1,      // insertion
-          matrix[i - 1][j] + 1       // deletion
+          matrix[i][j - 1] + 1, // insertion
+          matrix[i - 1][j] + 1 // deletion
         );
       }
     }
@@ -164,8 +164,8 @@ export function findSimilarPairs<T>(
 export function normalizeText(text: string): string {
   return text
     .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, " ")
+    .replace(/[^\w\s]/g, "")
     .trim();
 }
 
@@ -194,7 +194,7 @@ export function batchItems<T>(items: T[], batchSize: number): T[][] {
  */
 export function averageEmbedding(embeddings: number[][]): number[] {
   if (embeddings.length === 0) {
-    throw new Error('Cannot calculate average of empty embedding list');
+    throw new Error("Cannot calculate average of empty embedding list");
   }
 
   const dimensions = embeddings[0].length;
@@ -202,7 +202,7 @@ export function averageEmbedding(embeddings: number[][]): number[] {
 
   for (const embedding of embeddings) {
     if (embedding.length !== dimensions) {
-      throw new Error('All embeddings must have the same dimensions');
+      throw new Error("All embeddings must have the same dimensions");
     }
 
     for (let i = 0; i < dimensions; i++) {
@@ -210,7 +210,7 @@ export function averageEmbedding(embeddings: number[][]): number[] {
     }
   }
 
-  return sum.map(val => val / embeddings.length);
+  return sum.map((val) => val / embeddings.length);
 }
 
 /**
@@ -232,7 +232,7 @@ export function clusterEmbeddings<T>(
 
   if (k >= items.length) {
     // Each item is its own cluster
-    return items.map(item => ({
+    return items.map((item) => ({
       centroid: item.embedding,
       items: [item.data],
     }));
@@ -292,7 +292,7 @@ export function clusterEmbeddings<T>(
 
     // Early stop if converged
     if (!changed) {
-      logger.debug({ iteration: iter + 1 }, 'K-means converged early');
+      logger.debug({ iteration: iter + 1 }, "K-means converged early");
       break;
     }
   }

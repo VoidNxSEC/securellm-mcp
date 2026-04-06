@@ -8,7 +8,7 @@
  * - Formatting for readability
  */
 
-import { logger } from './logger.js';
+import { logger } from "./logger.js";
 
 interface ModelInfo {
   id: string;
@@ -33,15 +33,16 @@ export class ResponseSummarizer {
     }
 
     // Concise summary
-    const lines = [
-      `Found ${models.length} models:\n`,
-    ];
+    const lines = [`Found ${models.length} models:\n`];
 
     // Group by format
-    const byFormat = models.reduce((acc, m) => {
-      acc[m.format] = (acc[m.format] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const byFormat = models.reduce(
+      (acc, m) => {
+        acc[m.format] = (acc[m.format] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
     lines.push("By format:");
     for (const [format, count] of Object.entries(byFormat)) {
@@ -55,9 +56,7 @@ export class ResponseSummarizer {
     lines.push(`Est. VRAM: ${totalVram.toFixed(1)}GB\n`);
 
     // Show top 10 by size
-    const sorted = [...models]
-      .sort((a, b) => b.size_gb - a.size_gb)
-      .slice(0, 10);
+    const sorted = [...models].sort((a, b) => b.size_gb - a.size_gb).slice(0, 10);
 
     lines.push("Top models (by size):");
     for (const m of sorted) {
@@ -70,9 +69,7 @@ export class ResponseSummarizer {
       lines.push(`\n... and ${models.length - 10} more models`);
     }
 
-    lines.push(
-      '\n💡 Tip: Use "get_model_info" with a specific ID for full details'
-    );
+    lines.push('\n💡 Tip: Use "get_model_info" with a specific ID for full details');
 
     return lines.join("\n");
   }
@@ -80,26 +77,29 @@ export class ResponseSummarizer {
   /**
    * Summarize VRAM status
    */
-  static summarizeVram(vram: {
-    total_gb: number;
-    used_gb: number;
-    free_gb: number;
-    utilization_percent: number;
-    gpus?: Array<{
-      id: number;
-      name: string;
-      used_mb: number;
-      total_mb: number;
+  static summarizeVram(
+    vram: {
+      total_gb: number;
+      used_gb: number;
+      free_gb: number;
       utilization_percent: number;
-      temperature_c: number;
-    }>;
-    processes?: Array<{
-      gpu_id: number;
-      name: string;
-      pid: number;
-      memory_mb: number;
-    }>;
-  }, verbose: boolean = false): string {
+      gpus?: Array<{
+        id: number;
+        name: string;
+        used_mb: number;
+        total_mb: number;
+        utilization_percent: number;
+        temperature_c: number;
+      }>;
+      processes?: Array<{
+        gpu_id: number;
+        name: string;
+        pid: number;
+        memory_mb: number;
+      }>;
+    },
+    verbose: boolean = false
+  ): string {
     if (verbose) {
       return JSON.stringify(vram, null, 2);
     }
@@ -122,13 +122,9 @@ export class ResponseSummarizer {
 
     if (vram.processes && vram.processes.length > 0) {
       lines.push(`\nActive processes: ${vram.processes.length}`);
-      const topProcs = vram.processes
-        .sort((a, b) => b.memory_mb - a.memory_mb)
-        .slice(0, 5);
+      const topProcs = vram.processes.sort((a, b) => b.memory_mb - a.memory_mb).slice(0, 5);
       for (const proc of topProcs) {
-        lines.push(
-          `  GPU ${proc.gpu_id}: ${proc.name} (PID ${proc.pid}) - ${proc.memory_mb}MB`
-        );
+        lines.push(`  GPU ${proc.gpu_id}: ${proc.name} (PID ${proc.pid}) - ${proc.memory_mb}MB`);
       }
       if (vram.processes.length > 5) {
         lines.push(`  ... and ${vram.processes.length - 5} more`);
@@ -286,11 +282,7 @@ export class ResponseSummarizer {
    * Generic operation result
    */
   static summarizeOperation(result: any, operation: string): string {
-    const lines = [
-      `✅ ${operation} successful`,
-      "",
-      JSON.stringify(result, null, 2),
-    ];
+    const lines = [`✅ ${operation} successful`, "", JSON.stringify(result, null, 2)];
     return lines.join("\n");
   }
 

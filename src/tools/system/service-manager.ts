@@ -3,16 +3,22 @@
  * Manage systemd services
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import type { SystemServiceManagerArgs, ToolResult } from '../../types/extended-tools.js';
+import { exec } from "child_process";
+import { promisify } from "util";
+import type { SystemServiceManagerArgs, ToolResult } from "../../types/extended-tools.js";
 
 const execAsync = promisify(exec);
 
 export class SystemServiceManagerTool {
   private allowedServices = [
-    'sshd', 'nginx', 'docker', 'postgresql', 'redis',
-    'NetworkManager', 'systemd-resolved', 'cups'
+    "sshd",
+    "nginx",
+    "docker",
+    "postgresql",
+    "redis",
+    "NetworkManager",
+    "systemd-resolved",
+    "cups",
   ];
 
   async execute(args: SystemServiceManagerArgs): Promise<ToolResult> {
@@ -28,18 +34,18 @@ export class SystemServiceManagerTool {
     }
 
     try {
-      let cmd = '';
+      let cmd = "";
       switch (action) {
-        case 'start':
-        case 'stop':
-        case 'restart':
+        case "start":
+        case "stop":
+        case "restart":
           cmd = `sudo systemctl ${action} ${service}`;
           break;
-        case 'enable':
-        case 'disable':
+        case "enable":
+        case "disable":
           cmd = `sudo systemctl ${action} ${service}`;
           break;
-        case 'status':
+        case "status":
           cmd = `systemctl status ${service} --no-pager`;
           break;
       }
@@ -52,7 +58,7 @@ export class SystemServiceManagerTool {
           service,
           action,
           output: stdout,
-          status: action === 'status' ? this.parseStatus(stdout) : 'completed',
+          status: action === "status" ? this.parseStatus(stdout) : "completed",
         },
         timestamp: new Date().toISOString(),
       };
@@ -66,10 +72,10 @@ export class SystemServiceManagerTool {
   }
 
   private parseStatus(output: string): string {
-    if (output.includes('Active: active (running)')) return 'running';
-    if (output.includes('Active: inactive')) return 'stopped';
-    if (output.includes('Active: failed')) return 'failed';
-    return 'unknown';
+    if (output.includes("Active: active (running)")) return "running";
+    if (output.includes("Active: inactive")) return "stopped";
+    if (output.includes("Active: failed")) return "failed";
+    return "unknown";
   }
 }
 

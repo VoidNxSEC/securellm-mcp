@@ -1,6 +1,6 @@
 // Unified LLM Client for Knowledge Database Operations
 
-import { logger } from './logger.js';
+import { logger } from "./logger.js";
 
 export interface LLMClientConfig {
   baseURL?: string;
@@ -57,8 +57,8 @@ export class UnifiedLLMClient {
   private apiKey?: string;
 
   constructor(config: LLMClientConfig = {}) {
-    this.baseURL = config.baseURL || process.env.LLM_API_URL || 'http://localhost:9000';
-    this.timeout = config.timeout || parseInt(process.env.LLM_API_TIMEOUT || '30000');
+    this.baseURL = config.baseURL || process.env.LLM_API_URL || "http://localhost:9000";
+    this.timeout = config.timeout || parseInt(process.env.LLM_API_TIMEOUT || "30000");
     this.retries = config.retries || 3;
     this.apiKey = config.apiKey || process.env.LLM_API_KEY;
   }
@@ -67,7 +67,7 @@ export class UnifiedLLMClient {
    * Generate text completion for summarization
    */
   async complete(prompt: string, options: CompletionOptions = {}): Promise<string> {
-    const model = options.model || process.env.LLM_DEFAULT_MODEL || 'default';
+    const model = options.model || process.env.LLM_DEFAULT_MODEL || "default";
     const maxTokens = options.max_tokens || 500;
     const temperature = options.temperature ?? 0.3;
 
@@ -75,7 +75,7 @@ export class UnifiedLLMClient {
       model,
       messages: [
         {
-          role: 'user',
+          role: "user",
           content: prompt,
         },
       ],
@@ -85,19 +85,19 @@ export class UnifiedLLMClient {
       stop: options.stop,
     };
 
-    logger.debug({ model, maxTokens, temperature }, 'Sending completion request');
+    logger.debug({ model, maxTokens, temperature }, "Sending completion request");
 
     const response = await this.fetchWithRetry<CompletionResponse>(
       `${this.baseURL}/v1/chat/completions`,
       {
-        method: 'POST',
+        method: "POST",
         headers: this.getHeaders(),
         body: JSON.stringify(requestBody),
       }
     );
 
     if (!response.choices || response.choices.length === 0) {
-      throw new Error('No completion choices returned from LLM API');
+      throw new Error("No completion choices returned from LLM API");
     }
 
     const content = response.choices[0].message.content;
@@ -106,7 +106,7 @@ export class UnifiedLLMClient {
         tokens: response.usage?.total_tokens,
         length: content.length,
       },
-      'Completion received'
+      "Completion received"
     );
 
     return content;
@@ -115,8 +115,11 @@ export class UnifiedLLMClient {
   /**
    * Generate embeddings for deduplication
    */
-  async embed(text: string | string[], options: EmbeddingOptions = {}): Promise<number[] | number[][]> {
-    const model = options.model || 'default';
+  async embed(
+    text: string | string[],
+    options: EmbeddingOptions = {}
+  ): Promise<number[] | number[][]> {
+    const model = options.model || "default";
     const batchSize = options.batch_size || 20;
 
     const inputs = Array.isArray(text) ? text : [text];
@@ -129,25 +132,25 @@ export class UnifiedLLMClient {
         input: batch,
       };
 
-      logger.debug({ model, batchSize: batch.length }, 'Sending embedding request');
+      logger.debug({ model, batchSize: batch.length }, "Sending embedding request");
 
       const response = await this.fetchWithRetry<EmbeddingResponse>(
         `${this.baseURL}/v1/embeddings`,
         {
-          method: 'POST',
+          method: "POST",
           headers: this.getHeaders(),
           body: JSON.stringify(requestBody),
         }
       );
 
       if (!response.data || response.data.length === 0) {
-        throw new Error('No embedding data returned from LLM API');
+        throw new Error("No embedding data returned from LLM API");
       }
 
       // Sort by index to maintain order
       const sortedEmbeddings = response.data
         .sort((a, b) => a.index - b.index)
-        .map(item => item.embedding);
+        .map((item) => item.embedding);
 
       allEmbeddings.push(...sortedEmbeddings);
 
@@ -156,7 +159,7 @@ export class UnifiedLLMClient {
           count: sortedEmbeddings.length,
           dimensions: sortedEmbeddings[0]?.length,
         },
-        'Embeddings received'
+        "Embeddings received"
       );
     }
 
@@ -172,16 +175,16 @@ export class UnifiedLLMClient {
       const response = await this.fetchWithRetry<any>(
         `${this.baseURL}/health`,
         {
-          method: 'GET',
+          method: "GET",
           headers: this.getHeaders(),
         },
         1 // Only 1 retry for health check
       );
 
-      logger.debug({ status: response.status }, 'LLM API health check');
-      return response.status === 'ok' || response.status === 'healthy';
+      logger.debug({ status: response.status }, "LLM API health check");
+      return response.status === "ok" || response.status === "healthy";
     } catch (err) {
-      logger.warn({ err, baseURL: this.baseURL }, 'LLM API health check failed');
+      logger.warn({ err, baseURL: this.baseURL }, "LLM API health check failed");
       return false;
     }
   }
@@ -210,7 +213,9 @@ export class UnifiedLLMClient {
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(`LLM API error: ${response.status} ${response.statusText} - ${errorText}`);
+          throw new Error(
+            `LLM API error: ${response.status} ${response.statusText} - ${errorText}`
+          );
         }
 
         const data = await response.json();
@@ -218,22 +223,16 @@ export class UnifiedLLMClient {
       } catch (err: any) {
         lastError = err;
 
-        if (err.name === 'AbortError') {
-          logger.warn(
-            { attempt, maxRetries, timeout: this.timeout },
-            'LLM API request timeout'
-          );
+        if (err.name === "AbortError") {
+          logger.warn({ attempt, maxRetries, timeout: this.timeout }, "LLM API request timeout");
         } else {
-          logger.warn(
-            { attempt, maxRetries, error: err.message },
-            'LLM API request failed'
-          );
+          logger.warn({ attempt, maxRetries, error: err.message }, "LLM API request failed");
         }
 
         if (attempt < maxRetries) {
           // Exponential backoff
           const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-          logger.debug({ delay }, 'Retrying after delay');
+          logger.debug({ delay }, "Retrying after delay");
           await this.sleep(delay);
         }
       }
@@ -247,11 +246,11 @@ export class UnifiedLLMClient {
    */
   private getHeaders(): HeadersInit {
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     };
 
     if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
+      headers["Authorization"] = `Bearer ${this.apiKey}`;
     }
 
     return headers;
@@ -272,7 +271,7 @@ export class UnifiedLLMClient {
    * Sleep helper
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

@@ -263,19 +263,22 @@ class SecureLLMBridgeMCPServer {
     this.server.onerror = (error) => logger.error({ err: error }, "MCP server error");
 
     // Register core resources for cleanup (order matters: first registered = last disposed)
-    this.disposables.register('mcp-server', () => this.server.close());
-    this.disposables.register('request-deduplicator', () => this.requestDeduplicator.close());
+    this.disposables.register("mcp-server", () => this.server.close());
+    this.disposables.register("request-deduplicator", () => this.requestDeduplicator.close());
 
     // Register shutdown handlers for graceful cleanup
     const shutdownHandler = () => {
       logger.info("Received shutdown signal, cleaning up resources");
 
-      this.disposables.disposeAll().then(() => {
-        process.exit(0);
-      }).catch((error) => {
-        logger.error({ err: error }, "Error during shutdown");
-        process.exit(1);
-      });
+      this.disposables
+        .disposeAll()
+        .then(() => {
+          process.exit(0);
+        })
+        .catch((error) => {
+          logger.error({ err: error }, "Error during shutdown");
+          process.exit(1);
+        });
     };
 
     process.on("SIGINT", shutdownHandler);
@@ -350,21 +353,23 @@ class SecureLLMBridgeMCPServer {
       // Non-fatal: offline services degrade gracefully (semantic cache falls back to
       // SQLite embeddings; reranker falls back to keyword scoring).
       const [phantomResult, rerankerResult] = await Promise.allSettled([
-        fetch(
-          `${process.env.PHANTOM_URL ?? 'http://localhost:8008'}/health`,
-          { signal: AbortSignal.timeout(2_000) },
-        ).then(r => r.ok).catch(() => false),
-        fetch(
-          `${process.env.CEREBRO_RERANKER_URL ?? 'http://localhost:8016'}/health`,
-          { signal: AbortSignal.timeout(2_000) },
-        ).then(r => r.ok).catch(() => false),
+        fetch(`${process.env.PHANTOM_URL ?? "http://localhost:8008"}/health`, {
+          signal: AbortSignal.timeout(2_000),
+        })
+          .then((r) => r.ok)
+          .catch(() => false),
+        fetch(`${process.env.CEREBRO_RERANKER_URL ?? "http://localhost:8016"}/health`, {
+          signal: AbortSignal.timeout(2_000),
+        })
+          .then((r) => r.ok)
+          .catch(() => false),
       ]);
       logger.info(
         {
-          phantomHealth: phantomResult.status === 'fulfilled' && phantomResult.value,
-          rerankerHealth: rerankerResult.status === 'fulfilled' && rerankerResult.value,
+          phantomHealth: phantomResult.status === "fulfilled" && phantomResult.value,
+          rerankerHealth: rerankerResult.status === "fulfilled" && rerankerResult.value,
         },
-        '[Startup] Optional service health',
+        "[Startup] Optional service health"
       );
 
       logger.info("MCP Server initialization complete");
@@ -377,7 +382,12 @@ class SecureLLMBridgeMCPServer {
   private initKnowledge() {
     try {
       this.db = createKnowledgeDatabase(KNOWLEDGE_DB_PATH);
-      this.disposables.register('knowledge-db', () => { if (this.db) { this.db.close(); this.db = null; } });
+      this.disposables.register("knowledge-db", () => {
+        if (this.db) {
+          this.db.close();
+          this.db = null;
+        }
+      });
       logger.info({ dbPath: KNOWLEDGE_DB_PATH }, "Knowledge database initialized");
 
       // Initialize Project Watcher if we have a project root
@@ -393,7 +403,12 @@ class SecureLLMBridgeMCPServer {
         this.projectWatcher = new ProjectWatcher(this.projectRoot);
         this.projectWatcher.setDatabase(this.db);
         this.projectWatcher.start();
-        this.disposables.register('project-watcher', () => { if (this.projectWatcher) { this.projectWatcher.stop(); this.projectWatcher = null; } });
+        this.disposables.register("project-watcher", () => {
+          if (this.projectWatcher) {
+            this.projectWatcher.stop();
+            this.projectWatcher = null;
+          }
+        });
 
         // Initialize Proactive Logic components
         this.contextManager = new ContextManager(this.projectRoot, this.db as any); // Cast to any to avoid type mismatch if different SQLite wrapper
@@ -430,7 +445,12 @@ class SecureLLMBridgeMCPServer {
         ttlSeconds: parseInt(process.env.SEMANTIC_CACHE_TTL || "3600", 10),
         llamaCppUrl: process.env.LLAMA_CPP_URL || "http://localhost:8081",
       });
-      this.disposables.register('semantic-cache', () => { if (this.semanticCache) { this.semanticCache.close(); this.semanticCache = null; } });
+      this.disposables.register("semantic-cache", () => {
+        if (this.semanticCache) {
+          this.semanticCache.close();
+          this.semanticCache = null;
+        }
+      });
 
       logger.info({ dbPath: cacheDbPath }, "Semantic cache initialized");
       // Note: SemanticCache handles its own cleanup interval internally
@@ -1124,7 +1144,7 @@ class SecureLLMBridgeMCPServer {
             if (hygieneReport && result && Array.isArray((result as any).content)) {
               (result as any).content.push({
                 type: "text",
-                text: `\n---\n${hygieneReport.summary}\n${hygieneReport.details.join('\n')}`,
+                text: `\n---\n${hygieneReport.summary}\n${hygieneReport.details.join("\n")}`,
               });
             }
           } catch {

@@ -1,10 +1,10 @@
 /**
  * Nix Build Analyzer
- * 
+ *
  * Analyzes Nix build logs and provides insights.
  */
 
-import type { BuildAnalysis } from '../../types/nix-tools.js';
+import type { BuildAnalysis } from "../../types/nix-tools.js";
 
 /**
  * Build Analyzer
@@ -14,8 +14,8 @@ export class BuildAnalyzer {
    * Analyze build log
    */
   public analyze(buildLog: string): BuildAnalysis {
-    const lines = buildLog.split('\n');
-    
+    const lines = buildLog.split("\n");
+
     let totalTime = 0;
     let derivationsBuilt = 0;
     const failures: string[] = [];
@@ -26,27 +26,27 @@ export class BuildAnalyzer {
 
     for (const line of lines) {
       // Count derivations
-      if (line.includes('building') && line.includes('/nix/store/')) {
+      if (line.includes("building") && line.includes("/nix/store/")) {
         derivationsBuilt++;
       }
 
       // Detect cache hits
-      if (line.includes('copying path') || line.includes('from cache')) {
+      if (line.includes("copying path") || line.includes("from cache")) {
         cacheHits++;
       }
 
       // Detect cache misses (actual builds)
-      if (line.includes('building') && !line.includes('copying')) {
+      if (line.includes("building") && !line.includes("copying")) {
         cacheMisses++;
       }
 
       // Extract failures
-      if (line.includes('error:') || line.includes('ERROR') || line.includes('failed')) {
+      if (line.includes("error:") || line.includes("ERROR") || line.includes("failed")) {
         failures.push(line.trim());
       }
 
       // Extract warnings
-      if (line.includes('warning:') || line.includes('WARN')) {
+      if (line.includes("warning:") || line.includes("WARN")) {
         warnings.push(line.trim());
       }
 
@@ -84,12 +84,16 @@ export class BuildAnalyzer {
    */
   private parseSize(value: string, unit: string): number {
     const num = parseFloat(value);
-    
+
     switch (unit) {
-      case 'KiB': return num * 1024;
-      case 'MiB': return num * 1024 * 1024;
-      case 'GiB': return num * 1024 * 1024 * 1024;
-      default: return num;
+      case "KiB":
+        return num * 1024;
+      case "MiB":
+        return num * 1024 * 1024;
+      case "GiB":
+        return num * 1024 * 1024 * 1024;
+      default:
+        return num;
     }
   }
 
@@ -98,10 +102,14 @@ export class BuildAnalyzer {
    */
   private normalizeTime(value: number, unit: string): number {
     switch (unit) {
-      case 's': return value;
-      case 'm': return value * 60;
-      case 'h': return value * 3600;
-      default: return value;
+      case "s":
+        return value;
+      case "m":
+        return value * 60;
+      case "h":
+        return value * 3600;
+      default:
+        return value;
     }
   }
 
@@ -110,28 +118,28 @@ export class BuildAnalyzer {
    */
   public generateSummary(analysis: BuildAnalysis): string {
     const lines: string[] = [];
-    
+
     lines.push(`Build Summary:`);
     lines.push(`  Total Time: ${this.formatTime(analysis.totalTime)}`);
     lines.push(`  Derivations Built: ${analysis.derivationsBuilt}`);
     lines.push(`  Cache Hits: ${analysis.cacheHits}`);
     lines.push(`  Cache Misses: ${analysis.cacheMisses}`);
-    
+
     if (analysis.downloads.length > 0) {
       const totalSize = analysis.downloads.reduce((sum, d) => sum + d.size, 0);
       lines.push(`  Downloads: ${analysis.downloads.length} (${this.formatBytes(totalSize)})`);
     }
-    
+
     if (analysis.warnings.length > 0) {
       lines.push(`  Warnings: ${analysis.warnings.length}`);
     }
-    
+
     if (analysis.failures.length > 0) {
       lines.push(`  Failures: ${analysis.failures.length}`);
-      analysis.failures.forEach(f => lines.push(`    - ${f}`));
+      analysis.failures.forEach((f) => lines.push(`    - ${f}`));
     }
-    
-    return lines.join('\n');
+
+    return lines.join("\n");
   }
 
   /**

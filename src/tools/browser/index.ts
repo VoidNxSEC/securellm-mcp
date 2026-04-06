@@ -4,8 +4,8 @@
  */
 
 // @ts-ignore
-import puppeteer, { Browser, Page } from 'puppeteer';
-import { logger } from '../../utils/logger.js';
+import puppeteer, { Browser, Page } from "puppeteer";
+import { logger } from "../../utils/logger.js";
 import type {
   BrowserLaunchAdvancedArgs,
   BrowserExtractDataArgs,
@@ -14,7 +14,7 @@ import type {
   BrowserSearchAggregateArgs,
   BrowserSessionResult,
   ToolResult,
-} from '../../types/extended-tools.js';
+} from "../../types/extended-tools.js";
 
 interface BrowserSession {
   id: string;
@@ -26,14 +26,26 @@ interface BrowserSession {
 
 class BrowserSessionManager {
   private sessions = new Map<string, BrowserSession>();
-  private allowedDomains = ['google.com', 'github.com', 'stackoverflow.com', 'duckduckgo.com', 'localhost'];
+  private allowedDomains = [
+    "google.com",
+    "github.com",
+    "stackoverflow.com",
+    "duckduckgo.com",
+    "localhost",
+  ];
 
   async createSession(args: BrowserLaunchAdvancedArgs): Promise<BrowserSessionResult> {
-    const { url, headless = true, viewport = { width: 1920, height: 1080 }, user_agent, cookies } = args;
+    const {
+      url,
+      headless = true,
+      viewport = { width: 1920, height: 1080 },
+      user_agent,
+      cookies,
+    } = args;
 
     // Security: validate URL
     const domain = new URL(url).hostname;
-    if (!this.allowedDomains.some(d => domain === d || domain.endsWith('.' + d))) {
+    if (!this.allowedDomains.some((d) => domain === d || domain.endsWith("." + d))) {
       return {
         success: false,
         error: `Domain ${domain} not in whitelist`,
@@ -42,10 +54,12 @@ class BrowserSessionManager {
     }
 
     try {
-      const browserArgs = ['--disable-setuid-sandbox'];
-      if (process.env.BROWSER_DISABLE_SANDBOX === 'true') {
-        logger.warn('Puppeteer --no-sandbox enabled via BROWSER_DISABLE_SANDBOX. This reduces security isolation.');
-        browserArgs.unshift('--no-sandbox');
+      const browserArgs = ["--disable-setuid-sandbox"];
+      if (process.env.BROWSER_DISABLE_SANDBOX === "true") {
+        logger.warn(
+          "Puppeteer --no-sandbox enabled via BROWSER_DISABLE_SANDBOX. This reduces security isolation."
+        );
+        browserArgs.unshift("--no-sandbox");
       }
 
       const launchOptions: any = {
@@ -62,19 +76,21 @@ class BrowserSessionManager {
 
       const page = await browser.newPage();
       await page.setViewport(viewport);
-      
+
       if (user_agent) {
         await page.setUserAgent(user_agent);
       } else {
         // Default to a common browser User-Agent to avoid basic bot detection
-        await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        await page.setUserAgent(
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        );
       }
 
       if (cookies && cookies.length > 0) {
         await page.setCookie(...cookies);
       }
 
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+      await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
 
       const sessionId = `browser-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const session: BrowserSession = {
@@ -88,10 +104,10 @@ class BrowserSessionManager {
       this.sessions.set(sessionId, session);
 
       // Capture screenshot
-      const screenshot = await page.screenshot({ encoding: 'base64' });
+      const screenshot = await page.screenshot({ encoding: "base64" });
       const consoleLogs: string[] = [];
 
-      page.on('console', (msg: any) => {
+      page.on("console", (msg: any) => {
         consoleLogs.push(`[${msg.type()}] ${msg.text()}`);
       });
 
@@ -158,7 +174,7 @@ export class BrowserExtractDataTool {
     if (!session) {
       return {
         success: false,
-        error: 'Browser session not found',
+        error: "Browser session not found",
         timestamp: new Date().toISOString(),
       };
     }
@@ -178,14 +194,18 @@ export class BrowserExtractDataTool {
           const values = [];
 
           for (const el of elements) {
-            if (selector.type === 'text') {
+            if (selector.type === "text") {
               const text = await page.evaluate((e: any) => e.textContent, el);
               values.push(text?.trim());
-            } else if (selector.type === 'html') {
+            } else if (selector.type === "html") {
               const html = await page.evaluate((e: any) => e.innerHTML, el);
               values.push(html);
-            } else if (selector.type === 'attribute') {
-              const attr = await page.evaluate((e: any, name: string) => e.getAttribute(name), el, selector.name || 'href');
+            } else if (selector.type === "attribute") {
+              const attr = await page.evaluate(
+                (e: any, name: string) => e.getAttribute(name),
+                el,
+                selector.name || "href"
+              );
               values.push(attr);
             }
           }
@@ -196,7 +216,7 @@ export class BrowserExtractDataTool {
         }
       }
 
-      const screenshot = await page.screenshot({ encoding: 'base64' });
+      const screenshot = await page.screenshot({ encoding: "base64" });
 
       return {
         success: true,
@@ -228,7 +248,7 @@ export class BrowserInteractFormTool {
     if (!session) {
       return {
         success: false,
-        error: 'Browser session not found',
+        error: "Browser session not found",
         timestamp: new Date().toISOString(),
       };
     }
@@ -240,19 +260,19 @@ export class BrowserInteractFormTool {
         await page.waitForSelector(action.selector, { timeout: 5000 });
 
         switch (action.type) {
-          case 'fill':
-            await page.type(action.selector, action.value || '');
+          case "fill":
+            await page.type(action.selector, action.value || "");
             break;
-          case 'click':
+          case "click":
             await page.click(action.selector);
             break;
-          case 'select':
-            await page.select(action.selector, action.value || '');
+          case "select":
+            await page.select(action.selector, action.value || "");
             break;
-          case 'check':
+          case "check":
             await page.click(action.selector);
             break;
-          case 'upload':
+          case "upload":
             const input = await page.$(action.selector);
             if (input && action.value) {
               await (input as any).uploadFile(action.value);
@@ -260,7 +280,7 @@ export class BrowserInteractFormTool {
             break;
         }
 
-        await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between actions
+        await new Promise((resolve) => setTimeout(resolve, 500)); // Small delay between actions
       }
 
       if (submit_selector) {
@@ -268,7 +288,7 @@ export class BrowserInteractFormTool {
         await page.waitForNavigation({ timeout: 10000 }).catch(() => {});
       }
 
-      const screenshot = await page.screenshot({ encoding: 'base64' });
+      const screenshot = await page.screenshot({ encoding: "base64" });
 
       return {
         success: true,
@@ -301,7 +321,7 @@ export class BrowserMonitorChangesTool {
     if (!session) {
       return {
         success: false,
-        error: 'Browser session not found',
+        error: "Browser session not found",
         timestamp: new Date().toISOString(),
       };
     }
@@ -316,22 +336,22 @@ export class BrowserMonitorChangesTool {
           const content = await page.$eval(selector, (el: any) => el.textContent);
           changes.push({
             timestamp: new Date().toISOString(),
-            content: content?.trim() || '',
+            content: content?.trim() || "",
           });
         } catch (error) {
           changes.push({
             timestamp: new Date().toISOString(),
-            content: '[ERROR: Element not found]',
+            content: "[ERROR: Element not found]",
           });
         }
 
         if (i < iterations - 1) {
-          await new Promise(resolve => setTimeout(resolve, interval_seconds * 1000));
+          await new Promise((resolve) => setTimeout(resolve, interval_seconds * 1000));
         }
       }
 
       // Detect if content changed
-      const uniqueContents = new Set(changes.map(c => c.content));
+      const uniqueContents = new Set(changes.map((c) => c.content));
       const contentChanged = uniqueContents.size > 1;
 
       return {
@@ -397,7 +417,7 @@ export class BrowserSearchAggregateTool {
     return {
       source,
       query,
-      message: 'Search aggregation requires API keys - simplified implementation',
+      message: "Search aggregation requires API keys - simplified implementation",
       results_count: 0,
     };
   }

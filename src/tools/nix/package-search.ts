@@ -1,12 +1,12 @@
 /**
  * Nix Package Search
- * 
+ *
  * Search for Nix packages across nixpkgs and other channels.
  */
 
-import { executeNixCommand } from './utils/async-exec.js';
-import type { NixPackage } from '../../types/nix-tools.js';
-import { CacheManager } from '../../utils/cache-manager.js';
+import { executeNixCommand } from "./utils/async-exec.js";
+import type { NixPackage } from "../../types/nix-tools.js";
+import { CacheManager } from "../../utils/cache-manager.js";
 
 /**
  * Package Search
@@ -14,7 +14,7 @@ import { CacheManager } from '../../utils/cache-manager.js';
 export class PackageSearch {
   private searchCache = new CacheManager<string, NixPackage[]>({
     max: 500,
-    ttl: 1800000,  // 30 min
+    ttl: 1800000, // 30 min
   });
   /**
    * Search for packages
@@ -26,7 +26,7 @@ export class PackageSearch {
 
     try {
       // Use nix search for fast searching
-      const output = await executeNixCommand(['search', 'nixpkgs', query, '--json'], {
+      const output = await executeNixCommand(["search", "nixpkgs", query, "--json"], {
         timeout: 30000,
         maxBuffer: 5 * 1024 * 1024,
       });
@@ -36,10 +36,10 @@ export class PackageSearch {
 
       for (const [attrPath, info] of Object.entries(results)) {
         const pkgInfo = info as any;
-        
+
         packages.push({
           name: pkgInfo.pname || this.extractName(attrPath),
-          version: pkgInfo.version || 'unknown',
+          version: pkgInfo.version || "unknown",
           description: pkgInfo.description,
           attrPath,
         });
@@ -64,7 +64,7 @@ export class PackageSearch {
    */
   public async getPackageInfo(attrPath: string): Promise<NixPackage | null> {
     try {
-      const output = await executeNixCommand(['eval', `nixpkgs#${attrPath}.meta`, '--json'], {
+      const output = await executeNixCommand(["eval", `nixpkgs#${attrPath}.meta`, "--json"], {
         timeout: 10000,
       });
 
@@ -72,7 +72,7 @@ export class PackageSearch {
 
       return {
         name: meta.pname || this.extractName(attrPath),
-        version: meta.version || 'unknown',
+        version: meta.version || "unknown",
         description: meta.description,
         attrPath,
       };
@@ -86,7 +86,7 @@ export class PackageSearch {
    */
   private async fallbackSearch(query: string, limit: number): Promise<NixPackage[]> {
     try {
-      const output = await executeNixCommand(['search', 'nixpkgs', query], {
+      const output = await executeNixCommand(["search", "nixpkgs", query], {
         timeout: 30000,
         maxBuffer: 5 * 1024 * 1024,
       });
@@ -102,18 +102,18 @@ export class PackageSearch {
    */
   private parseTextOutput(output: string, limit: number): NixPackage[] {
     const packages: NixPackage[] = [];
-    const lines = output.split('\n');
-    
+    const lines = output.split("\n");
+
     let currentPackage: Partial<NixPackage> | null = null;
-    
+
     for (const line of lines) {
-      if (line.startsWith('*')) {
+      if (line.startsWith("*")) {
         // New package entry
         if (currentPackage && currentPackage.attrPath) {
           packages.push(currentPackage as NixPackage);
           if (packages.length >= limit) break;
         }
-        
+
         const match = line.match(/\* ([^\s]+) \(([^)]+)\)/);
         if (match) {
           currentPackage = {
@@ -127,12 +127,12 @@ export class PackageSearch {
         currentPackage.description = line.trim();
       }
     }
-    
+
     // Add last package
     if (currentPackage && currentPackage.attrPath) {
       packages.push(currentPackage as NixPackage);
     }
-    
+
     return packages;
   }
 
@@ -140,7 +140,7 @@ export class PackageSearch {
    * Extract package name from attribute path
    */
   private extractName(attrPath: string): string {
-    const parts = attrPath.split('.');
+    const parts = attrPath.split(".");
     return parts[parts.length - 1];
   }
 }

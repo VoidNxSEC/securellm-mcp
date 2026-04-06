@@ -1,16 +1,16 @@
 /**
  * Proactive Action Types
- * 
+ *
  * Types for actions that execute automatically before asking user questions
  * to gather relevant context and reduce friction.
  */
 
-import type { EnrichedContext } from './context-inference.js';
+import type { EnrichedContext } from "./context-inference.js";
 
 /**
  * Proactive action result status
  */
-export type ActionStatus = 'success' | 'error' | 'timeout' | 'skipped';
+export type ActionStatus = "success" | "error" | "timeout" | "skipped";
 
 /**
  * Base proactive action result
@@ -32,7 +32,7 @@ export interface ActionResult {
  * File scanning result
  */
 export interface FileScanResult extends ActionResult {
-  action: 'file_scan';
+  action: "file_scan";
   data: {
     /** Matching files */
     files: string[];
@@ -47,10 +47,10 @@ export interface FileScanResult extends ActionResult {
  * Directory listing result
  */
 export interface DirectoryListResult extends ActionResult {
-  action: 'directory_list';
+  action: "directory_list";
   data: {
     /** Directory entries */
-    entries: Array<{ name: string; type: 'file' | 'dir'; size: number }>;
+    entries: Array<{ name: string; type: "file" | "dir"; size: number }>;
     /** Total entries */
     total: number;
     /** Directory path */
@@ -62,7 +62,7 @@ export interface DirectoryListResult extends ActionResult {
  * Git history result
  */
 export interface GitHistoryResult extends ActionResult {
-  action: 'git_history';
+  action: "git_history";
   data: {
     /** Recent commits */
     commits: Array<{ hash: string; message: string; author: string; date: string }>;
@@ -77,14 +77,14 @@ export interface GitHistoryResult extends ActionResult {
  * Package search result
  */
 export interface PackageSearchResult extends ActionResult {
-  action: 'package_search';
+  action: "package_search";
   data: {
     /** Found packages */
     packages: Array<{ name: string; version: string; description?: string }>;
     /** Search query */
     query: string;
     /** Package manager */
-    manager: 'npm' | 'cargo' | 'cabal' | 'nix';
+    manager: "npm" | "cargo" | "cabal" | "nix";
   };
 }
 
@@ -92,7 +92,7 @@ export interface PackageSearchResult extends ActionResult {
  * Function search result
  */
 export interface FunctionSearchResult extends ActionResult {
-  action: 'function_search';
+  action: "function_search";
   data: {
     /** Found functions */
     functions: Array<{ name: string; file: string; line: number; signature?: string }>;
@@ -105,7 +105,7 @@ export interface FunctionSearchResult extends ActionResult {
  * Build validation result
  */
 export interface BuildValidationResult extends ActionResult {
-  action: 'build_validation';
+  action: "build_validation";
   data: {
     /** Is build valid */
     valid: boolean;

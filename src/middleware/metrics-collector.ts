@@ -1,5 +1,5 @@
-import { ErrorCategory } from './error-classifier.js';
-import type { RateLimitMetrics } from '../types/middleware/rate-limiter.js';
+import { ErrorCategory } from "./error-classifier.js";
+import type { RateLimitMetrics } from "../types/middleware/rate-limiter.js";
 
 /**
  * Collects and aggregates metrics with statistical analysis
@@ -15,21 +15,21 @@ export class MetricsCollector {
   };
   private queueLengths: number[] = [];
   private queueTimes: number[] = [];
-  
+
   private totalRequests = 0;
   private successfulRequests = 0;
   private failedRequests = 0;
   private retriedRequests = 0;
   private totalRetries = 0;
   private circuitBreakerActivations = 0;
-  
+
   private startTime: number;
   private readonly maxSamples = 1000; // Keep last 1000 samples for percentiles
-  
+
   constructor() {
     this.startTime = Date.now();
   }
-  
+
   /**
    * Record a successful request
    */
@@ -38,7 +38,7 @@ export class MetricsCollector {
     this.successfulRequests++;
     this.recordLatency(latencyMs);
   }
-  
+
   /**
    * Record a failed request
    */
@@ -46,12 +46,12 @@ export class MetricsCollector {
     this.totalRequests++;
     this.failedRequests++;
     this.recordLatency(latencyMs);
-    
+
     if (errorCategory) {
       this.errorCounts[errorCategory]++;
     }
   }
-  
+
   /**
    * Record a retry attempt
    */
@@ -61,21 +61,21 @@ export class MetricsCollector {
       this.retriedRequests++;
     }
   }
-  
+
   /**
    * Record circuit breaker activation
    */
   recordCircuitBreakerTrip(): void {
     this.circuitBreakerActivations++;
   }
-  
+
   /**
    * Record queue metrics
    */
   recordQueueMetrics(queueLength: number, timeInQueueMs: number): void {
     this.queueLengths.push(queueLength);
     this.queueTimes.push(timeInQueueMs);
-    
+
     // Keep only recent samples
     if (this.queueLengths.length > this.maxSamples) {
       this.queueLengths.shift();
@@ -84,19 +84,19 @@ export class MetricsCollector {
       this.queueTimes.shift();
     }
   }
-  
+
   /**
    * Record latency sample
    */
   private recordLatency(latencyMs: number): void {
     this.latencies.push(latencyMs);
-    
+
     // Keep only recent samples for percentile calculation
     if (this.latencies.length > this.maxSamples) {
       this.latencies.shift();
     }
   }
-  
+
   /**
    * Calculate latency percentiles
    */
@@ -104,10 +104,10 @@ export class MetricsCollector {
     if (this.latencies.length === 0) {
       return { p50: 0, p95: 0, p99: 0, max: 0 };
     }
-    
+
     const sorted = [...this.latencies].sort((a, b) => a - b);
     const len = sorted.length;
-    
+
     return {
       p50: sorted[Math.floor(len * 0.5)] || 0,
       p95: sorted[Math.floor(len * 0.95)] || 0,
@@ -115,7 +115,7 @@ export class MetricsCollector {
       max: sorted[len - 1] || 0,
     };
   }
-  
+
   /**
    * Calculate average
    */
@@ -123,7 +123,7 @@ export class MetricsCollector {
     if (values.length === 0) return 0;
     return values.reduce((sum, val) => sum + val, 0) / values.length;
   }
-  
+
   /**
    * Get current metrics snapshot
    */
@@ -131,14 +131,14 @@ export class MetricsCollector {
     const now = Date.now();
     const durationMs = now - this.startTime;
     const durationMin = durationMs / 60000;
-    
+
     return {
       totalRequests: this.totalRequests,
       successfulRequests: this.successfulRequests,
       failedRequests: this.failedRequests,
       averageLatency: this.average(this.latencies),
       circuitBreakerActivations: this.circuitBreakerActivations,
-      
+
       retriedRequests: this.retriedRequests,
       totalRetries: this.totalRetries,
       errorsByCategory: { ...this.errorCounts },
@@ -156,39 +156,39 @@ export class MetricsCollector {
       },
     };
   }
-  
+
   /**
    * Get metrics in Prometheus format
    */
   getPrometheusMetrics(): string {
     const m = this.getMetrics();
-    const prefix = 'securellm_mcp';
-    
+    const prefix = "securellm_mcp";
+
     return [
       `# HELP ${prefix}_requests_total Total number of requests`,
       `# TYPE ${prefix}_requests_total counter`,
       `${prefix}_requests_total ${m.totalRequests}`,
-      
+
       `# HELP ${prefix}_requests_failed_total Total number of failed requests`,
       `# TYPE ${prefix}_requests_failed_total counter`,
       `${prefix}_requests_failed_total ${m.failedRequests}`,
-      
+
       `# HELP ${prefix}_latency_seconds Request latency in seconds`,
       `# TYPE ${prefix}_latency_seconds gauge`,
       `${prefix}_latency_seconds{quantile="0.5"} ${(m.latencyPercentiles.p50 / 1000).toFixed(4)}`,
       `${prefix}_latency_seconds{quantile="0.95"} ${(m.latencyPercentiles.p95 / 1000).toFixed(4)}`,
       `${prefix}_latency_seconds{quantile="0.99"} ${(m.latencyPercentiles.p99 / 1000).toFixed(4)}`,
-      
+
       `# HELP ${prefix}_circuit_breaker_trips_total Total circuit breaker activations`,
       `# TYPE ${prefix}_circuit_breaker_trips_total counter`,
       `${prefix}_circuit_breaker_trips_total ${m.circuitBreakerActivations}`,
-      
+
       `# HELP ${prefix}_active_queue_length Current queue length`,
       `# TYPE ${prefix}_active_queue_length gauge`,
       `${prefix}_active_queue_length ${m.queueMetrics.averageQueueLength.toFixed(2)}`,
-    ].join('\n');
+    ].join("\n");
   }
-  
+
   /**
    * Reset all metrics
    */

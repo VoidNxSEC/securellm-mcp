@@ -3,9 +3,9 @@
  * Temp directory creation, cleanup, and file helpers
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
+import * as fs from "fs/promises";
+import * as path from "path";
+import * as os from "os";
 
 export interface TempDir {
   path: string;
@@ -16,7 +16,7 @@ export interface TempDir {
  * Create a temporary directory for tests.
  * Returns the path and a cleanup function.
  */
-export async function createTempDir(prefix: string = 'securellm-test-'): Promise<TempDir> {
+export async function createTempDir(prefix: string = "securellm-test-"): Promise<TempDir> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
   return {
     path: dir,
@@ -44,12 +44,12 @@ export async function populateTempDir(
  * Create a temp directory with nested structure for path traversal tests.
  */
 export async function createNestedTempDir(): Promise<TempDir> {
-  const temp = await createTempDir('securellm-nested-');
+  const temp = await createTempDir("securellm-nested-");
   await populateTempDir(temp.path, {
-    'src/index.ts': 'export {};',
-    'src/utils/helper.ts': 'export const x = 1;',
-    'tests/test.ts': 'import { test } from "node:test";',
-    'package.json': '{"name": "test"}',
+    "src/index.ts": "export {};",
+    "src/utils/helper.ts": "export const x = 1;",
+    "tests/test.ts": 'import { test } from "node:test";',
+    "package.json": '{"name": "test"}',
   });
   return temp;
 }

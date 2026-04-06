@@ -26,9 +26,7 @@ const socketDebugReportSchema = z.object({
     .object({
       port: z.number().int().min(1).max(65535).optional(),
       proto: z.enum(["tcp", "udp", "all"]).optional().default("all"),
-      service: SafeServiceName
-        .optional()
-        .describe("systemd unit name (e.g. sshd.service)"),
+      service: SafeServiceName.optional().describe("systemd unit name (e.g. sshd.service)"),
       pid: z.number().int().min(1).optional(),
     })
     .optional()
@@ -47,8 +45,7 @@ const socketDebugReportSchema = z.object({
     .default({ firewall: true, dns: true, routes: true, systemd: true, logs: true }),
 
   /** Log window for journalctl */
-  logs_since: SafeTimePeriod
-    .optional()
+  logs_since: SafeTimePeriod.optional()
     .default("1 hour ago")
     .describe("journalctl --since value (e.g. '30 min ago')"),
 });
@@ -121,7 +118,13 @@ function redactionHint() {
 export async function handleSocketDebugReport(rawArgs: unknown) {
   const args = socketDebugReportSchema.parse(rawArgs);
   const filter = args.filter || { proto: "all" };
-  const include = args.include || { firewall: true, dns: true, routes: true, systemd: true, logs: true };
+  const include = args.include || {
+    firewall: true,
+    dns: true,
+    routes: true,
+    systemd: true,
+    logs: true,
+  };
 
   const cmds: Cmd[] = [];
 
@@ -164,8 +167,18 @@ export async function handleSocketDebugReport(rawArgs: unknown) {
   if (include.systemd) {
     cmds.push({ key: "systemd_failed", cmd: "systemctl", args: ["--no-pager", "--failed"] });
     if (filter.service) {
-      cmds.push({ key: "systemd_status", cmd: "systemctl", args: ["--no-pager", "status", filter.service], requireSudo: true });
-      cmds.push({ key: "systemd_show", cmd: "systemctl", args: ["show", filter.service, "--no-pager"], requireSudo: true });
+      cmds.push({
+        key: "systemd_status",
+        cmd: "systemctl",
+        args: ["--no-pager", "status", filter.service],
+        requireSudo: true,
+      });
+      cmds.push({
+        key: "systemd_show",
+        cmd: "systemctl",
+        args: ["show", filter.service, "--no-pager"],
+        requireSudo: true,
+      });
     }
   }
 
@@ -184,9 +197,19 @@ export async function handleSocketDebugReport(rawArgs: unknown) {
     cmds.push({ key: "nstat", cmd: "nstat", args: ["-az"] });
     // lsof is nice but may not be installed; keep best-effort
     if (filter.port) {
-      cmds.push({ key: "lsof_port", cmd: "lsof", args: ["-nP", `-i:${filter.port}`], requireSudo: true });
+      cmds.push({
+        key: "lsof_port",
+        cmd: "lsof",
+        args: ["-nP", `-i:${filter.port}`],
+        requireSudo: true,
+      });
     } else {
-      cmds.push({ key: "lsof_listen", cmd: "lsof", args: ["-nP", "-iTCP", "-sTCP:LISTEN"], requireSudo: true });
+      cmds.push({
+        key: "lsof_listen",
+        cmd: "lsof",
+        args: ["-nP", "-iTCP", "-sTCP:LISTEN"],
+        requireSudo: true,
+      });
     }
   }
 
@@ -198,12 +221,18 @@ export async function handleSocketDebugReport(rawArgs: unknown) {
   // Lightweight post-filtering for port if requested (doesn't mutate raw outputs)
   const notes: string[] = [];
   if (filter.port) {
-    notes.push(`Filtered view hint: manually search outputs.listeners_ss/connections_ss for ":${filter.port}"`);
+    notes.push(
+      `Filtered view hint: manually search outputs.listeners_ss/connections_ss for ":${filter.port}"`
+    );
   }
   if (args.use_sudo) {
-    notes.push("use_sudo=true: commands that require visibility (ss -p, nft, journalctl, systemctl status) were attempted via sudo -n.");
+    notes.push(
+      "use_sudo=true: commands that require visibility (ss -p, nft, journalctl, systemctl status) were attempted via sudo -n."
+    );
   } else {
-    notes.push("use_sudo=false: process-level socket visibility may be limited (ss -p may omit PIDs).");
+    notes.push(
+      "use_sudo=false: process-level socket visibility may be limited (ss -p may omit PIDs)."
+    );
   }
   notes.push(redactionHint());
 
@@ -236,4 +265,3 @@ export async function handleSocketDebugReport(rawArgs: unknown) {
     content: [{ type: "text", text: stringifyGeneric(report) }],
   };
 }
-

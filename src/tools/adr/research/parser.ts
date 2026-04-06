@@ -1,57 +1,61 @@
 /**
  * Research Data Parser for ADR Generation
- * 
+ *
  * Transforms research_agent output into ADR-compatible formats
  */
 
 import type { ResearchData, ADRRecord } from "../types.js";
 
 export class ResearchParser {
-    /**
-     * Calculate credibility score from research data (0-10 scale)
-     */
-    static calculateCredibilityScore(research: ResearchData): number {
-        if (research.sources.length === 0) return 0;
+  /**
+   * Calculate credibility score from research data (0-10 scale)
+   */
+  static calculateCredibilityScore(research: ResearchData): number {
+    if (research.sources.length === 0) return 0;
 
-        // Weighted average of source credibilities (70% weight)
-        const avgCredibility =
-            research.sources.reduce((sum, s) => sum + s.credibility, 0) / research.sources.length;
-        const credibilityScore = avgCredibility * 7;
+    // Weighted average of source credibilities (70% weight)
+    const avgCredibility =
+      research.sources.reduce((sum, s) => sum + s.credibility, 0) / research.sources.length;
+    const credibilityScore = avgCredibility * 7;
 
-        // Source diversity bonus (20% weight)
-        const uniqueSources = new Set(research.sources.map(s => s.source)).size;
-        const diversityBonus = Math.min(uniqueSources * 0.5, 2);
+    // Source diversity bonus (20% weight)
+    const uniqueSources = new Set(research.sources.map((s) => s.source)).size;
+    const diversityBonus = Math.min(uniqueSources * 0.5, 2);
 
-        // Fact-check bonus (10% weight)
-        const factCheckBonus = research.factCheck.verified ? 1 : 0;
+    // Fact-check bonus (10% weight)
+    const factCheckBonus = research.factCheck.verified ? 1 : 0;
 
-        const totalScore = credibilityScore + diversityBonus + factCheckBonus;
-        return Math.min(Math.round(totalScore * 10) / 10, 10);
-    }
+    const totalScore = credibilityScore + diversityBonus + factCheckBonus;
+    return Math.min(Math.round(totalScore * 10) / 10, 10);
+  }
 
-    /**
-     * Generate ADR YAML frontmatter from research data
-     */
-    static toADRFrontmatter(research: ResearchData, title: string, project: string = "GLOBAL"): string {
-        const credibilityScore = this.calculateCredibilityScore(research);
-        const date = new Date().toISOString().split('T')[0];
-        const timestamp = new Date().toISOString();
+  /**
+   * Generate ADR YAML frontmatter from research data
+   */
+  static toADRFrontmatter(
+    research: ResearchData,
+    title: string,
+    project: string = "GLOBAL"
+  ): string {
+    const credibilityScore = this.calculateCredibilityScore(research);
+    const date = new Date().toISOString().split("T")[0];
+    const timestamp = new Date().toISOString();
 
-        const validationSources = research.sources.map(s => {
-            const source: any = {
-                type: s.source,
-                title: s.title,
-                url: s.url,
-                credibility: s.credibility
-            };
+    const validationSources = research.sources.map((s) => {
+      const source: any = {
+        type: s.source,
+        title: s.title,
+        url: s.url,
+        credibility: s.credibility,
+      };
 
-            if (s.stars !== undefined) source.stars = s.stars;
-            if (s.points !== undefined) source.points = s.points;
+      if (s.stars !== undefined) source.stars = s.stars;
+      if (s.points !== undefined) source.points = s.points;
 
-            return source;
-        });
+      return source;
+    });
 
-        return `---
+    return `---
 id: "ADR-${String(Date.now()).slice(-4)}"
 title: "${title}"
 status: proposed
@@ -69,7 +73,7 @@ governance:
   requires_approval_from:
     - architect
   compliance_tags: []
-  review_deadline: "${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}"
+  review_deadline: "${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]}"
   auto_supersede_after: "1y"
   validation:
     credibility_score: ${credibilityScore}
@@ -87,10 +91,14 @@ scope:
     - all
 
 validation_sources:
-${validationSources.map(s => `  - type: "${s.type}"
+${validationSources
+  .map(
+    (s) => `  - type: "${s.type}"
     title: "${s.title}"
     url: "${s.url}"
-    credibility: ${s.credibility}${s.stars !== undefined ? `\n    stars: ${s.stars}` : ''}${s.points !== undefined ? `\n    points: ${s.points}` : ''}`).join('\n')}
+    credibility: ${s.credibility}${s.stars !== undefined ? `\n    stars: ${s.stars}` : ""}${s.points !== undefined ? `\n    points: ${s.points}` : ""}`
+  )
+  .join("\n")}
 
 rationale:
   drivers: []
@@ -132,22 +140,22 @@ audit:
       change: "ADR auto-generated from research validation"
       commit_hash: null
 ---`;
-    }
+  }
 
-    /**
-     * Generate markdown Context section from research
-     */
-    static generateContext(research: ResearchData): string {
-        const date = new Date().toISOString().split('T')[0];
-        const credibilityScore = this.calculateCredibilityScore(research);
+  /**
+   * Generate markdown Context section from research
+   */
+  static generateContext(research: ResearchData): string {
+    const date = new Date().toISOString().split("T")[0];
+    const credibilityScore = this.calculateCredibilityScore(research);
 
-        // Group sources by type
-        const githubRepos = research.sources.filter(s => s.source === "github");
-        const hnPosts = research.sources.filter(s => s.source === "hackernews");
-        const soQuestions = research.sources.filter(s => s.source === "stackoverflow");
-        const redditPosts = research.sources.filter(s => s.source === "reddit");
+    // Group sources by type
+    const githubRepos = research.sources.filter((s) => s.source === "github");
+    const hnPosts = research.sources.filter((s) => s.source === "hackernews");
+    const soQuestions = research.sources.filter((s) => s.source === "stackoverflow");
+    const redditPosts = research.sources.filter((s) => s.source === "reddit");
 
-        let context = `## Context
+    let context = `## Context
 
 ### Market Validation (${date})
 
@@ -160,59 +168,59 @@ audit:
 
 `;
 
-        if (githubRepos.length > 0) {
-            const avgStars = githubRepos.reduce((sum, r) => sum + (r.stars || 0), 0) / githubRepos.length;
-            context += `**GitHub**: ${githubRepos.length} repositories (avg ${Math.round(avgStars)} stars)\n`;
-            githubRepos.slice(0, 5).forEach(r => {
-                context += `- [${r.title}](${r.url})${r.stars ? ` - ${r.stars} stars` : ''}\n`;
-            });
-            context += '\n';
-        }
-
-        if (hnPosts.length > 0) {
-            const totalEngagement = hnPosts.reduce((sum, p) => sum + (p.points || 0), 0);
-            context += `**Hacker News**: ${hnPosts.length} discussions (${totalEngagement} total points)\n`;
-            hnPosts.slice(0, 5).forEach(p => {
-                context += `- [${p.title}](${p.url})${p.points ? ` - ${p.points} points` : ''}\n`;
-            });
-            context += '\n';
-        }
-
-        if (soQuestions.length > 0) {
-            context += `**Stack Overflow**: ${soQuestions.length} questions\n`;
-            soQuestions.slice(0, 3).forEach(q => {
-                context += `- [${q.title}](${q.url})\n`;
-            });
-            context += '\n';
-        }
-
-        if (research.consensus) {
-            context += `#### Community Consensus\n\n${research.consensus}\n\n`;
-        }
-
-        if (research.factCheck.verified) {
-            context += `#### Official Verification\n\n`;
-            context += `✅ Verified via official sources (confidence: ${(research.factCheck.confidence * 100).toFixed(0)}%)\n`;
-            if (research.factCheck.officialSource) {
-                context += `- ${research.factCheck.officialSource}\n`;
-            }
-            context += '\n';
-        }
-
-        context += `**Research Query**: "${research.query}"  \n`;
-        context += `**Search Duration**: ${research.searchDuration}ms\n`;
-
-        return context;
+    if (githubRepos.length > 0) {
+      const avgStars = githubRepos.reduce((sum, r) => sum + (r.stars || 0), 0) / githubRepos.length;
+      context += `**GitHub**: ${githubRepos.length} repositories (avg ${Math.round(avgStars)} stars)\n`;
+      githubRepos.slice(0, 5).forEach((r) => {
+        context += `- [${r.title}](${r.url})${r.stars ? ` - ${r.stars} stars` : ""}\n`;
+      });
+      context += "\n";
     }
 
-    /**
-     * Generate complete ADR markdown from research
-     */
-    static generateADR(research: ResearchData, title: string, project?: string): string {
-        const frontmatter = this.toADRFrontmatter(research, title, project);
-        const context = this.generateContext(research);
+    if (hnPosts.length > 0) {
+      const totalEngagement = hnPosts.reduce((sum, p) => sum + (p.points || 0), 0);
+      context += `**Hacker News**: ${hnPosts.length} discussions (${totalEngagement} total points)\n`;
+      hnPosts.slice(0, 5).forEach((p) => {
+        context += `- [${p.title}](${p.url})${p.points ? ` - ${p.points} points` : ""}\n`;
+      });
+      context += "\n";
+    }
 
-        const placeholderSections = `
+    if (soQuestions.length > 0) {
+      context += `**Stack Overflow**: ${soQuestions.length} questions\n`;
+      soQuestions.slice(0, 3).forEach((q) => {
+        context += `- [${q.title}](${q.url})\n`;
+      });
+      context += "\n";
+    }
+
+    if (research.consensus) {
+      context += `#### Community Consensus\n\n${research.consensus}\n\n`;
+    }
+
+    if (research.factCheck.verified) {
+      context += `#### Official Verification\n\n`;
+      context += `✅ Verified via official sources (confidence: ${(research.factCheck.confidence * 100).toFixed(0)}%)\n`;
+      if (research.factCheck.officialSource) {
+        context += `- ${research.factCheck.officialSource}\n`;
+      }
+      context += "\n";
+    }
+
+    context += `**Research Query**: "${research.query}"  \n`;
+    context += `**Search Duration**: ${research.searchDuration}ms\n`;
+
+    return context;
+  }
+
+  /**
+   * Generate complete ADR markdown from research
+   */
+  static generateADR(research: ResearchData, title: string, project?: string): string {
+    const frontmatter = this.toADRFrontmatter(research, title, project);
+    const context = this.generateContext(research);
+
+    const placeholderSections = `
 ## Decision
 
 [Describe the architectural decision here based on the research findings]
@@ -221,7 +229,7 @@ audit:
 
 ### Drivers
 
-${research.recommendations.map(r => `- ${r}`).join('\n')}
+${research.recommendations.map((r) => `- ${r}`).join("\n")}
 
 ### Alternatives Considered
 
@@ -264,9 +272,9 @@ ${research.recommendations.map(r => `- ${r}`).join('\n')}
 
 ### Research Sources
 
-${research.sources.map((s, i) => `${i + 1}. [${s.title}](${s.url}) (${s.source}, credibility: ${s.credibility})`).join('\n')}
+${research.sources.map((s, i) => `${i + 1}. [${s.title}](${s.url}) (${s.source}, credibility: ${s.credibility})`).join("\n")}
 `;
 
-        return `${frontmatter}\n\n${context}\n${placeholderSections}`;
-    }
+    return `${frontmatter}\n\n${context}\n${placeholderSections}`;
+  }
 }

@@ -6,23 +6,27 @@
  * REFACTORED [MCP-2]: Async execution to prevent event loop blocking
  */
 
-import { executeRipgrep } from '../../tools/nix/utils/async-exec.js';
-import type { ProactiveAction, ActionContext, FileScanResult } from '../../types/proactive-actions.js';
+import { executeRipgrep } from "../../tools/nix/utils/async-exec.js";
+import type {
+  ProactiveAction,
+  ActionContext,
+  FileScanResult,
+} from "../../types/proactive-actions.js";
 
 /**
  * File Scanner Action
  */
 export class FileScannerAction implements ProactiveAction {
-  public readonly name = 'file_scan';
+  public readonly name = "file_scan";
 
   /**
    * Check if should run
    */
   public shouldRun(context: ActionContext): boolean {
     const { enrichedContext } = context;
-    
+
     // Run if user mentioned files but we haven't found them yet
-    const fileEntities = enrichedContext.input.entities.filter(e => e.type === 'file');
+    const fileEntities = enrichedContext.input.entities.filter((e) => e.type === "file");
     return fileEntities.length > 0 && enrichedContext.quality < 0.7;
   }
 
@@ -31,16 +35,16 @@ export class FileScannerAction implements ProactiveAction {
    */
   public async execute(context: ActionContext): Promise<FileScanResult> {
     const startTime = Date.now();
-    
+
     try {
       const { enrichedContext, projectRoot, timeout } = context;
-      const fileEntities = enrichedContext.input.entities.filter(e => e.type === 'file');
-      
+      const fileEntities = enrichedContext.input.entities.filter((e) => e.type === "file");
+
       if (fileEntities.length === 0) {
         return {
           action: this.name,
-          status: 'skipped',
-          data: { files: [], pattern: '', totalScanned: 0 },
+          status: "skipped",
+          data: { files: [], pattern: "", totalScanned: 0 },
           duration: Date.now() - startTime,
         };
       }
@@ -49,23 +53,18 @@ export class FileScannerAction implements ProactiveAction {
       const pattern = fileEntities[0].value;
 
       // Use ripgrep for fast file finding (async, non-blocking)
-      const output = await executeRipgrep(
-        ['--files'],
-        {
-          cwd: projectRoot,
-          timeout: Math.min(timeout, 5000),  // Max 5s (async safe)
-        }
-      );
+      const output = await executeRipgrep(["--files"], {
+        cwd: projectRoot,
+        timeout: Math.min(timeout, 5000), // Max 5s (async safe)
+      });
 
       // Filter for pattern in JavaScript (simple string matching)
-      const allFiles = output.split('\n').filter(f => f.length > 0);
-      const files = allFiles
-        .filter(file => file.includes(pattern))
-        .slice(0, 20);
+      const allFiles = output.split("\n").filter((f) => f.length > 0);
+      const files = allFiles.filter((file) => file.includes(pattern)).slice(0, 20);
 
       return {
         action: this.name,
-        status: 'success',
+        status: "success",
         data: {
           files,
           pattern,
@@ -77,17 +76,17 @@ export class FileScannerAction implements ProactiveAction {
       if (error.killed) {
         return {
           action: this.name,
-          status: 'timeout',
-          data: { files: [], pattern: '', totalScanned: 0 },
+          status: "timeout",
+          data: { files: [], pattern: "", totalScanned: 0 },
           duration: Date.now() - startTime,
-          error: 'Execution timeout',
+          error: "Execution timeout",
         };
       }
 
       return {
         action: this.name,
-        status: 'error',
-        data: { files: [], pattern: '', totalScanned: 0 },
+        status: "error",
+        data: { files: [], pattern: "", totalScanned: 0 },
         duration: Date.now() - startTime,
         error: error.message,
       };

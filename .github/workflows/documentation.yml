@@ -84,6 +84,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Create report directories
+        run: mkdir -p docs/reports docs/diagrams
+
       # Dependency Cruiser - module dependency visualization
       - name: Generate Dependency Graph
         run: |
@@ -140,6 +143,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Create report directories
+        run: mkdir -p docs/reports docs/diagrams
 
       # ESLint complexity plugin
       - name: Calculate Cyclomatic Complexity
@@ -349,6 +355,9 @@ jobs:
       - name: Validate Markdown formatting
         run: |
           npx markdownlint-cli2 "**/*.md" "#node_modules" || true
+
+      - name: Create report directories
+        run: mkdir -p docs/reports docs/diagrams
 
       - name: Check for TODO/FIXME comments
         run: |

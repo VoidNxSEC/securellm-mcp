@@ -5,16 +5,13 @@ import type {
   RateLimitMetrics,
   CircuitBreaker as CircuitBreakerType,
   CircuitBreakerState,
-} from '../types/middleware/rate-limiter.js';
-import {
-  RateLimitError,
-  CircuitBreakerError,
-} from '../types/middleware/rate-limiter.js';
-import { CircuitBreaker } from './circuit-breaker.js';
-import { RetryStrategy } from './retry-strategy.js';
-import { ErrorClassifier, ErrorCategory, type ErrorClassification } from './error-classifier.js';
-import { MetricsCollector } from './metrics-collector.js';
-import { logger } from '../utils/logger.js';
+} from "../types/middleware/rate-limiter.js";
+import { RateLimitError, CircuitBreakerError } from "../types/middleware/rate-limiter.js";
+import { CircuitBreaker } from "./circuit-breaker.js";
+import { RetryStrategy } from "./retry-strategy.js";
+import { ErrorClassifier, ErrorCategory, type ErrorClassification } from "./error-classifier.js";
+import { MetricsCollector } from "./metrics-collector.js";
+import { logger } from "../utils/logger.js";
 
 /**
  * Smart Rate Limiter - Phase 1.3 Implementation
@@ -69,9 +66,9 @@ export class SmartRateLimiter {
         provider,
         new RetryStrategy(
           config.retryStrategy,
-          1000,  // baseDelay: 1 second
+          1000, // baseDelay: 1 second
           32000, // maxDelay: 32 seconds
-          0.1    // jitterFactor: 10% randomness
+          0.1 // jitterFactor: 10% randomness
         )
       );
     }
@@ -93,7 +90,7 @@ export class SmartRateLimiter {
     const circuitBreaker = this.circuitBreakers.get(provider);
     const retryStrategy = this.retryStrategies.get(provider);
     const collector = this.metricsCollectors.get(provider);
-    
+
     if (!circuitBreaker || !retryStrategy) {
       throw new Error(`Missing components for provider: ${provider}`);
     }
@@ -104,15 +101,15 @@ export class SmartRateLimiter {
     // Retry loop: attempt 0 to maxRetries (inclusive)
     for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
       const startTime = Date.now();
-      
+
       try {
         // Attempt execution through circuit breaker and queue
         const result = await circuitBreaker.execute(async () => {
           return this.executeWithQueue(provider, fn);
         });
-        
+
         const latency = Date.now() - startTime;
-        
+
         // Success - record metrics
         if (collector) {
           collector.recordSuccess(latency);
@@ -120,7 +117,7 @@ export class SmartRateLimiter {
             collector.recordRetry(attempt === 1);
           }
         }
-        
+
         return result;
       } catch (error) {
         const latency = Date.now() - startTime;
@@ -137,7 +134,7 @@ export class SmartRateLimiter {
         // Classify the error to determine if we should retry
         const classification = ErrorClassifier.classify(error);
         lastClassification = classification;
-        
+
         // Record failure with error category
         if (collector) {
           collector.recordFailure(latency, classification.category);
@@ -163,9 +160,10 @@ export class SmartRateLimiter {
         }
 
         // For rate limit errors, use longer delays
-        const baseDelay = classification.category === ErrorCategory.RATE_LIMIT
-          ? retryStrategy.calculateDelay(attempt) * 2 // Double delay for rate limits
-          : retryStrategy.calculateDelay(attempt);
+        const baseDelay =
+          classification.category === ErrorCategory.RATE_LIMIT
+            ? retryStrategy.calculateDelay(attempt) * 2 // Double delay for rate limits
+            : retryStrategy.calculateDelay(attempt);
 
         logger.debug(
           {
@@ -173,7 +171,7 @@ export class SmartRateLimiter {
             attempt: attempt + 1,
             maxRetries: config.maxRetries,
             delayMs: Math.round(baseDelay),
-            errorCategory: classification.category
+            errorCategory: classification.category,
           },
           "Rate limiter retry attempt"
         );
@@ -196,13 +194,13 @@ export class SmartRateLimiter {
   private async executeWithQueue<T>(provider: string, fn: () => Promise<T>): Promise<T> {
     const queue = this.queues.get(provider);
     const collector = this.metricsCollectors.get(provider);
-    
+
     if (!queue) {
       throw new Error(`No queue found for provider: ${provider}`);
     }
 
     const queueStartTime = Date.now();
-    
+
     // Create a promise that will be resolved when the request completes
     return new Promise<T>((resolve, reject) => {
       const request: QueuedRequest<T> = {
@@ -216,7 +214,7 @@ export class SmartRateLimiter {
 
       // Add to queue
       queue.queue.push(request);
-      
+
       // Record queue metrics
       if (collector) {
         const queueTime = Date.now() - queueStartTime;
@@ -239,7 +237,7 @@ export class SmartRateLimiter {
   private async processQueue(provider: string): Promise<void> {
     const queue = this.queues.get(provider);
     const config = this.configs.get(provider);
-    
+
     if (!queue || !config) {
       return;
     }
@@ -255,7 +253,7 @@ export class SmartRateLimiter {
       try {
         // Calculate delay based on rate limit
         const delayMs = this.calculateDelay(provider, config);
-        
+
         if (delayMs > 0) {
           await this.sleep(delayMs);
         }
@@ -291,7 +289,7 @@ export class SmartRateLimiter {
 
     const now = Date.now();
     const timeSinceLastRequest = now - queue.lastRequestTime;
-    
+
     // Calculate minimum delay between requests (in milliseconds)
     const minDelayMs = 60000 / config.requestsPerMinute;
 
@@ -345,38 +343,52 @@ export class SmartRateLimiter {
    */
   getAggregatePrometheusMetrics(): string {
     const lines: string[] = [];
-    const prefix = 'securellm_mcp';
-    
+    const prefix = "securellm_mcp";
+
     // Header
     lines.push(`# HELP ${prefix}_requests_total Total number of requests by provider`);
     lines.push(`# TYPE ${prefix}_requests_total counter`);
-    
+
     lines.push(`# HELP ${prefix}_latency_seconds Request latency in seconds`);
     lines.push(`# TYPE ${prefix}_latency_seconds gauge`);
-    
+
     lines.push(`# HELP ${prefix}_circuit_breaker_trips_total Total circuit breaker activations`);
     lines.push(`# TYPE ${prefix}_circuit_breaker_trips_total counter`);
 
     for (const [provider, collector] of this.metricsCollectors.entries()) {
       const m = collector.getMetrics();
-      
+
       // Requests
-      lines.push(`${prefix}_requests_total{provider="${provider}",status="success"} ${m.successfulRequests}`);
-      lines.push(`${prefix}_requests_total{provider="${provider}",status="failed"} ${m.failedRequests}`);
-      
+      lines.push(
+        `${prefix}_requests_total{provider="${provider}",status="success"} ${m.successfulRequests}`
+      );
+      lines.push(
+        `${prefix}_requests_total{provider="${provider}",status="failed"} ${m.failedRequests}`
+      );
+
       // Latency
-      lines.push(`${prefix}_latency_seconds{provider="${provider}",quantile="0.5"} ${(m.latencyPercentiles.p50 / 1000).toFixed(4)}`);
-      lines.push(`${prefix}_latency_seconds{provider="${provider}",quantile="0.95"} ${(m.latencyPercentiles.p95 / 1000).toFixed(4)}`);
-      lines.push(`${prefix}_latency_seconds{provider="${provider}",quantile="0.99"} ${(m.latencyPercentiles.p99 / 1000).toFixed(4)}`);
-      
+      lines.push(
+        `${prefix}_latency_seconds{provider="${provider}",quantile="0.5"} ${(m.latencyPercentiles.p50 / 1000).toFixed(4)}`
+      );
+      lines.push(
+        `${prefix}_latency_seconds{provider="${provider}",quantile="0.95"} ${(m.latencyPercentiles.p95 / 1000).toFixed(4)}`
+      );
+      lines.push(
+        `${prefix}_latency_seconds{provider="${provider}",quantile="0.99"} ${(m.latencyPercentiles.p99 / 1000).toFixed(4)}`
+      );
+
       // Circuit Breaker
-      lines.push(`${prefix}_circuit_breaker_trips_total{provider="${provider}"} ${m.circuitBreakerActivations}`);
-      
+      lines.push(
+        `${prefix}_circuit_breaker_trips_total{provider="${provider}"} ${m.circuitBreakerActivations}`
+      );
+
       // Queue
-      lines.push(`${prefix}_active_queue_length{provider="${provider}"} ${m.queueMetrics.averageQueueLength.toFixed(2)}`);
+      lines.push(
+        `${prefix}_active_queue_length{provider="${provider}"} ${m.queueMetrics.averageQueueLength.toFixed(2)}`
+      );
     }
-    
-    return lines.join('\n');
+
+    return lines.join("\n");
   }
 
   /**

@@ -1,18 +1,18 @@
 /**
  * Wildcard Command System - Swiss Army Knife for Terminals
- * 
+ *
  * Dynamic command generation based on context and problem type.
  * Agents can request commands like:
  * - "fix {error-type}"
  * - "debug {service}"
  * - "optimize {component}"
- * 
+ *
  * And get executable, context-aware commands instantly.
  */
 
-import { execaCommand } from 'execa';
-import { logger } from '../utils/logger.js';
-import { hasShellMeta, SafeServiceName, SafeHostname } from '../security/input-validators.js';
+import { execaCommand } from "execa";
+import { logger } from "../utils/logger.js";
+import { hasShellMeta, SafeServiceName, SafeHostname } from "../security/input-validators.js";
 
 function isSafeServiceName(value: string): boolean {
   return SafeServiceName.safeParse(value).success;
@@ -34,7 +34,7 @@ interface CommandTemplate {
   pattern: RegExp;
   generator: (match: RegExpMatchArray, context: any) => string[];
   description: string;
-  riskLevel: 'safe' | 'medium' | 'dangerous';
+  riskLevel: "safe" | "medium" | "dangerous";
 }
 
 interface ExecutionResult {
@@ -63,19 +63,19 @@ export class WildcardCommandSystem {
    */
   private registerBuiltinTemplates() {
     // NixOS rebuild fixes
-    this.register('nix-fix-rebuild', {
+    this.register("nix-fix-rebuild", {
       pattern: /^nix-fix\s+(rebuild|build)$/i,
       generator: () => [
-        'sudo rm -rf /nix/var/nix/gcroots/auto/*',
-        'nix-collect-garbage -d',
-        'sudo nixos-rebuild switch --fast --max-jobs 2 --cores 4',
+        "sudo rm -rf /nix/var/nix/gcroots/auto/*",
+        "nix-collect-garbage -d",
+        "sudo nixos-rebuild switch --fast --max-jobs 2 --cores 4",
       ],
-      description: 'Fix NixOS rebuild issues (cleanup + rebuild)',
-      riskLevel: 'medium',
+      description: "Fix NixOS rebuild issues (cleanup + rebuild)",
+      riskLevel: "medium",
     });
 
     // Service debugging
-    this.register('debug-service', {
+    this.register("debug-service", {
       pattern: /^debug\s+(.+?)$/i,
       generator: (match) => {
         const service = match[1];
@@ -85,20 +85,16 @@ export class WildcardCommandSystem {
           `systemctl cat ${service}`,
         ];
       },
-      description: 'Debug systemd service (status + logs + config)',
-      riskLevel: 'safe',
+      description: "Debug systemd service (status + logs + config)",
+      riskLevel: "safe",
     });
 
     // Network troubleshooting
-    this.register('net-diagnose', {
+    this.register("net-diagnose", {
       pattern: /^net-diagnose\s*(.+?)?$/i,
       generator: (match) => {
-        const target = match[1] || '';
-        const cmds = [
-          'ip addr show',
-          'ip route show',
-          'resolvectl status',
-        ];
+        const target = match[1] || "";
+        const cmds = ["ip addr show", "ip route show", "resolvectl status"];
         if (target) {
           // Validate target is a safe hostname/IP
           if (!SafeHostname.safeParse(target).success) {
@@ -106,30 +102,30 @@ export class WildcardCommandSystem {
           }
           cmds.push(`ping -c 4 -- ${target}`, `traceroute -- ${target}`);
         } else {
-          cmds.push('ping -c 4 8.8.8.8');
+          cmds.push("ping -c 4 8.8.8.8");
         }
         return cmds;
       },
-      description: 'Complete network diagnostics',
-      riskLevel: 'safe',
+      description: "Complete network diagnostics",
+      riskLevel: "safe",
     });
 
     // Disk space emergency
-    this.register('disk-emergency', {
+    this.register("disk-emergency", {
       pattern: /^disk-emergency$/i,
       generator: () => [
-        'df -h',
+        "df -h",
         'du -sh /nix/store 2>/dev/null || echo "Checking store..."',
-        'nix-collect-garbage -d',
-        'sudo journalctl --vacuum-time=7d',
-        'df -h',
+        "nix-collect-garbage -d",
+        "sudo journalctl --vacuum-time=7d",
+        "df -h",
       ],
-      description: 'Emergency disk space cleanup',
-      riskLevel: 'medium',
+      description: "Emergency disk space cleanup",
+      riskLevel: "medium",
     });
 
     // Process kill patterns
-    this.register('kill-pattern', {
+    this.register("kill-pattern", {
       pattern: /^kill\s+(.+?)$/i,
       generator: (match) => {
         const pattern = match[1];
@@ -139,62 +135,52 @@ export class WildcardCommandSystem {
           `pgrep -f "${pattern}" || echo "Successfully killed"`,
         ];
       },
-      description: 'Kill processes matching pattern',
-      riskLevel: 'dangerous',
+      description: "Kill processes matching pattern",
+      riskLevel: "dangerous",
     });
 
     // Git operations
-    this.register('git-fix', {
+    this.register("git-fix", {
       pattern: /^git-fix\s+(conflict|merge|rebase)$/i,
       generator: (match) => {
         const issue = match[1].toLowerCase();
-        if (issue === 'conflict') {
+        if (issue === "conflict") {
           return [
-            'git status',
-            'git diff --name-only --diff-filter=U',
+            "git status",
+            "git diff --name-only --diff-filter=U",
             'echo "# Resolve conflicts in listed files"',
           ];
-        } else if (issue === 'merge') {
-          return [
-            'git merge --abort || echo "No merge in progress"',
-            'git status',
-          ];
+        } else if (issue === "merge") {
+          return ['git merge --abort || echo "No merge in progress"', "git status"];
         } else {
-          return [
-            'git rebase --abort || echo "No rebase in progress"',
-            'git status',
-          ];
+          return ['git rebase --abort || echo "No rebase in progress"', "git status"];
         }
       },
-      description: 'Fix git issues (conflicts, merge, rebase)',
-      riskLevel: 'medium',
+      description: "Fix git issues (conflicts, merge, rebase)",
+      riskLevel: "medium",
     });
 
     // Docker cleanup
-    this.register('docker-cleanup', {
+    this.register("docker-cleanup", {
       pattern: /^docker-cleanup$/i,
-      generator: () => [
-        'docker ps -a',
-        'docker system prune -af --volumes',
-        'docker images',
-      ],
-      description: 'Complete Docker cleanup (containers, images, volumes)',
-      riskLevel: 'dangerous',
+      generator: () => ["docker ps -a", "docker system prune -af --volumes", "docker images"],
+      description: "Complete Docker cleanup (containers, images, volumes)",
+      riskLevel: "dangerous",
     });
 
     // Temperature check
-    this.register('temp-check', {
+    this.register("temp-check", {
       pattern: /^temp-check$/i,
       generator: () => [
         'sensors 2>/dev/null || cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null || echo "No temperature sensors"',
-        'uptime',
+        "uptime",
       ],
-      description: 'Check system temperature and load',
-      riskLevel: 'safe',
+      description: "Check system temperature and load",
+      riskLevel: "safe",
     });
 
     // Port investigation
-    this.register('port-check', {
+    this.register("port-check", {
       pattern: /^port-check\s+(\d+)$/i,
       generator: (match) => {
         const port = match[1];
@@ -204,52 +190,49 @@ export class WildcardCommandSystem {
           `sudo ss -tulpn | grep :${port}`,
         ];
       },
-      description: 'Check what is using a specific port',
-      riskLevel: 'safe',
+      description: "Check what is using a specific port",
+      riskLevel: "safe",
     });
 
     // Service restart patterns
-    this.register('restart-service', {
+    this.register("restart-service", {
       pattern: /^restart\s+(.+?)$/i,
       generator: (match) => {
         const service = match[1];
-        return [
-          `sudo systemctl restart ${service}`,
-          `sudo systemctl status ${service}`,
-        ];
+        return [`sudo systemctl restart ${service}`, `sudo systemctl status ${service}`];
       },
-      description: 'Restart service and check status',
-      riskLevel: 'medium',
+      description: "Restart service and check status",
+      riskLevel: "medium",
     });
 
     // Log analysis
-    this.register('analyze-logs', {
+    this.register("analyze-logs", {
       pattern: /^analyze-logs\s+(.+?)\s*(\d+)?$/i,
       generator: (match) => {
         const service = match[1];
-        const lines = match[2] || '100';
+        const lines = match[2] || "100";
         return [
           `journalctl -u ${service} --no-pager -n ${lines}`,
           `journalctl -u ${service} --no-pager -p err -n 20`,
         ];
       },
-      description: 'Analyze service logs (recent + errors)',
-      riskLevel: 'safe',
+      description: "Analyze service logs (recent + errors)",
+      riskLevel: "safe",
     });
 
     // Nix build with safety
-    this.register('safe-build', {
+    this.register("safe-build", {
       pattern: /^safe-build\s+(.+?)$/i,
       generator: (match) => {
         const target = match[1];
         return [
-          'emergency-status || true',
+          "emergency-status || true",
           `nix build ${target} --max-jobs 2 --cores 4 --keep-going`,
-          'emergency-status || true',
+          "emergency-status || true",
         ];
       },
-      description: 'Safe Nix build with resource limits',
-      riskLevel: 'medium',
+      description: "Safe Nix build with resource limits",
+      riskLevel: "medium",
     });
   }
 
@@ -263,7 +246,9 @@ export class WildcardCommandSystem {
   /**
    * Match command against all templates
    */
-  private matchTemplate(command: string): { name: string; template: CommandTemplate; match: RegExpMatchArray } | null {
+  private matchTemplate(
+    command: string
+  ): { name: string; template: CommandTemplate; match: RegExpMatchArray } | null {
     for (const [name, template] of this.templates) {
       const match = command.match(template.pattern);
       if (match) {
@@ -276,13 +261,16 @@ export class WildcardCommandSystem {
   /**
    * Generate commands from wildcard pattern
    */
-  generate(wildcardCommand: string, context: any = {}): {
+  generate(
+    wildcardCommand: string,
+    context: any = {}
+  ): {
     commands: string[];
     description: string;
     riskLevel: string;
   } | null {
     const matched = this.matchTemplate(wildcardCommand);
-    
+
     if (!matched) {
       return null;
     }
@@ -310,51 +298,53 @@ export class WildcardCommandSystem {
     if (!matched) {
       return {
         success: false,
-        output: '',
+        output: "",
         error: `No matching template for: ${wildcardCommand}`,
         commands: [],
-        riskLevel: 'safe',
+        riskLevel: "safe",
       };
     }
 
     const { name, template, match } = matched;
 
     // Input validation for templates that interpolate user-provided tokens into shell commands
-    if (name === 'debug-service' || name === 'restart-service' || name === 'analyze-logs') {
+    if (name === "debug-service" || name === "restart-service" || name === "analyze-logs") {
       const service = match[1];
       if (!service || !isSafeServiceName(service)) {
         return {
           success: false,
-          output: '',
-          error: 'Invalid service name. Allowed: starts with letter, then letters/numbers/underscore/dot/dash/@, max 64 chars',
+          output: "",
+          error:
+            "Invalid service name. Allowed: starts with letter, then letters/numbers/underscore/dot/dash/@, max 64 chars",
           commands: [],
-          riskLevel: 'safe',
+          riskLevel: "safe",
         };
       }
     }
 
-    if (name === 'net-diagnose') {
+    if (name === "net-diagnose") {
       const target = match[1];
       if (target && !SafeHostname.safeParse(target).success) {
         return {
           success: false,
-          output: '',
-          error: 'Invalid target. Must be a hostname or IP address (alphanumeric, dots, dashes only)',
+          output: "",
+          error:
+            "Invalid target. Must be a hostname or IP address (alphanumeric, dots, dashes only)",
           commands: [],
-          riskLevel: 'safe',
+          riskLevel: "safe",
         };
       }
     }
 
-    if (name === 'kill-pattern' || name === 'safe-build') {
+    if (name === "kill-pattern" || name === "safe-build") {
       const value = match[1];
       if (value && hasShellMeta(value)) {
         return {
           success: false,
-          output: '',
-          error: 'Input contains potentially unsafe shell metacharacters',
+          output: "",
+          error: "Input contains potentially unsafe shell metacharacters",
           commands: [],
-          riskLevel: 'safe',
+          riskLevel: "safe",
         };
       }
     }
@@ -363,38 +353,38 @@ export class WildcardCommandSystem {
     const { description, riskLevel } = template;
 
     const needsConfirm =
-      riskLevel === 'dangerous' || commands.some((cmd) => commandLooksDestructive(cmd));
+      riskLevel === "dangerous" || commands.some((cmd) => commandLooksDestructive(cmd));
 
     if (needsConfirm && options.confirm !== true) {
       return {
         success: false,
-        output: '',
+        output: "",
         error:
-          'Confirmation required before executing potentially destructive commands. Re-run with confirm=true to proceed.',
+          "Confirmation required before executing potentially destructive commands. Re-run with confirm=true to proceed.",
         commands,
         riskLevel,
       };
     }
-    
-    logger.info({ description, riskLevel }, '[WildcardCmd] Executing');
-    
-    let output = '';
+
+    logger.info({ description, riskLevel }, "[WildcardCmd] Executing");
+
+    let output = "";
     let hasError = false;
 
     for (const cmd of commands) {
       if (!cmd) continue;
-      
+
       try {
-        logger.info({ cmd }, '[WildcardCmd] Running');
+        logger.info({ cmd }, "[WildcardCmd] Running");
         const result = await execaCommand(cmd, {
           timeout: 30000,
           maxBuffer: 10 * 1024 * 1024, // 10MB
           shell: true,
           reject: false,
         });
-        
+
         output += `$ ${cmd}\n${result.stdout}\n`;
-        
+
         if (result.stderr) {
           output += `STDERR: ${result.stderr}\n`;
         }
@@ -405,10 +395,10 @@ export class WildcardCommandSystem {
       } catch (error: any) {
         hasError = true;
         output += `$ ${cmd}\nERROR: ${error.message}\n`;
-        logger.warn({ cmd, err: error }, '[WildcardCmd] Command failed');
+        logger.warn({ cmd, err: error }, "[WildcardCmd] Command failed");
       }
-      
-      output += '\n---\n\n';
+
+      output += "\n---\n\n";
     }
 
     // Record in history
@@ -422,7 +412,7 @@ export class WildcardCommandSystem {
     return {
       success: !hasError,
       output: output.trim(),
-      error: hasError ? 'Some commands failed (see output)' : undefined,
+      error: hasError ? "Some commands failed (see output)" : undefined,
       commands,
       riskLevel,
     };
@@ -454,7 +444,7 @@ export class WildcardCommandSystem {
     // Future enhancement: Consider storing in vector database for semantic search
     // Would enable better pattern matching and intelligent command recommendations
     // For now, log successful patterns for audit trail
-    logger.info({ problem, commandsCount: commands.length }, '[WildcardCmd] Learned solution');
+    logger.info({ problem, commandsCount: commands.length }, "[WildcardCmd] Learned solution");
   }
 }
 

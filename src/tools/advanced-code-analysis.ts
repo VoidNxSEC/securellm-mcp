@@ -43,7 +43,10 @@ const advancedCodeAnalysisSchema = z.object({
   symbol_file: z.string().optional().describe("File path to search symbol within first (optional)"),
 
   /** Optional symbol to focus on (identifier, e.g. 'SemanticCache' or 'setupToolHandlers') */
-  symbol: z.string().optional().describe("Symbol name to analyze (required for symbol/callers/callees/impact/import_trace)"),
+  symbol: z
+    .string()
+    .optional()
+    .describe("Symbol name to analyze (required for symbol/callers/callees/impact/import_trace)"),
 
   /** Output mode */
   mode: z
@@ -53,7 +56,11 @@ const advancedCodeAnalysisSchema = z.object({
     .describe("Return high-level, low-level, or both"),
 
   /** Max files to include in high-level summary (directories only) */
-  max_files: z.number().optional().default(80).describe("Max files to scan when target is a directory"),
+  max_files: z
+    .number()
+    .optional()
+    .default(80)
+    .describe("Max files to scan when target is a directory"),
 
   /** Max references to return */
   max_refs: z.number().optional().default(80).describe("Max symbol references to return"),
@@ -133,7 +140,11 @@ async function listFilesRec(dir: string, maxFiles: number): Promise<string[]> {
   return out;
 }
 
-function getLineSnippet(text: string, line: number, context: number = 2): { startLine: number; endLine: number; snippet: string } {
+function getLineSnippet(
+  text: string,
+  line: number,
+  context: number = 2
+): { startLine: number; endLine: number; snippet: string } {
   const lines = text.split(/\r?\n/);
   const start = Math.max(0, line - 1 - context);
   const end = Math.min(lines.length - 1, line - 1 + context);
@@ -179,7 +190,11 @@ function createLanguageService(rootFiles: string[], options: ts.CompilerOptions)
   return ts.createLanguageService(host, ts.createDocumentRegistry());
 }
 
-function loadTsConfig(tsconfigPath: string): { rootFiles: string[]; options: ts.CompilerOptions; projectDir: string } {
+function loadTsConfig(tsconfigPath: string): {
+  rootFiles: string[];
+  options: ts.CompilerOptions;
+  projectDir: string;
+} {
   const projectDir = path.dirname(tsconfigPath);
   const configText = ts.sys.readFile(tsconfigPath);
   if (!configText) {
@@ -204,7 +219,11 @@ function summarizeSourceFile(sf: ts.SourceFile, checker: ts.TypeChecker) {
   };
 
   sf.forEachChild((node) => {
-    if (ts.isImportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+    if (
+      ts.isImportDeclaration(node) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
       const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
       const from = node.moduleSpecifier.text;
       const specifier = node.importClause?.getText(sf) || "";
@@ -314,7 +333,11 @@ function findNodeAtPosition(sf: ts.SourceFile, pos: number): ts.Node | null {
   return best;
 }
 
-function collectCalleesInFunction(sf: ts.SourceFile, checker: ts.TypeChecker, declPos: number): Array<{ name: string; type?: string; line: number; col: number }> {
+function collectCalleesInFunction(
+  sf: ts.SourceFile,
+  checker: ts.TypeChecker,
+  declPos: number
+): Array<{ name: string; type?: string; line: number; col: number }> {
   const node = findNodeAtPosition(sf, declPos);
   if (!node) return [];
   // find nearest callable node
@@ -338,7 +361,9 @@ function collectCalleesInFunction(sf: ts.SourceFile, checker: ts.TypeChecker, de
       const expr = n.expression;
       const sym = checker.getSymbolAtLocation(expr);
       const name = sym?.getName() || expr.getText(sf);
-      const t = sym ? checker.typeToString(checker.getTypeOfSymbolAtLocation(sym, expr)) : undefined;
+      const t = sym
+        ? checker.typeToString(checker.getTypeOfSymbolAtLocation(sym, expr))
+        : undefined;
       const { line, character } = sf.getLineAndCharacterOfPosition(expr.getStart(sf));
       out.push({ name, type: t, line: line + 1, col: character + 1 });
     }
@@ -385,7 +410,9 @@ export async function handleAdvancedCodeAnalysis(rawArgs: unknown) {
   }
 
   const { rootFiles, options, projectDir } = loadTsConfig(tsconfigPath);
-  const filesToAnalyze = st.isDirectory() ? await listFilesRec(targetPath, args.max_files) : [targetPath];
+  const filesToAnalyze = st.isDirectory()
+    ? await listFilesRec(targetPath, args.max_files)
+    : [targetPath];
 
   // Ensure the target file(s) are included (tsconfig might exclude them)
   const fileSet = new Set<string>(rootFiles.map((f) => path.normalize(f)));
@@ -396,7 +423,12 @@ export async function handleAdvancedCodeAnalysis(rawArgs: unknown) {
   const program = service.getProgram();
   if (!program) {
     return {
-      content: [{ type: "text", text: stringifyGeneric({ error: "Failed to create TS program", tsconfigPath }) }],
+      content: [
+        {
+          type: "text",
+          text: stringifyGeneric({ error: "Failed to create TS program", tsconfigPath }),
+        },
+      ],
       isError: true,
     };
   }
@@ -414,8 +446,15 @@ export async function handleAdvancedCodeAnalysis(rawArgs: unknown) {
     },
   };
 
-  const wantHigh = args.mode === "high" || args.mode === "both" || args.intent === "overview" || args.intent === "entrypoints";
-  const wantLow = args.mode === "low" || args.mode === "both" || ["symbol", "callers", "callees", "impact", "import_trace"].includes(args.intent);
+  const wantHigh =
+    args.mode === "high" ||
+    args.mode === "both" ||
+    args.intent === "overview" ||
+    args.intent === "entrypoints";
+  const wantLow =
+    args.mode === "low" ||
+    args.mode === "both" ||
+    ["symbol", "callers", "callees", "impact", "import_trace"].includes(args.intent);
 
   if (wantHigh) {
     const fileSummaries: any[] = [];
@@ -535,7 +574,12 @@ export async function handleAdvancedCodeAnalysis(rawArgs: unknown) {
       if (firstDecl) {
         const declText = await getFileText(firstDecl.file);
         if (declText) {
-          const declSf = ts.createSourceFile(firstDecl.file, declText, ts.ScriptTarget.ES2022, true);
+          const declSf = ts.createSourceFile(
+            firstDecl.file,
+            declText,
+            ts.ScriptTarget.ES2022,
+            true
+          );
           const declPos = positionFromLineCol(declText, firstDecl.line, firstDecl.col);
           callees = collectCalleesInFunction(declSf, checker, declPos);
         }
@@ -566,8 +610,14 @@ export async function handleAdvancedCodeAnalysis(rawArgs: unknown) {
         symbol_file: focusFile,
         declarations: decls.candidates,
         references: refs,
-        callers: args.intent === "callers" || args.intent === "symbol" || args.intent === "impact" ? callersTop : undefined,
-        callees: args.intent === "callees" || args.intent === "symbol" || args.intent === "impact" ? callees : undefined,
+        callers:
+          args.intent === "callers" || args.intent === "symbol" || args.intent === "impact"
+            ? callersTop
+            : undefined,
+        callees:
+          args.intent === "callees" || args.intent === "symbol" || args.intent === "impact"
+            ? callees
+            : undefined,
         impact:
           args.intent === "impact"
             ? {
@@ -584,4 +634,3 @@ export async function handleAdvancedCodeAnalysis(rawArgs: unknown) {
     content: [{ type: "text", text: stringifyGeneric(result) }],
   };
 }
-

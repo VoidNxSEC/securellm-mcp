@@ -7,7 +7,7 @@ export interface RateLimitConfig {
   provider: string;
   requestsPerMinute: number;
   burstSize: number;
-  retryStrategy: 'exponential' | 'linear' | 'fibonacci';
+  retryStrategy: "exponential" | "linear" | "fibonacci";
   maxRetries: number;
   circuitBreaker: {
     failureThreshold: number;
@@ -18,7 +18,7 @@ export interface RateLimitConfig {
 /**
  * State of circuit breaker for a provider
  */
-export type CircuitBreakerState = 'closed' | 'open' | 'half-open';
+export type CircuitBreakerState = "closed" | "open" | "half-open";
 
 /**
  * Queued request with metadata
@@ -75,7 +75,7 @@ export interface RateLimitMetrics {
   averageLatency: number;
   circuitBreakerActivations: number;
   lastRequestTime?: number;
-  
+
   // Enhanced metrics
   errorsByCategory: {
     transient: number;
@@ -113,7 +113,7 @@ export class RateLimitError extends Error {
     public retryAfter?: number
   ) {
     super(message);
-    this.name = 'RateLimitError';
+    this.name = "RateLimitError";
   }
 }
 
@@ -127,11 +127,11 @@ export class CircuitBreakerError extends Error {
     public resetTime: number
   ) {
     super(message);
-    this.name = 'CircuitBreakerError';
+    this.name = "CircuitBreakerError";
   }
 }
 
 /**
  * Re-export error classification types from error-classifier
  */
-export { ErrorCategory, ErrorClassification } from '../../middleware/error-classifier.js';
+export { ErrorCategory, ErrorClassification } from "../../middleware/error-classifier.js";

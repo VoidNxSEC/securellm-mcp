@@ -1,11 +1,11 @@
 /**
  * Dependency Resolver
- * 
+ *
  * Resolves step dependencies and determines execution order
  * using topological sorting.
  */
 
-import type { TaskStep } from '../../types/planning.js';
+import type { TaskStep } from "../../types/planning.js";
 
 /**
  * Dependency Resolver
@@ -17,8 +17,8 @@ export class DependencyResolver {
   public resolveOrder(steps: TaskStep[]): TaskStep[] {
     const graph = this.buildDependencyGraph(steps);
     const sorted = this.topologicalSort(graph);
-    
-    return sorted.map(id => steps.find(s => s.id === id)!);
+
+    return sorted.map((id) => steps.find((s) => s.id === id)!);
   }
 
   /**
@@ -31,8 +31,8 @@ export class DependencyResolver {
 
     while (remaining.length > 0) {
       // Find steps with all dependencies completed
-      const ready = remaining.filter(step => 
-        step.dependencies.every(dep => completed.has(dep))
+      const ready = remaining.filter((step) =>
+        step.dependencies.every((dep) => completed.has(dep))
       );
 
       if (ready.length === 0) {
@@ -41,9 +41,9 @@ export class DependencyResolver {
       }
 
       groups.push(ready);
-      
+
       // Mark as completed
-      ready.forEach(step => {
+      ready.forEach((step) => {
         completed.add(step.id);
         const index = remaining.indexOf(step);
         remaining.splice(index, 1);
@@ -97,7 +97,7 @@ export class DependencyResolver {
       if (!graph.has(step.id)) {
         graph.set(step.id, []);
       }
-      
+
       for (const dep of step.dependencies) {
         if (!graph.has(dep)) {
           graph.set(dep, []);

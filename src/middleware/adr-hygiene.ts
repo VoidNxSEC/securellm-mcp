@@ -33,7 +33,7 @@ interface ProposedADR {
   classification?: string;
 }
 
-const DEFAULT_CHECK_INTERVAL = 50;       // every N tool calls
+const DEFAULT_CHECK_INTERVAL = 50; // every N tool calls
 const STALE_THRESHOLD_DAYS = 30;
 const HIGH_OPEN_THRESHOLD = 10;
 
@@ -45,10 +45,11 @@ export class ADRHygieneMiddleware {
   private readonly repoPath: string;
 
   constructor(options?: { checkInterval?: number; repoPath?: string }) {
-    this.checkInterval = options?.checkInterval
-      ?? (parseInt(process.env.ADR_HYGIENE_INTERVAL || '', 10) || DEFAULT_CHECK_INTERVAL);
-    this.repoPath = options?.repoPath
-      ?? (process.env.ADR_REPO_PATH || '/home/kernelcore/master/adr-ledger');
+    this.checkInterval =
+      options?.checkInterval ??
+      (parseInt(process.env.ADR_HYGIENE_INTERVAL || "", 10) || DEFAULT_CHECK_INTERVAL);
+    this.repoPath =
+      options?.repoPath ?? (process.env.ADR_REPO_PATH || "/home/kernelcore/master/adr-ledger");
   }
 
   /**
@@ -86,7 +87,7 @@ export class ADRHygieneMiddleware {
     const details: string[] = [];
 
     // Stale ADRs (>30 days old)
-    const stale = proposed.filter(adr => {
+    const stale = proposed.filter((adr) => {
       const created = new Date(adr.date);
       const daysSince = (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
       return daysSince > STALE_THRESHOLD_DAYS;
@@ -94,18 +95,18 @@ export class ADRHygieneMiddleware {
 
     if (stale.length > 0) {
       details.push(
-        `${stale.length} stale ADR(s) (>${STALE_THRESHOLD_DAYS} days): ${stale.map(a => a.id).join(', ')}`
+        `${stale.length} stale ADR(s) (>${STALE_THRESHOLD_DAYS} days): ${stale.map((a) => a.id).join(", ")}`
       );
     }
 
     // Expired deadlines
-    const expired = proposed.filter(adr =>
-      adr.reviewDeadline && new Date(adr.reviewDeadline) < now
+    const expired = proposed.filter(
+      (adr) => adr.reviewDeadline && new Date(adr.reviewDeadline) < now
     );
 
     if (expired.length > 0) {
       details.push(
-        `${expired.length} expired deadline(s): ${expired.map(a => `${a.id} (due ${a.reviewDeadline})`).join(', ')}`
+        `${expired.length} expired deadline(s): ${expired.map((a) => `${a.id} (due ${a.reviewDeadline})`).join(", ")}`
       );
     }
 
@@ -117,10 +118,10 @@ export class ADRHygieneMiddleware {
     }
 
     // Critical ADRs that are stale
-    const staleCritical = stale.filter(a => a.classification === 'critical');
+    const staleCritical = stale.filter((a) => a.classification === "critical");
     if (staleCritical.length > 0) {
       details.push(
-        `${staleCritical.length} CRITICAL stale ADR(s): ${staleCritical.map(a => a.id).join(', ')}`
+        `${staleCritical.length} CRITICAL stale ADR(s): ${staleCritical.map((a) => a.id).join(", ")}`
       );
     }
 
@@ -143,16 +144,16 @@ export class ADRHygieneMiddleware {
    * Load proposed ADRs from filesystem
    */
   private async loadProposed(): Promise<ProposedADR[]> {
-    const proposedDir = join(this.repoPath, 'adr', 'proposed');
+    const proposedDir = join(this.repoPath, "adr", "proposed");
     if (!existsSync(proposedDir)) return [];
 
     const files = await readdir(proposedDir);
-    const adrFiles = files.filter(f => f.startsWith('ADR-') && f.endsWith('.md'));
+    const adrFiles = files.filter((f) => f.startsWith("ADR-") && f.endsWith(".md"));
     const results: ProposedADR[] = [];
 
     for (const file of adrFiles) {
       try {
-        const content = await readFile(join(proposedDir, file), 'utf-8');
+        const content = await readFile(join(proposedDir, file), "utf-8");
         const id = content.match(/^id:\s*"([^"]+)"/m)?.[1];
         const title = content.match(/^title:\s*"([^"]+)"/m)?.[1];
         const date = content.match(/^date:\s*"([^"]+)"/m)?.[1];

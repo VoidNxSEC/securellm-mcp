@@ -8,7 +8,7 @@
  * - Tracking cache hit rate
  */
 
-import { logger } from './logger.js';
+import { logger } from "./logger.js";
 
 interface CacheEntry<T> {
   data: T;
@@ -74,24 +74,16 @@ export class SmartCache {
   /**
    * Get cached data or execute function
    */
-  async get<T>(
-    key: string,
-    tool: string,
-    fetchFn: () => Promise<T>
-  ): Promise<T> {
+  async get<T>(key: string, tool: string, fetchFn: () => Promise<T>): Promise<T> {
     // Check rate limit first
     if (this.isRateLimited(tool)) {
       this.stats.rateLimited++;
       const entry = this.cache.get(key);
       if (entry) {
-        logger.info(
-          `[Cache] Rate limited ${tool}, returning stale cache`
-        );
+        logger.info(`[Cache] Rate limited ${tool}, returning stale cache`);
         return entry.data;
       }
-      throw new Error(
-        `Rate limit exceeded for ${tool}. Please wait a moment.`
-      );
+      throw new Error(`Rate limit exceeded for ${tool}. Please wait a moment.`);
     }
 
     // Check cache

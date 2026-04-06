@@ -10,8 +10,8 @@
  * After: execa runs async, event loop stays responsive
  */
 
-import { execa } from 'execa';
-import { logger } from '../../../utils/logger.js';
+import { execa } from "execa";
+import { logger } from "../../../utils/logger.js";
 
 export interface ExecOptions {
   cwd?: string;
@@ -43,8 +43,8 @@ export async function executeNixCommand(
 ): Promise<string> {
   const {
     cwd = process.cwd(),
-    timeout = 30000,  // Default 30s (configurable per command)
-    maxBuffer = 10 * 1024 * 1024,  // 10MB default
+    timeout = 30000, // Default 30s (configurable per command)
+    maxBuffer = 10 * 1024 * 1024, // 10MB default
     env = {},
   } = options;
 
@@ -53,19 +53,19 @@ export async function executeNixCommand(
   try {
     logger.debug(
       {
-        command: 'nix',
+        command: "nix",
         args,
         cwd,
-        timeout
+        timeout,
       },
       "Executing Nix command"
     );
 
-    const result = await execa('nix', args, {
+    const result = await execa("nix", args, {
       cwd,
       timeout,
       maxBuffer,
-      reject: false,  // Don't throw, we handle errors manually
+      reject: false, // Don't throw, we handle errors manually
       env: {
         ...process.env,
         ...env,
@@ -78,9 +78,9 @@ export async function executeNixCommand(
       logger.error(
         {
           args,
-          stderr: result.stderr.substring(0, 500),  // Truncate for logging
+          stderr: result.stderr.substring(0, 500), // Truncate for logging
           exitCode: result.exitCode,
-          durationMs: duration
+          durationMs: duration,
         },
         "Nix command failed"
       );
@@ -92,7 +92,7 @@ export async function executeNixCommand(
         args,
         exitCode: result.exitCode,
         durationMs: duration,
-        stdoutLength: result.stdout.length
+        stdoutLength: result.stdout.length,
       },
       "Nix command succeeded"
     );
@@ -101,11 +101,8 @@ export async function executeNixCommand(
   } catch (error: any) {
     const duration = Date.now() - startTime;
 
-    if (error.name === 'ExecaError' && error.timedOut) {
-      logger.warn(
-        { args, timeout, durationMs: duration },
-        "Nix command timed out"
-      );
+    if (error.name === "ExecaError" && error.timedOut) {
+      logger.warn({ args, timeout, durationMs: duration }, "Nix command timed out");
       throw new Error(`Nix command timed out after ${timeout}ms`);
     }
 
@@ -133,19 +130,16 @@ export async function executeNixCommandStreaming(
 ): Promise<ExecResult> {
   const {
     cwd = process.cwd(),
-    timeout = 120000,  // 2 minutes for streaming (builds)
+    timeout = 120000, // 2 minutes for streaming (builds)
     env = {},
   } = options;
 
   const startTime = Date.now();
 
-  logger.info(
-    { command: 'nix', args, cwd, timeout },
-    "Starting Nix command with streaming"
-  );
+  logger.info({ command: "nix", args, cwd, timeout }, "Starting Nix command with streaming");
 
   try {
-    const subprocess = execa('nix', args, {
+    const subprocess = execa("nix", args, {
       cwd,
       timeout,
       reject: false,
@@ -157,14 +151,14 @@ export async function executeNixCommandStreaming(
 
     // Stream stdout
     if (onStdout && subprocess.stdout) {
-      subprocess.stdout.on('data', (chunk: Buffer) => {
+      subprocess.stdout.on("data", (chunk: Buffer) => {
         onStdout(chunk.toString());
       });
     }
 
     // Stream stderr
     if (onStderr && subprocess.stderr) {
-      subprocess.stderr.on('data', (chunk: Buffer) => {
+      subprocess.stderr.on("data", (chunk: Buffer) => {
         onStderr(chunk.toString());
       });
     }
@@ -179,7 +173,7 @@ export async function executeNixCommandStreaming(
         exitCode: result.exitCode,
         durationMs: duration,
         failed: result.failed,
-        timedOut: result.timedOut
+        timedOut: result.timedOut,
       },
       "Nix streaming command completed"
     );
@@ -194,10 +188,7 @@ export async function executeNixCommandStreaming(
   } catch (error: any) {
     const duration = Date.now() - startTime;
 
-    logger.error(
-      { err: error, args, durationMs: duration },
-      "Nix streaming command error"
-    );
+    logger.error({ err: error, args, durationMs: duration }, "Nix streaming command error");
 
     throw error;
   }
@@ -210,19 +201,16 @@ export async function executeNixCommandStreaming(
  * @param options - Execution options
  * @returns Promise resolving to matching files (one per line)
  */
-export async function executeRipgrep(
-  args: string[],
-  options: ExecOptions = {}
-): Promise<string> {
+export async function executeRipgrep(args: string[], options: ExecOptions = {}): Promise<string> {
   const {
     cwd = process.cwd(),
-    timeout = 5000,  // 5s for file searches
+    timeout = 5000, // 5s for file searches
   } = options;
 
   try {
     logger.debug({ args, cwd }, "Executing ripgrep");
 
-    const result = await execa('rg', args, {
+    const result = await execa("rg", args, {
       cwd,
       timeout,
       reject: false,
@@ -235,7 +223,7 @@ export async function executeRipgrep(
 
     return result.stdout;
   } catch (error: any) {
-    if (error.name === 'ExecaError' && error.timedOut) {
+    if (error.name === "ExecaError" && error.timedOut) {
       logger.warn({ args, timeout }, "Ripgrep timed out");
       throw new Error(`Ripgrep timed out after ${timeout}ms`);
     }

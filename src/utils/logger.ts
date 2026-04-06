@@ -8,14 +8,14 @@
  * uses stderr during fatal startup errors (before MCP initialization).
  */
 
-import pino from 'pino';
-import { join } from 'path';
-import { homedir } from 'os';
-import { mkdirSync, existsSync } from 'fs';
+import pino from "pino";
+import { join } from "path";
+import { homedir } from "os";
+import { mkdirSync, existsSync } from "fs";
 
 // Determine log directory
-const LOG_DIR = process.env.LOG_DIR || join(homedir(), '.local', 'state', 'securellm-mcp');
-const LOG_FILE = join(LOG_DIR, 'mcp.log');
+const LOG_DIR = process.env.LOG_DIR || join(homedir(), ".local", "state", "securellm-mcp");
+const LOG_FILE = join(LOG_DIR, "mcp.log");
 
 // Ensure log directory exists
 if (!existsSync(LOG_DIR)) {
@@ -27,43 +27,43 @@ if (!existsSync(LOG_DIR)) {
  */
 export const logger = pino(
   {
-    level: process.env.LOG_LEVEL || 'info',
+    level: process.env.LOG_LEVEL || "info",
     formatters: {
       level: (label) => ({ level: label }),
     },
     timestamp: pino.stdTimeFunctions.isoTime,
     base: {
       pid: process.pid,
-      hostname: process.env.HOSTNAME || 'mcp-server',
+      hostname: process.env.HOSTNAME || "mcp-server",
     },
     redact: {
       paths: [
-        'password',
-        'token',
-        'apiKey',
-        'api_key',
-        'secret',
-        'privateKey',
-        'private_key',
-        'authorization',
-        'Authorization',
-        'config.password',
-        'config.privateKey',
-        'config.token',
-        'config.secret',
-        '*.password',
-        '*.token',
-        '*.apiKey',
-        '*.secret',
-        '*.privateKey',
-        '*.authorization',
+        "password",
+        "token",
+        "apiKey",
+        "api_key",
+        "secret",
+        "privateKey",
+        "private_key",
+        "authorization",
+        "Authorization",
+        "config.password",
+        "config.privateKey",
+        "config.token",
+        "config.secret",
+        "*.password",
+        "*.token",
+        "*.apiKey",
+        "*.secret",
+        "*.privateKey",
+        "*.authorization",
       ],
-      censor: '[REDACTED]',
+      censor: "[REDACTED]",
     },
   },
   pino.destination({
     dest: LOG_FILE,
-    sync: false,  // CRITICAL: async writes - non-blocking
+    sync: false, // CRITICAL: async writes - non-blocking
     mkdir: true,
   })
 );
@@ -75,16 +75,16 @@ export const logger = pino(
  * WARNING: Do not use in production MCP server!
  */
 let stderrLogger: pino.Logger | null = null;
-if (process.env.DEBUG_TO_STDERR === 'true') {
+if (process.env.DEBUG_TO_STDERR === "true") {
   stderrLogger = pino(
     {
-      level: 'debug',
+      level: "debug",
       transport: {
-        target: 'pino-pretty',
+        target: "pino-pretty",
         options: {
           colorize: true,
-          translateTime: 'SYS:HH:MM:ss',
-          ignore: 'pid,hostname',
+          translateTime: "SYS:HH:MM:ss",
+          ignore: "pid,hostname",
         },
       },
     },
@@ -120,7 +120,7 @@ export async function flushLogs(): Promise<void> {
 }
 
 // Auto-flush on process exit
-process.on('beforeExit', async () => {
+process.on("beforeExit", async () => {
   await flushLogs();
 });
 
@@ -128,8 +128,8 @@ process.on('beforeExit', async () => {
 logger.info(
   {
     logFile: LOG_FILE,
-    logLevel: process.env.LOG_LEVEL || 'info',
-    debugToStderr: process.env.DEBUG_TO_STDERR === 'true',
+    logLevel: process.env.LOG_LEVEL || "info",
+    debugToStderr: process.env.DEBUG_TO_STDERR === "true",
   },
-  'Logger initialized'
+  "Logger initialized"
 );

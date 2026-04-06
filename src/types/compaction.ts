@@ -1,11 +1,11 @@
 // Type definitions for Knowledge Database Compaction System
 
-export type Tier = 'hot' | 'warm' | 'cold' | 'frozen';
-export type SummaryType = 'session' | 'topic' | 'cluster';
-export type CompactionMode = 'full' | 'incremental' | 'archive_only' | 'summarize_only';
-export type DeduplicationMethod = 'exact' | 'embedding' | 'fuzzy';
-export type CompressionType = 'gzip' | 'bzip2' | 'none';
-export type DuplicateAction = 'merged' | 'kept_both' | 'ignored';
+export type Tier = "hot" | "warm" | "cold" | "frozen";
+export type SummaryType = "session" | "topic" | "cluster";
+export type CompactionMode = "full" | "incremental" | "archive_only" | "summarize_only";
+export type DeduplicationMethod = "exact" | "embedding" | "fuzzy";
+export type CompressionType = "gzip" | "bzip2" | "none";
+export type DuplicateAction = "merged" | "kept_both" | "ignored";
 
 // Summary Types
 export interface KnowledgeSummary {
@@ -190,10 +190,10 @@ export interface ArchiveOldSessionsOutput {
 // Restore Input/Output
 export interface RestoreArchivedSessionInput {
   session_id: string;
-  restore_mode?: 'full' | 'summary_only';
+  restore_mode?: "full" | "summary_only";
   archive_path?: string;
   force?: boolean;
-  restore_tier?: 'hot' | 'warm';
+  restore_tier?: "hot" | "warm";
 }
 
 export interface RestoreArchivedSessionOutput {

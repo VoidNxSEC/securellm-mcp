@@ -1,6 +1,6 @@
 /**
  * Tool-level metrics collector
- * 
+ *
  * Collects detailed metrics per tool including:
  * - Latency percentiles (p50, p95, p99)
  * - Cache hit/miss rates
@@ -9,8 +9,8 @@
  * - Request/response sizes
  */
 
-import { MetricsCollector } from './metrics-collector.js';
-import { logger } from '../utils/logger.js';
+import { MetricsCollector } from "./metrics-collector.js";
+import { logger } from "../utils/logger.js";
 
 export interface ToolMetrics {
   toolName: string;
@@ -134,7 +134,7 @@ export class ToolMetricsCollector {
         executionTime: snapshot.executionTime,
         error: snapshot.error,
       },
-      'Tool execution metrics'
+      "Tool execution metrics"
     );
   }
 
@@ -160,12 +160,10 @@ export class ToolMetricsCollector {
     const queueP99 = this.percentile(sortedQueueTimes, 99);
 
     // Calculate average sizes
-    const avgRequestSize = reqSizes.length > 0
-      ? reqSizes.reduce((a, b) => a + b, 0) / reqSizes.length
-      : 0;
-    const avgResponseSize = respSizes.length > 0
-      ? respSizes.reduce((a, b) => a + b, 0) / respSizes.length
-      : 0;
+    const avgRequestSize =
+      reqSizes.length > 0 ? reqSizes.reduce((a, b) => a + b, 0) / reqSizes.length : 0;
+    const avgResponseSize =
+      respSizes.length > 0 ? respSizes.reduce((a, b) => a + b, 0) / respSizes.length : 0;
 
     return {
       toolName,
@@ -176,9 +174,8 @@ export class ToolMetricsCollector {
       cacheMisses: cacheStat.misses,
       latencyPercentiles: metrics.latencyPercentiles,
       averageLatency: metrics.averageLatency,
-      averageQueueWaitTime: queueTimes.length > 0
-        ? queueTimes.reduce((a, b) => a + b, 0) / queueTimes.length
-        : 0,
+      averageQueueWaitTime:
+        queueTimes.length > 0 ? queueTimes.reduce((a, b) => a + b, 0) / queueTimes.length : 0,
       averageRequestSize: avgRequestSize,
       averageResponseSize: avgResponseSize,
       errorsByCategory: metrics.errorsByCategory,
@@ -205,7 +202,7 @@ export class ToolMetricsCollector {
    */
   getPrometheusMetrics(): string {
     const lines: string[] = [];
-    const prefix = 'securellm_mcp_tool';
+    const prefix = "securellm_mcp_tool";
 
     // Headers
     lines.push(`# HELP ${prefix}_requests_total Total number of tool requests`);
@@ -223,13 +220,23 @@ export class ToolMetricsCollector {
       const toolLabel = `tool="${toolName}"`;
 
       // Request counts
-      lines.push(`${prefix}_requests_total{${toolLabel},status="success"} ${metrics.successfulRequests}`);
-      lines.push(`${prefix}_requests_total{${toolLabel},status="failed"} ${metrics.failedRequests}`);
+      lines.push(
+        `${prefix}_requests_total{${toolLabel},status="success"} ${metrics.successfulRequests}`
+      );
+      lines.push(
+        `${prefix}_requests_total{${toolLabel},status="failed"} ${metrics.failedRequests}`
+      );
 
       // Latency percentiles
-      lines.push(`${prefix}_latency_seconds{${toolLabel},quantile="0.5"} ${(metrics.latencyPercentiles.p50 / 1000).toFixed(4)}`);
-      lines.push(`${prefix}_latency_seconds{${toolLabel},quantile="0.95"} ${(metrics.latencyPercentiles.p95 / 1000).toFixed(4)}`);
-      lines.push(`${prefix}_latency_seconds{${toolLabel},quantile="0.99"} ${(metrics.latencyPercentiles.p99 / 1000).toFixed(4)}`);
+      lines.push(
+        `${prefix}_latency_seconds{${toolLabel},quantile="0.5"} ${(metrics.latencyPercentiles.p50 / 1000).toFixed(4)}`
+      );
+      lines.push(
+        `${prefix}_latency_seconds{${toolLabel},quantile="0.95"} ${(metrics.latencyPercentiles.p95 / 1000).toFixed(4)}`
+      );
+      lines.push(
+        `${prefix}_latency_seconds{${toolLabel},quantile="0.99"} ${(metrics.latencyPercentiles.p99 / 1000).toFixed(4)}`
+      );
 
       // Cache stats
       lines.push(`${prefix}_cache_hits_total{${toolLabel}} ${metrics.cacheHits}`);
@@ -237,15 +244,23 @@ export class ToolMetricsCollector {
 
       // Queue wait time (use p95 for both since we don't track percentiles separately)
       const queueP95 = metrics.averageQueueWaitTime > 0 ? metrics.averageQueueWaitTime : 0;
-      lines.push(`${prefix}_queue_wait_seconds{${toolLabel},quantile="0.5"} ${(queueP95 / 1000).toFixed(4)}`);
-      lines.push(`${prefix}_queue_wait_seconds{${toolLabel},quantile="0.95"} ${(queueP95 / 1000).toFixed(4)}`);
+      lines.push(
+        `${prefix}_queue_wait_seconds{${toolLabel},quantile="0.5"} ${(queueP95 / 1000).toFixed(4)}`
+      );
+      lines.push(
+        `${prefix}_queue_wait_seconds{${toolLabel},quantile="0.95"} ${(queueP95 / 1000).toFixed(4)}`
+      );
 
       // Request/response sizes
-      lines.push(`${prefix}_request_size_bytes{${toolLabel}} ${metrics.averageRequestSize.toFixed(0)}`);
-      lines.push(`${prefix}_response_size_bytes{${toolLabel}} ${metrics.averageResponseSize.toFixed(0)}`);
+      lines.push(
+        `${prefix}_request_size_bytes{${toolLabel}} ${metrics.averageRequestSize.toFixed(0)}`
+      );
+      lines.push(
+        `${prefix}_response_size_bytes{${toolLabel}} ${metrics.averageResponseSize.toFixed(0)}`
+      );
     }
 
-    return lines.join('\n');
+    return lines.join("\n");
   }
 
   /**

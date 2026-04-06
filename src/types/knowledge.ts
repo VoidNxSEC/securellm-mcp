@@ -13,10 +13,10 @@ export interface KnowledgeEntry {
   id: number;
   session_id: string;
   timestamp: string;
-  entry_type: 'insight' | 'code' | 'decision' | 'reference' | 'question' | 'answer';
+  entry_type: "insight" | "code" | "decision" | "reference" | "question" | "answer";
   content: string;
   tags: string[];
-  priority: 'low' | 'medium' | 'high';
+  priority: "low" | "medium" | "high";
   metadata: Record<string, any>;
 }
 
@@ -41,16 +41,16 @@ export interface CreateSessionInput {
 export interface SaveKnowledgeInput {
   session_id?: string;
   content: string;
-  type: KnowledgeEntry['entry_type'];
+  type: KnowledgeEntry["entry_type"];
   tags?: string[];
-  priority?: KnowledgeEntry['priority'];
+  priority?: KnowledgeEntry["priority"];
   metadata?: Record<string, any>;
 }
 
 export interface SearchKnowledgeInput {
   query: string;
   session_id?: string;
-  entry_type?: KnowledgeEntry['entry_type'];
+  entry_type?: KnowledgeEntry["entry_type"];
   limit?: number;
 }
 
@@ -61,14 +61,14 @@ export interface KnowledgeDatabase {
   listSessions(limit?: number, offset?: number): Promise<Session[]>;
   updateSession(id: string, updates: Partial<Session>): Promise<void>;
   deleteSession(id: string): Promise<void>;
-  
+
   // Knowledge operations
   saveKnowledge(input: SaveKnowledgeInput): Promise<KnowledgeEntry>;
   getKnowledgeEntry(id: number): Promise<KnowledgeEntry | null>;
   searchKnowledge(input: SearchKnowledgeInput): Promise<SearchResult[]>;
   getRecentKnowledge(session_id?: string, limit?: number): Promise<KnowledgeEntry[]>;
   deleteKnowledgeEntry(id: number): Promise<void>;
-  
+
   // Stats
   getStats(): Promise<SessionStats>;
 
@@ -82,18 +82,18 @@ export interface KnowledgeDatabase {
     fileTypes: Record<string, number>;
     timestamp?: number;
   }): void;
-  
+
   getRecentProjectStates(limit?: number): any[];
-  
+
   // Cleanup
   cleanupOldSessions(days: number): Promise<number>;
-  
+
   // Maintenance
   maintenance(): Promise<void>;
 
   // Patterns
   getPatterns(type?: string, limit?: number): any[];
-  
+
   // Close
   close(): void;
 }

@@ -1,18 +1,18 @@
 /**
  * Nix Tools Coordinator
- * 
+ *
  * Main interface for all Nix development tools.
  */
 
-import { FlakeOps } from './flake-ops.js';
-import { PackageSearch } from './package-search.js';
-import { BuildAnalyzer } from './build-analyzer.js';
+import { FlakeOps } from "./flake-ops.js";
+import { PackageSearch } from "./package-search.js";
+import { BuildAnalyzer } from "./build-analyzer.js";
 import type {
   FlakeBuildResult,
   FlakeMetadata,
   NixPackage,
   BuildAnalysis,
-} from '../../types/nix-tools.js';
+} from "../../types/nix-tools.js";
 
 /**
  * Nix Tools

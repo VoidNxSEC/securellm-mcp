@@ -5,7 +5,8 @@ import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 export const knowledgeCompactionTools: ExtendedTool[] = [
   {
     name: "compact_knowledge",
-    description: "Comprehensive knowledge database compaction with tiered storage, summarization, and archival. Reduces database size while preserving critical information.",
+    description:
+      "Comprehensive knowledge database compaction with tiered storage, summarization, and archival. Reduces database size while preserving critical information.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -19,7 +20,8 @@ export const knowledgeCompactionTools: ExtendedTool[] = [
           type: "string",
           enum: ["full", "incremental", "archive_only", "summarize_only"],
           default: "incremental",
-          description: "Compaction mode: full (all operations), incremental (smart tier-based), archive_only (cold tier only), summarize_only (warm tier only)",
+          description:
+            "Compaction mode: full (all operations), incremental (smart tier-based), archive_only (cold tier only), summarize_only (warm tier only)",
         },
         hot_threshold: {
           type: "number",
@@ -71,7 +73,8 @@ export const knowledgeCompactionTools: ExtendedTool[] = [
   },
   {
     name: "summarize_session",
-    description: "Generate LLM-powered summary of a knowledge session, preserving key information in compact form.",
+    description:
+      "Generate LLM-powered summary of a knowledge session, preserving key information in compact form.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -84,7 +87,8 @@ export const knowledgeCompactionTools: ExtendedTool[] = [
           type: "string",
           enum: ["session", "topic", "cluster"],
           default: "session",
-          description: "Type of summary: session (overall), topic (by theme), cluster (by similarity)",
+          description:
+            "Type of summary: session (overall), topic (by theme), cluster (by similarity)",
         },
         model: {
           type: "string",
@@ -121,7 +125,8 @@ export const knowledgeCompactionTools: ExtendedTool[] = [
   },
   {
     name: "deduplicate_entries",
-    description: "Detect and merge duplicate knowledge entries using exact matching, fuzzy matching, or semantic embeddings.",
+    description:
+      "Detect and merge duplicate knowledge entries using exact matching, fuzzy matching, or semantic embeddings.",
     defer_loading: true,
     inputSchema: {
       type: "object",
@@ -135,7 +140,8 @@ export const knowledgeCompactionTools: ExtendedTool[] = [
           type: "string",
           enum: ["exact", "embedding", "fuzzy"],
           default: "embedding",
-          description: "Detection method: exact (hash-based), embedding (semantic), fuzzy (Levenshtein distance)",
+          description:
+            "Detection method: exact (hash-based), embedding (semantic), fuzzy (Levenshtein distance)",
         },
         session_id: {
           type: "string",
@@ -156,7 +162,8 @@ export const knowledgeCompactionTools: ExtendedTool[] = [
   },
   {
     name: "archive_old_sessions",
-    description: "Archive old sessions to compressed JSON files, preserving data while freeing database space.",
+    description:
+      "Archive old sessions to compressed JSON files, preserving data while freeing database space.",
     defer_loading: true,
     inputSchema: {
       type: "object",

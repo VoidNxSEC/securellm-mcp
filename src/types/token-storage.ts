@@ -2,7 +2,7 @@
  * Token storage types and interfaces
  */
 
-import { OAuthToken, OAuthProvider } from './oauth.js';
+import { OAuthToken, OAuthProvider } from "./oauth.js";
 
 /**
  * Encrypted token storage format

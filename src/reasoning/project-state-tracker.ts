@@ -1,14 +1,14 @@
 /**
  * Project State Tracker
- * 
+ *
  * Monitors project state including file system, git, and build status.
  * Provides real-time awareness of project changes.
  */
 
-import { execa } from 'execa';
-import { readdirSync, statSync } from 'fs';
-import { join, extname } from 'path';
-import type { ProjectState, GitState, BuildState } from '../types/context-inference.js';
+import { execa } from "execa";
+import { readdirSync, statSync } from "fs";
+import { join, extname } from "path";
+import type { ProjectState, GitState, BuildState } from "../types/context-inference.js";
 
 /**
  * Project State Tracker
@@ -28,14 +28,14 @@ export class ProjectStateTracker {
    */
   public async getState(): Promise<ProjectState> {
     const now = Date.now();
-    
+
     if (this.cache && now < this.cacheExpiry) {
       return this.cache;
     }
 
     this.cache = await this.buildState();
     this.cacheExpiry = now + this.CACHE_TTL;
-    
+
     return this.cache;
   }
 
@@ -67,19 +67,19 @@ export class ProjectStateTracker {
   private async getGitState(): Promise<GitState | null> {
     try {
       // Check if git repo
-      await execa('git', ['rev-parse', '--git-dir'], {
+      await execa("git", ["rev-parse", "--git-dir"], {
         cwd: this.projectRoot,
-        stdio: 'ignore',
+        stdio: "ignore",
       });
 
       // Get current branch
-      const branchResult = await execa('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      const branchResult = await execa("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
         cwd: this.projectRoot,
       });
       const branch = branchResult.stdout.trim();
 
       // Get status
-      const statusResult = await execa('git', ['status', '--porcelain'], {
+      const statusResult = await execa("git", ["status", "--porcelain"], {
         cwd: this.projectRoot,
       });
 
@@ -87,19 +87,19 @@ export class ProjectStateTracker {
       const staged: string[] = [];
       const untracked: string[] = [];
 
-      for (const line of statusResult.stdout.split('\n')) {
+      for (const line of statusResult.stdout.split("\n")) {
         if (!line) continue;
-        
+
         const status = line.substring(0, 2);
         const file = line.substring(3);
-        
-        if (status[0] !== ' ' && status[0] !== '?') {
+
+        if (status[0] !== " " && status[0] !== "?") {
           staged.push(file);
         }
-        if (status[1] === 'M') {
+        if (status[1] === "M") {
           modified.push(file);
         }
-        if (status === '??') {
+        if (status === "??") {
           untracked.push(file);
         }
       }
@@ -107,14 +107,14 @@ export class ProjectStateTracker {
       // Get last commit
       let lastCommit: string | undefined;
       let lastCommitMessage: string | undefined;
-      
+
       try {
-        const lastCommitResult = await execa('git', ['rev-parse', '--short', 'HEAD'], {
+        const lastCommitResult = await execa("git", ["rev-parse", "--short", "HEAD"], {
           cwd: this.projectRoot,
         });
         lastCommit = lastCommitResult.stdout.trim();
-        
-        const msgResult = await execa('git', ['log', '-1', '--pretty=%B'], {
+
+        const msgResult = await execa("git", ["log", "-1", "--pretty=%B"], {
           cwd: this.projectRoot,
         });
         lastCommitMessage = msgResult.stdout.trim();
@@ -143,10 +143,10 @@ export class ProjectStateTracker {
     try {
       // Try nix flake check
       // Use execa directly as we want to capture error output for analysis
-      await execa('nix', ['flake', 'check', '--no-build'], {
+      await execa("nix", ["flake", "check", "--no-build"], {
         cwd: this.projectRoot,
         timeout: 5000, // 5s timeout
-        stderr: 'pipe', // Capture stderr
+        stderr: "pipe", // Capture stderr
       });
 
       return {
@@ -156,8 +156,8 @@ export class ProjectStateTracker {
         timestamp: Date.now(),
       };
     } catch (error: any) {
-      const output = error.stdout || error.stderr || '';
-      
+      const output = error.stdout || error.stderr || "";
+
       return {
         success: false,
         errors: this.parseErrors(output),
@@ -172,14 +172,14 @@ export class ProjectStateTracker {
    */
   private parseErrors(output: string): string[] {
     const errors: string[] = [];
-    const lines = output.split('\n');
-    
+    const lines = output.split("\n");
+
     for (const line of lines) {
-      if (line.includes('error:') || line.includes('ERROR')) {
+      if (line.includes("error:") || line.includes("ERROR")) {
         errors.push(line.trim());
       }
     }
-    
+
     return errors.slice(0, 10); // Limit to 10 errors
   }
 
@@ -188,14 +188,14 @@ export class ProjectStateTracker {
    */
   private parseWarnings(output: string): string[] {
     const warnings: string[] = [];
-    const lines = output.split('\n');
-    
+    const lines = output.split("\n");
+
     for (const line of lines) {
-      if (line.includes('warning:') || line.includes('WARN')) {
+      if (line.includes("warning:") || line.includes("WARN")) {
         warnings.push(line.trim());
       }
     }
-    
+
     return warnings.slice(0, 10); // Limit to 10 warnings
   }
 
@@ -204,12 +204,15 @@ export class ProjectStateTracker {
    */
   private async getRecentFiles(): Promise<string[]> {
     try {
-      const result = await execa('git', ['diff', '--name-only', 'HEAD~5..HEAD'], {
+      const result = await execa("git", ["diff", "--name-only", "HEAD~5..HEAD"], {
         cwd: this.projectRoot,
         timeout: 2000,
       });
-      
-      return result.stdout.split('\n').filter(f => f.length > 0).slice(0, 20);
+
+      return result.stdout
+        .split("\n")
+        .filter((f) => f.length > 0)
+        .slice(0, 20);
     } catch {
       return [];
     }
@@ -220,7 +223,7 @@ export class ProjectStateTracker {
    */
   private getFileTypeCounts(): Record<string, number> {
     const counts: Record<string, number> = {};
-    
+
     try {
       this.walkDirectory(this.projectRoot, (file) => {
         const ext = extname(file);
@@ -231,7 +234,7 @@ export class ProjectStateTracker {
     } catch {
       // Ignore errors
     }
-    
+
     return counts;
   }
 
@@ -240,19 +243,19 @@ export class ProjectStateTracker {
    */
   private walkDirectory(dir: string, callback: (file: string) => void, depth: number = 0): void {
     if (depth > 3) return; // Max depth 3
-    
+
     try {
       const entries = readdirSync(dir);
-      
+
       for (const entry of entries) {
         // Skip hidden and common ignore dirs
-        if (entry.startsWith('.') || entry === 'node_modules' || entry === 'target') {
+        if (entry.startsWith(".") || entry === "node_modules" || entry === "target") {
           continue;
         }
-        
+
         const fullPath = join(dir, entry);
         const stat = statSync(fullPath);
-        
+
         if (stat.isDirectory()) {
           this.walkDirectory(fullPath, callback, depth + 1);
         } else {

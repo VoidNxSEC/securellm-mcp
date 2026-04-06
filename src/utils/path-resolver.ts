@@ -42,8 +42,9 @@ export class PathResolutionEngine {
 
     // 1. Alias Substitution
     // Sort aliases by length (descending) to match longest prefix first
-    const sortedAliases = Array.from(this.aliases.entries())
-      .sort((a, b) => b[0].length - a[0].length);
+    const sortedAliases = Array.from(this.aliases.entries()).sort(
+      (a, b) => b[0].length - a[0].length
+    );
 
     for (const [alias, value] of sortedAliases) {
       if (resolved.startsWith(alias)) {

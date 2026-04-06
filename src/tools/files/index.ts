@@ -3,11 +3,11 @@
  * Intelligent file management and search
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as crypto from 'crypto';
-import Database from 'better-sqlite3';
-import { validatePath, validatePaths } from '../../security/path-validator.js';
+import * as fs from "fs/promises";
+import * as path from "path";
+import * as crypto from "crypto";
+import Database from "better-sqlite3";
+import { validatePath, validatePaths } from "../../security/path-validator.js";
 import type {
   FilesAnalyzeStructureArgs,
   FilesAutoOrganizeArgs,
@@ -16,7 +16,7 @@ import type {
   FilesTagManagerArgs,
   FileCatalogResult,
   ToolResult,
-} from '../../types/extended-tools.js';
+} from "../../types/extended-tools.js";
 
 /**
  * Files Analyze Structure Tool
@@ -27,7 +27,13 @@ export class FilesAnalyzeStructureTool {
 
     try {
       validatePath(base_path, process.cwd());
-      const analysis = await this.analyzeDirectory(base_path, 0, max_depth, min_size_mb * 1024 * 1024, file_types);
+      const analysis = await this.analyzeDirectory(
+        base_path,
+        0,
+        max_depth,
+        min_size_mb * 1024 * 1024,
+        file_types
+      );
 
       return {
         success: true,
@@ -81,8 +87,14 @@ export class FilesAnalyzeStructureTool {
 
         if (entry.isDirectory()) {
           analysis.dirCount++;
-          const subAnalysis = await this.analyzeDirectory(fullPath, currentDepth + 1, maxDepth, minSize, fileTypes);
-          
+          const subAnalysis = await this.analyzeDirectory(
+            fullPath,
+            currentDepth + 1,
+            maxDepth,
+            minSize,
+            fileTypes
+          );
+
           analysis.fileCount += subAnalysis.fileCount;
           analysis.dirCount += subAnalysis.dirCount;
           analysis.totalSize += subAnalysis.totalSize;
@@ -105,9 +117,9 @@ export class FilesAnalyzeStructureTool {
           }
         } else if (entry.isFile()) {
           const stats = await fs.stat(fullPath);
-          
+
           if (stats.size >= minSize) {
-            const ext = path.extname(entry.name).toLowerCase() || 'no_extension';
+            const ext = path.extname(entry.name).toLowerCase() || "no_extension";
 
             if (fileTypes.length === 0 || fileTypes.includes(ext)) {
               analysis.fileCount++;
@@ -177,7 +189,7 @@ export class FilesAutoOrganizeTool {
           files_to_move: operations.length,
           operations: operations.slice(0, 50), // Limit output
         },
-        warnings: dry_run ? ['Dry run - no files actually moved'] : undefined,
+        warnings: dry_run ? ["Dry run - no files actually moved"] : undefined,
         timestamp: new Date().toISOString(),
       };
     } catch (error: any) {
@@ -221,25 +233,37 @@ export class FilesAutoOrganizeTool {
     }
 
     switch (strategy) {
-      case 'by_type':
+      case "by_type":
         const typeMap: Record<string, string> = {
-          '.jpg': 'images', '.jpeg': 'images', '.png': 'images', '.gif': 'images',
-          '.pdf': 'documents', '.doc': 'documents', '.docx': 'documents', '.txt': 'documents',
-          '.mp4': 'videos', '.avi': 'videos', '.mkv': 'videos',
-          '.mp3': 'audio', '.wav': 'audio', '.flac': 'audio',
-          '.zip': 'archives', '.tar': 'archives', '.gz': 'archives',
+          ".jpg": "images",
+          ".jpeg": "images",
+          ".png": "images",
+          ".gif": "images",
+          ".pdf": "documents",
+          ".doc": "documents",
+          ".docx": "documents",
+          ".txt": "documents",
+          ".mp4": "videos",
+          ".avi": "videos",
+          ".mkv": "videos",
+          ".mp3": "audio",
+          ".wav": "audio",
+          ".flac": "audio",
+          ".zip": "archives",
+          ".tar": "archives",
+          ".gz": "archives",
         };
-        const folder = typeMap[ext] || 'others';
+        const folder = typeMap[ext] || "others";
         return path.join(basePath, folder, fileName);
 
-      case 'by_date':
+      case "by_date":
         const year = stats.mtime.getFullYear();
-        const month = String(stats.mtime.getMonth() + 1).padStart(2, '0');
+        const month = String(stats.mtime.getMonth() + 1).padStart(2, "0");
         return path.join(basePath, `${year}`, `${month}`, fileName);
 
-      case 'by_size':
+      case "by_size":
         const sizeMB = stats.size / (1024 * 1024);
-        const sizeFolder = sizeMB < 1 ? 'small' : sizeMB < 100 ? 'medium' : 'large';
+        const sizeFolder = sizeMB < 1 ? "small" : sizeMB < 100 ? "medium" : "large";
         return path.join(basePath, sizeFolder, fileName);
 
       default:
@@ -253,7 +277,12 @@ export class FilesAutoOrganizeTool {
  */
 export class FilesCreateCatalogTool {
   async execute(args: FilesCreateCatalogArgs): Promise<FileCatalogResult> {
-    const { paths, include_metadata = true, include_checksums = false, output_format = 'sqlite' } = args;
+    const {
+      paths,
+      include_metadata = true,
+      include_checksums = false,
+      output_format = "sqlite",
+    } = args;
 
     try {
       validatePaths(paths, process.cwd());
@@ -261,7 +290,7 @@ export class FilesCreateCatalogTool {
       const catalogPath = `/tmp/${catalogId}.db`;
 
       const db = new Database(catalogPath);
-      
+
       db.exec(`
         CREATE TABLE IF NOT EXISTS files (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -342,7 +371,7 @@ export class FilesCreateCatalogTool {
 
   private async scanFilesRecursive(dirPath: string): Promise<string[]> {
     const files: string[] = [];
-    
+
     try {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
@@ -350,7 +379,7 @@ export class FilesCreateCatalogTool {
         const fullPath = path.join(dirPath, entry.name);
 
         if (entry.isDirectory()) {
-          files.push(...await this.scanFilesRecursive(fullPath));
+          files.push(...(await this.scanFilesRecursive(fullPath)));
         } else if (entry.isFile()) {
           files.push(fullPath);
         }
@@ -364,7 +393,7 @@ export class FilesCreateCatalogTool {
 
   private async calculateChecksum(filePath: string): Promise<string> {
     const content = await fs.readFile(filePath);
-    return crypto.createHash('sha256').update(content).digest('hex');
+    return crypto.createHash("sha256").update(content).digest("hex");
   }
 }
 
@@ -383,9 +412,9 @@ export class FilesSearchCatalogTool {
           query,
           filters,
           results: [],
-          message: 'Catalog search requires catalog ID from create_catalog',
+          message: "Catalog search requires catalog ID from create_catalog",
         },
-        warnings: ['Simplified implementation - requires integration with catalog DB'],
+        warnings: ["Simplified implementation - requires integration with catalog DB"],
         timestamp: new Date().toISOString(),
       };
     } catch (error: any) {
@@ -409,36 +438,36 @@ export class FilesTagManagerTool {
 
     try {
       switch (action) {
-        case 'add':
-          if (!file_path) throw new Error('file_path required for add action');
+        case "add":
+          if (!file_path) throw new Error("file_path required for add action");
           const existing = this.tagsDb.get(file_path) || new Set();
-          tags.forEach(t => existing.add(t));
+          tags.forEach((t) => existing.add(t));
           this.tagsDb.set(file_path, existing);
           return {
             success: true,
-            data: { file_path, tags: Array.from(existing), action: 'added' },
+            data: { file_path, tags: Array.from(existing), action: "added" },
             timestamp: new Date().toISOString(),
           };
 
-        case 'remove':
-          if (!file_path) throw new Error('file_path required for remove action');
+        case "remove":
+          if (!file_path) throw new Error("file_path required for remove action");
           const fileTags = this.tagsDb.get(file_path);
           if (fileTags) {
-            tags.forEach(t => fileTags.delete(t));
+            tags.forEach((t) => fileTags.delete(t));
             if (fileTags.size === 0) {
               this.tagsDb.delete(file_path);
             }
           }
           return {
             success: true,
-            data: { file_path, tags: fileTags ? Array.from(fileTags) : [], action: 'removed' },
+            data: { file_path, tags: fileTags ? Array.from(fileTags) : [], action: "removed" },
             timestamp: new Date().toISOString(),
           };
 
-        case 'search':
+        case "search":
           const matches: string[] = [];
           for (const [file, fileTags] of this.tagsDb.entries()) {
-            if (tags.every(t => fileTags.has(t))) {
+            if (tags.every((t) => fileTags.has(t))) {
               matches.push(file);
             }
           }
@@ -448,7 +477,7 @@ export class FilesTagManagerTool {
             timestamp: new Date().toISOString(),
           };
 
-        case 'list':
+        case "list":
           const allFiles = Array.from(this.tagsDb.entries()).map(([file, tags]) => ({
             file,
             tags: Array.from(tags),
@@ -482,7 +511,11 @@ export const filesAnalyzeStructureSchema = {
       base_path: { type: "string", description: "Base directory to analyze" },
       max_depth: { type: "number", description: "Maximum depth to traverse (default: 5)" },
       min_size_mb: { type: "number", description: "Minimum file size in MB (default: 0)" },
-      file_types: { type: "array", items: { type: "string" }, description: "File extensions to include" },
+      file_types: {
+        type: "array",
+        items: { type: "string" },
+        description: "File extensions to include",
+      },
     },
     required: ["base_path"],
   },
@@ -520,8 +553,15 @@ export const filesCreateCatalogSchema = {
     properties: {
       paths: { type: "array", items: { type: "string" }, description: "Paths to catalog" },
       include_metadata: { type: "boolean", description: "Include file metadata (default: true)" },
-      include_checksums: { type: "boolean", description: "Calculate SHA256 checksums (default: false)" },
-      output_format: { type: "string", enum: ["json", "sqlite", "csv"], description: "Default: sqlite" },
+      include_checksums: {
+        type: "boolean",
+        description: "Calculate SHA256 checksums (default: false)",
+      },
+      output_format: {
+        type: "string",
+        enum: ["json", "sqlite", "csv"],
+        description: "Default: sqlite",
+      },
     },
     required: ["paths"],
   },
