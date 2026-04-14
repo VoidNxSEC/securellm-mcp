@@ -95,7 +95,7 @@
             chromium
 
             # OSINT/Web Crawling
-            spider-nix.packages.${system}.default
+            #spider-nix.packages.${system}.default
 
             # Utils
             ripgrep
