@@ -70,7 +70,7 @@
             maintainers = [ "kernelcore" ];
           };
         };
-  #export PATH="${spider-nix.packages.${system}.default}/bin:\$PATH"
+        #export PATH="${spider-nix.packages.${system}.default}/bin:\$PATH"
       in
       {
         packages = {
@@ -93,10 +93,10 @@
             sqlite
 
             # Browser Automation
-            #chromium
+            chromium
 
             # OSINT/Web Crawling
-            #spider-nix.packages.${system}.default
+            spider-nix.packages.${system}.default
 
             # Utils
             ripgrep
@@ -104,14 +104,14 @@
           ];
 
           shellHook = ''
-            #export LD_LIBRARY_PATH=${pkgs.openssl.out}/lib:$LD_LIBRARY_PATH
-            #export PUPPETEER_EXECUTABLE_PATH="${pkgs.chromium}/bin/chromium"
-            #export PUPPETEER_SKIP_DOWNLOAD="1"
+            export LD_LIBRARY_PATH=${pkgs.openssl.out}/lib:$LD_LIBRARY_PATH
+            export PUPPETEER_EXECUTABLE_PATH="${pkgs.chromium}/bin/chromium"
+            export PUPPETEER_SKIP_DOWNLOAD="1"
             echo "🛡️ SecureLLM Dev Environment (Node.js + Rust) Loaded"
             echo "Rust Version: $(rustc --version)"
             echo "Node Version: $(node --version)"
-            #echo "Chromium: ${pkgs.chromium}/bin/chromium"
-            #echo "Spider-Nix: $(which spider-nix 2>/dev/null || echo 'not found')"
+            echo "Chromium: ${pkgs.chromium}/bin/chromium"
+            echo "Spider-Nix: $(which spider-nix 2>/dev/null || echo 'not found')"
           '';
         };
       }
