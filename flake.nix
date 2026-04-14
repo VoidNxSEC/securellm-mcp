@@ -82,9 +82,8 @@
           buildInputs = with pkgs; [
             # Node.js Environment (Legacy/Transition)
             nodejs_24
-            nodePackages.npm
-            nodePackages.typescript
-            nodePackages.typescript-language-server
+            typescript
+            typescript-language-server
 
             # Rust Environment (New Architecture)
             rustToolchain
