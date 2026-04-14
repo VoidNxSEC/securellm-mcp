@@ -8,10 +8,10 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     # Spider-Nix for web crawling/OSINT features
-    #spider-nix = {
-      #url = "github:VoidNxSEC/spider-nix";
-      #inputs.nixpkgs.follows = "nixpkgs";
-    #};
+    spider-nix = {
+      url = "git+ssh://git@github.com/VoidNxSEC/spider-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }:
