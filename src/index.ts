@@ -1141,8 +1141,8 @@ class SecureLLMBridgeMCPServer {
         if (this.adrHygieneMiddleware) {
           try {
             const hygieneReport = await this.adrHygieneMiddleware.onToolCall();
-            if (hygieneReport && result && Array.isArray((result as any).content)) {
-              (result as any).content.push({
+            if (hygieneReport && result && Array.isArray((result).content)) {
+              (result).content.push({
                 type: "text",
                 text: `\n---\n${hygieneReport.summary}\n${hygieneReport.details.join("\n")}`,
               });
@@ -1157,7 +1157,7 @@ class SecureLLMBridgeMCPServer {
         try {
           const responseStr = stringify(result);
           snapshot.responseSize = Buffer.byteLength(responseStr, "utf8");
-        } catch (err) {
+        } catch {
           // Fallback: estimate size from result object
           snapshot.responseSize = JSON.stringify(result).length;
         }
@@ -1188,7 +1188,7 @@ class SecureLLMBridgeMCPServer {
         // Classify error
         if (error instanceof McpError) {
           snapshot.errorCategory =
-            error.code === ErrorCode.InvalidParams ? "invalid_params" : "mcp_error";
+            error.code === (ErrorCode.InvalidParams as number) ? "invalid_params" : "mcp_error";
         } else if (error instanceof Error) {
           if (error.message.includes("timeout") || error.message.includes("Timeout")) {
             snapshot.errorCategory = "timeout";
@@ -1204,7 +1204,7 @@ class SecureLLMBridgeMCPServer {
         this.toolMetricsCollector.recordSnapshot(snapshot);
 
         if (error instanceof McpError) throw error;
-        throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${error}`);
+        throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         // Release permit if it was acquired
         if (permit) {
@@ -1340,7 +1340,7 @@ class SecureLLMBridgeMCPServer {
         }
       } catch (error) {
         if (error instanceof McpError) throw error;
-        throw new McpError(ErrorCode.InternalError, `Failed to read resource: ${error}`);
+        throw new McpError(ErrorCode.InternalError, `Failed to read resource: ${error instanceof Error ? error.message : String(error)}`);
       }
     });
   }
@@ -1626,7 +1626,7 @@ class SecureLLMBridgeMCPServer {
 
     try {
       // Wrap crypto operations with rate limiter (expensive operations)
-      const result = await this.rateLimiter.execute("crypto", async () => {
+      await this.rateLimiter.execute("crypto", async () => {
         await fs.mkdir(outputDir, { recursive: true });
 
         let certCommand = "";
@@ -1645,7 +1645,6 @@ class SecureLLMBridgeMCPServer {
         }
 
         await execAsync(certCommand);
-        return { success: true };
       });
 
       return {
@@ -1696,7 +1695,7 @@ class SecureLLMBridgeMCPServer {
           },
         ],
       };
-    } catch (error) {
+    } catch {
       return {
         contents: [
           {

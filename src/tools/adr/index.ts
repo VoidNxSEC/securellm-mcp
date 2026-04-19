@@ -456,7 +456,7 @@ async function handleAdrNewFromResearch(args: ADRCreateArgs) {
     const { title, research_data, project = "GLOBAL" } = args;
     if (!research_data) throw new Error("research_data is required");
 
-    const research = research_data as ResearchData;
+    const research = research_data;
     const credibilityScore = ResearchParser.calculateCredibilityScore(research);
     const content = ResearchParser.generateADR(research, title, project);
     const id = await backend.getNextId();

@@ -249,12 +249,26 @@ export class PackageDiagnoseTool {
         ["build", `${this.workspaceDir}#${attrPath}`, "--no-link"],
         {
           cwd: this.workspaceDir,
-          shell: true,
+          shell: false,
         }
       );
 
       let stderr = "";
       let stdout = "";
+      let resolved = false;
+
+      const timeoutHandle = setTimeout(
+        () => {
+          if (resolved) return;
+          resolved = true;
+          buildProcess.kill();
+          resolve({
+            status: "failed",
+            errors: "Build timed out after 5 minutes",
+          });
+        },
+        5 * 60 * 1000
+      );
 
       buildProcess.stdout.on("data", (data) => {
         stdout += data.toString();
@@ -265,6 +279,9 @@ export class PackageDiagnoseTool {
       });
 
       buildProcess.on("close", (code) => {
+        clearTimeout(timeoutHandle);
+        if (resolved) return;
+        resolved = true;
         if (code === 0) {
           resolve({ status: "success" });
         } else {
@@ -276,23 +293,14 @@ export class PackageDiagnoseTool {
       });
 
       buildProcess.on("error", (error) => {
+        clearTimeout(timeoutHandle);
+        if (resolved) return;
+        resolved = true;
         resolve({
           status: "failed",
           errors: `Failed to start build process: ${error.message}`,
         });
       });
-
-      // Set a timeout of 5 minutes
-      setTimeout(
-        () => {
-          buildProcess.kill();
-          resolve({
-            status: "failed",
-            errors: "Build timed out after 5 minutes",
-          });
-        },
-        5 * 60 * 1000
-      );
     });
   }
 

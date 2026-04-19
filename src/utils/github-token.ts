@@ -135,7 +135,7 @@ class GitHubTokenProvider {
         return { valid: false, rateLimit: 0, remaining: 0 };
       }
 
-      const data = (await response.json()) as any;
+      const data = (await response.json());
       return {
         valid: true,
         rateLimit: data.rate.limit,

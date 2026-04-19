@@ -16,7 +16,7 @@ export function createMockSSHClient(options?: {
   execOutput?: string;
   execError?: Error;
 }): MockSSHClient {
-  const listeners = new Map<string, Set<Function>>();
+  const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
 
   const client: MockSSHClient = {
     connect: (config: any) => {
@@ -37,7 +37,7 @@ export function createMockSSHClient(options?: {
         return;
       }
       const stream = {
-        on: (event: string, handler: Function) => {
+        on: (event: string, handler: (...args: unknown[]) => void) => {
           if (event === "data") {
             handler(Buffer.from(options?.execOutput || ""));
           }

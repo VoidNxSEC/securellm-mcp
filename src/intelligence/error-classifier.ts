@@ -2,7 +2,6 @@
 import type {
   ErrorPattern,
   ErrorType,
-  ErrorSeverity,
   DiagnoseIssue,
 } from "../types/package-debugger.js";
 
@@ -18,7 +17,7 @@ export class ErrorClassifier {
       {
         name: "hash_mismatch",
         regex:
-          /hash mismatch.*specified:\s*(sha256-[A-Za-z0-9+\/=]+).*got:\s*(sha256-[A-Za-z0-9+\/=]+)/s,
+          /hash mismatch.*specified:\s*(sha256-[A-Za-z0-9+/=]+).*got:\s*(sha256-[A-Za-z0-9+/=]+)/s,
         fix: "UPDATE_HASH",
         severity: "critical",
         extractor: (match) => ({

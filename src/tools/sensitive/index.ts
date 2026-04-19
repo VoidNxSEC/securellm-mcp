@@ -56,8 +56,8 @@ export class DataScanSensitiveTool {
             lines.forEach((line, index) => {
               // Check predefined patterns
               for (const pattern of patterns) {
-                if (pattern !== "custom" && this.patterns[pattern as keyof typeof this.patterns]) {
-                  const regex = this.patterns[pattern as keyof typeof this.patterns];
+                if (pattern !== "custom" && this.patterns[pattern]) {
+                  const regex = this.patterns[pattern];
                   const lineMatches = line.match(regex);
 
                   if (lineMatches) {

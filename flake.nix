@@ -9,15 +9,16 @@
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     # Spider-Nix for web crawling/OSINT features
     spider-nix = {
-      url = "https://github.com/VoidNxSEC/spider-nix";
+      url = "git+ssh://git@github.com/VoidNxSEC/spider-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }@inputs:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
+        spiderNixPkg = inputs.spider-nix.packages.${system}.default;
         pkgs = import nixpkgs {
           inherit system overlays;
         };
@@ -55,9 +56,10 @@
 
             # Create executable wrapper with Chromium and spider-nix paths
             cat > $out/bin/securellm-mcp <<EOF
-            !${pkgs.bash}/bin/bash
+            #!${pkgs.bash}/bin/bash
             export PUPPETEER_EXECUTABLE_PATH="${pkgs.chromium}/bin/chromium"
             export PUPPETEER_SKIP_DOWNLOAD="1"
+            export SPIDER_NIX_BIN="${spiderNixPkg}/bin/spider-nix"
 
             exec ${pkgs.nodejs}/bin/node $out/lib/mcp-server/build/src/index.js "\$@"
             EOF
@@ -70,7 +72,6 @@
             maintainers = [ "kernelcore" ];
           };
         };
-        #export PATH="${spider-nix.packages.${system}.default}/bin:\$PATH"
       in
       {
         packages = {
@@ -95,7 +96,7 @@
             chromium
 
             # OSINT/Web Crawling
-            #spider-nix.packages.${system}.default
+            spiderNixPkg
 
             # Utils
             ripgrep
@@ -106,11 +107,12 @@
             export LD_LIBRARY_PATH=${pkgs.openssl.out}/lib:$LD_LIBRARY_PATH
             export PUPPETEER_EXECUTABLE_PATH="${pkgs.chromium}/bin/chromium"
             export PUPPETEER_SKIP_DOWNLOAD="1"
+            export SPIDER_NIX_BIN="${spiderNixPkg}/bin/spider-nix"
             echo "🛡️ SecureLLM Dev Environment (Node.js + Rust) Loaded"
             echo "Rust Version: $(rustc --version)"
             echo "Node Version: $(node --version)"
             echo "Chromium: ${pkgs.chromium}/bin/chromium"
-            echo "Spider-Nix: $(which spider-nix 2>/dev/null || echo 'not found')"
+            echo "Spider-Nix: ${spiderNixPkg}/bin/spider-nix"
           '';
         };
       }

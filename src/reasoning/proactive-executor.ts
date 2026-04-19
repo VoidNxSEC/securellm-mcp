@@ -57,7 +57,7 @@ export class ProactiveExecutor {
     const timeoutCount = results.filter((r) => r.status === "timeout").length;
 
     return {
-      actions: results as ProactiveActionResult[],
+      actions: results,
       totalDuration: Date.now() - startTime,
       successCount,
       errorCount,

@@ -44,11 +44,11 @@ export class SSHTunnelManager {
   async createTunnel(config: TunnelConfig): Promise<TunnelResult> {
     switch (config.type) {
       case "local":
-        return this.createLocalTunnel(config as LocalTunnelConfig);
+        return this.createLocalTunnel(config);
       case "remote":
-        return this.createRemoteTunnel(config as RemoteTunnelConfig);
+        return this.createRemoteTunnel(config);
       case "dynamic":
-        return this.createDynamicTunnel(config as DynamicTunnelConfig);
+        return this.createDynamicTunnel(config);
       default:
         throw new Error(`Unknown tunnel type: ${(config as any).type}`);
     }
@@ -220,7 +220,7 @@ export class SSHTunnelManager {
           }
 
           let addr: string;
-          let port: number;
+          let port = 0;
           let offset = 3; // VER, CMD, RSV
 
           const addrType = data[3];

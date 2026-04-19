@@ -192,7 +192,8 @@ export async function executeSpiderNixCommand(
       "Executing spider-nix command"
     );
 
-    const result = await execa("spider-nix", args, {
+    const spiderNixBin = process.env.SPIDER_NIX_BIN || "spider-nix";
+    const result = await execa(spiderNixBin, args, {
       cwd,
       timeout,
       maxBuffer: effectiveMaxBuffer,

@@ -28,7 +28,7 @@ export class SystemHealthCheckTool {
         system: {
           hostname: (await si.osInfo()).hostname,
           platform: (await si.osInfo()).platform,
-          uptime: (await si.time()).uptime,
+          uptime: si.time().uptime,
         },
       };
 

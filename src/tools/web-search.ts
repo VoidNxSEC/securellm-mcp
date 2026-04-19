@@ -483,7 +483,7 @@ export async function handleWebSearch(args: WebSearchArgs) {
       });
 
       if (response.ok) {
-        const data = (await response.json()) as any;
+        const data = (await response.json());
 
         if (data.AbstractText) {
           return formatIntelligentOutput({
@@ -549,11 +549,11 @@ export async function handleGithubSearch(args: GithubSearchArgs) {
     });
 
     if (!response.ok) {
-      const errorData = (await response.json().catch(() => ({}))) as any;
+      const errorData = (await response.json().catch(() => ({})));
       throw new Error(errorData.message || `GitHub API error: ${response.status}`);
     }
 
-    const data = (await response.json()) as any;
+    const data = (await response.json());
 
     const results = (data.items || []).map((item: any) => {
       if (type === "repositories") {
@@ -648,7 +648,7 @@ export async function handleNixSearch(args: NixSearchArgs) {
             ? `Found packages. Latest version: ${results[0]?.version || "unknown"}`
             : undefined,
       });
-    } catch (nixError) {
+    } catch {
       // Fallback to web interface link
       const searchUrl = `https://search.nixos.org/${type}?channel=${channel === "stable" ? "25.05" : "unstable"}&query=${encodeURIComponent(searchTerm)}`;
 
@@ -693,7 +693,7 @@ export async function handleTechNewsSearch(args: TechNewsArgs) {
         });
 
         if (response.ok) {
-          const hn = (await response.json()) as any;
+          const hn = (await response.json());
           const hnResults = (hn.hits || []).slice(0, 5).map((hit: any) => ({
             source: "Hacker News",
             title: hit.title,
@@ -722,7 +722,7 @@ export async function handleTechNewsSearch(args: TechNewsArgs) {
         });
 
         if (response.ok) {
-          const reddit = (await response.json()) as any;
+          const reddit = (await response.json());
           const redditResults = (reddit.data?.children || []).slice(0, 5).map((child: any) => ({
             source: "Reddit",
             title: child.data.title,
@@ -784,7 +784,7 @@ export async function handleDiscourseSearch(args: { query: string; category?: st
       throw new Error(`Discourse API error: ${response.status}`);
     }
 
-    const data = (await response.json()) as any;
+    const data = (await response.json());
 
     const results = (data.posts || []).slice(0, 10).map((post: any) => ({
       title: post.blurb?.substring(0, 100),
@@ -845,7 +845,7 @@ export async function handleStackOverflowSearch(args: {
       throw new Error(`Stack Overflow API error: ${response.status}`);
     }
 
-    const data = (await response.json()) as any;
+    const data = (await response.json());
 
     const results = (data.items || []).slice(0, 10).map((item: any) => ({
       title: item.title,

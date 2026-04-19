@@ -748,9 +748,7 @@ export interface SSHConnectionPoolArgs {
 /**
  * SSH MFA tool arguments (extends MFAAuthArgs)
  */
-export interface SSHMFAArgs extends MFAAuthArgs {
-  // Inherits all fields from MFAAuthArgs
-}
+export type SSHMFAArgs = MFAAuthArgs;
 
 // ===== TYPE GUARDS & VALIDATORS =====
 

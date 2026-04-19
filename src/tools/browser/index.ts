@@ -24,8 +24,12 @@ interface BrowserSession {
   created: Date;
 }
 
+const SESSION_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
+const SESSION_CLEANUP_INTERVAL_MS = 10 * 60 * 1000; // check every 10 minutes
+
 class BrowserSessionManager {
   private sessions = new Map<string, BrowserSession>();
+  private cleanupInterval: NodeJS.Timeout;
   private allowedDomains = [
     "google.com",
     "github.com",
@@ -33,6 +37,29 @@ class BrowserSessionManager {
     "duckduckgo.com",
     "localhost",
   ];
+
+  constructor() {
+    this.cleanupInterval = setInterval(
+      () => this.cleanupStaleSessions(),
+      SESSION_CLEANUP_INTERVAL_MS
+    );
+    this.cleanupInterval.unref();
+  }
+
+  private async cleanupStaleSessions(): Promise<void> {
+    const now = Date.now();
+    for (const [id, session] of this.sessions.entries()) {
+      if (now - session.created.getTime() > SESSION_MAX_AGE_MS) {
+        try {
+          await session.browser.close();
+        } catch {
+          // ignore errors on stale session cleanup
+        }
+        this.sessions.delete(id);
+        logger.info({ sessionId: id }, "Closed stale browser session");
+      }
+    }
+  }
 
   async createSession(args: BrowserLaunchAdvancedArgs): Promise<BrowserSessionResult> {
     const {
@@ -116,7 +143,7 @@ class BrowserSessionManager {
         data: {
           session_id: sessionId,
           url,
-          screenshot: screenshot as string,
+          screenshot: screenshot,
           console_logs: consoleLogs,
         },
         timestamp: new Date().toISOString(),
@@ -223,7 +250,7 @@ export class BrowserExtractDataTool {
         data: {
           session_id,
           extracted,
-          screenshot: screenshot as string,
+          screenshot: screenshot,
         },
         timestamp: new Date().toISOString(),
       };
@@ -296,7 +323,7 @@ export class BrowserInteractFormTool {
           session_id,
           actions_performed: actions.length,
           submitted: !!submit_selector,
-          screenshot: screenshot as string,
+          screenshot: screenshot,
         },
         timestamp: new Date().toISOString(),
       };
