@@ -98,6 +98,10 @@
             # OSINT/Web Crawling
             spiderNixPkg
 
+            # Secrets Management
+            sops
+            age
+
             # Utils
             ripgrep
             jq

@@ -109,7 +109,7 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
           extra_nix_config: |
             experimental-features = nix-command flakes
-            substituters = https://cache.nixos.org/ https://securellm-mcp.cachix.org
+            substituters = https://cache.nixos.org/ https://marcosfpina.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
             max-jobs = auto
@@ -119,7 +119,7 @@ jobs:
       - name: Configure Cachix
         uses: cachix/cachix-action@v14
         with:
-          name: securellm-mcp
+          name: marcosfpina
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
           pushFilter: '-source$'
           skipPush: ${{ github.event_name == 'pull_request' }}
