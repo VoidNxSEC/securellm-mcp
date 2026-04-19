@@ -1141,8 +1141,8 @@ class SecureLLMBridgeMCPServer {
         if (this.adrHygieneMiddleware) {
           try {
             const hygieneReport = await this.adrHygieneMiddleware.onToolCall();
-            if (hygieneReport && result && Array.isArray((result).content)) {
-              (result).content.push({
+            if (hygieneReport && result && Array.isArray(result.content)) {
+              result.content.push({
                 type: "text",
                 text: `\n---\n${hygieneReport.summary}\n${hygieneReport.details.join("\n")}`,
               });
@@ -1204,7 +1204,10 @@ class SecureLLMBridgeMCPServer {
         this.toolMetricsCollector.recordSnapshot(snapshot);
 
         if (error instanceof McpError) throw error;
-        throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`);
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`
+        );
       } finally {
         // Release permit if it was acquired
         if (permit) {
@@ -1340,7 +1343,10 @@ class SecureLLMBridgeMCPServer {
         }
       } catch (error) {
         if (error instanceof McpError) throw error;
-        throw new McpError(ErrorCode.InternalError, `Failed to read resource: ${error instanceof Error ? error.message : String(error)}`);
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Failed to read resource: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     });
   }

@@ -300,7 +300,7 @@ export class DeepResearchEngine {
             { headers, signal: AbortSignal.timeout(10000) }
           );
           if (response.ok) {
-            const data = (await response.json());
+            const data = await response.json();
             for (const item of data.items || []) {
               results.push({
                 source: "github",
@@ -322,7 +322,7 @@ export class DeepResearchEngine {
             { headers: { "User-Agent": "SecureLLM-MCP/1.0" }, signal: AbortSignal.timeout(10000) }
           );
           if (response.ok) {
-            const data = (await response.json());
+            const data = await response.json();
             for (const item of data.query?.search || []) {
               results.push({
                 source: "nixos_wiki",
@@ -344,7 +344,7 @@ export class DeepResearchEngine {
             { headers: { "User-Agent": "SecureLLM-MCP/1.0" }, signal: AbortSignal.timeout(10000) }
           );
           if (response.ok) {
-            const data = (await response.json());
+            const data = await response.json();
             for (const post of (data.posts || []).slice(0, 3)) {
               results.push({
                 source: "discourse",
@@ -369,7 +369,7 @@ export class DeepResearchEngine {
             }
           );
           if (response.ok) {
-            const data = (await response.json());
+            const data = await response.json();
             for (const item of (data.items || []).slice(0, 3)) {
               results.push({
                 source: "stackoverflow",
@@ -391,7 +391,7 @@ export class DeepResearchEngine {
             { headers: { "User-Agent": "SecureLLM-MCP/1.0" }, signal: AbortSignal.timeout(10000) }
           );
           if (response.ok) {
-            const data = (await response.json());
+            const data = await response.json();
             for (const child of (data.data?.children || []).slice(0, 3)) {
               const post = child.data;
               results.push({
@@ -414,7 +414,7 @@ export class DeepResearchEngine {
             { headers: { "User-Agent": "SecureLLM-MCP/1.0" }, signal: AbortSignal.timeout(10000) }
           );
           if (response.ok) {
-            const data = (await response.json());
+            const data = await response.json();
             for (const hit of data.hits || []) {
               results.push({
                 source: "hackernews",

@@ -1,9 +1,5 @@
 // Error Classifier - Intelligent error pattern detection and solution suggestion
-import type {
-  ErrorPattern,
-  ErrorType,
-  DiagnoseIssue,
-} from "../types/package-debugger.js";
+import type { ErrorPattern, ErrorType, DiagnoseIssue } from "../types/package-debugger.js";
 
 export class ErrorClassifier {
   private patterns: ErrorPattern[];
