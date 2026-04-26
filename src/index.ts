@@ -83,6 +83,10 @@ import { socketDebugReportTool, handleSocketDebugReport } from "./tools/socket-d
 import { zodToMcpSchema } from "./utils/schema-converter.js";
 import { devTools, devToolHandlers } from "./tools/dev-tools.js";
 import {
+  professionalTools,
+  createProfessionalToolHandlers,
+} from "./tools/professional-tools.js";
+import {
   sshExecuteSchema,
   sshFileTransferSchema,
   sshMaintenanceCheckSchema,
@@ -120,8 +124,14 @@ import { adrTools, adrHandlers } from "./tools/adr/index.js";
 import { ADRHygieneMiddleware } from "./middleware/adr-hygiene.js";
 import crypto from "crypto";
 import { DisposableRegistry } from "./utils/disposable.js";
+import { ResponseSummarizer } from "./utils/response-summarizer.js";
+import {
+  shouldAttemptSemanticCache,
+  shouldStoreSemanticCache,
+} from "./utils/cache-policy.js";
 
 const shouldPrettyPrint = process.env.NODE_ENV === "development";
+const SERVER_VERSION = process.env.SECURELLM_MCP_VERSION || "2.1.0";
 
 function stringify(obj: unknown): string {
   if (shouldPrettyPrint) {
@@ -202,6 +212,7 @@ class SecureLLMBridgeMCPServer {
   private toolLimiter: ToolExecutionLimiter;
   private requestDeduplicator: RequestDeduplicator;
   private disposables: DisposableRegistry = new DisposableRegistry();
+  private professionalToolHandlers: ReturnType<typeof createProfessionalToolHandlers>;
 
   /**
    * Parse tool configuration from environment variable
@@ -243,11 +254,15 @@ class SecureLLMBridgeMCPServer {
       parseInt(process.env.REQUEST_DEDUPE_STALE_TIMEOUT || "60000", 10),
       parseInt(process.env.REQUEST_DEDUPE_CLEANUP_INTERVAL || "30000", 10)
     );
+    this.professionalToolHandlers = createProfessionalToolHandlers({
+      getProjectRoot: () => this.projectRoot,
+      getServerStatus: (includeMetrics: boolean) => this.buildServerStatus(includeMetrics),
+    });
 
     this.server = new Server(
       {
         name: "securellm-mcp",
-        version: "2.0.0",
+        version: SERVER_VERSION,
       },
       {
         capabilities: {
@@ -463,6 +478,21 @@ class SecureLLMBridgeMCPServer {
   private setupToolHandlers() {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
+        {
+          name: "server_status",
+          description: "Get current MCP server status, feature flags, and runtime health",
+          defer_loading: true,
+          inputSchema: {
+            type: "object",
+            properties: {
+              include_metrics: {
+                type: "boolean",
+                description: "Include per-tool metrics and queue state",
+                default: true,
+              },
+            },
+          },
+        },
         {
           name: "provider_test",
           description: "Test LLM provider connectivity",
@@ -783,6 +813,8 @@ class SecureLLMBridgeMCPServer {
         },
         // Add DX Tools
         ...devTools,
+        // Add Professional Operations Tools
+        ...professionalTools,
         // Add Browser Tools
         browserLaunchAdvancedSchema,
         browserExtractDataSchema,
@@ -813,7 +845,8 @@ class SecureLLMBridgeMCPServer {
       try {
         // SEMANTIC CACHE: Check cache before executing tool
         let cached: any = null;
-        if (this.semanticCache) {
+        const shouldUseSemanticCache = shouldAttemptSemanticCache(name);
+        if (this.semanticCache && shouldUseSemanticCache) {
           const cacheLookupStart = Date.now();
           cached = await this.semanticCache.lookup({
             toolName: name,
@@ -877,6 +910,9 @@ class SecureLLMBridgeMCPServer {
             switch (name) {
               case "provider_test":
                 toolResult = await this.handleProviderTest(args as unknown as ProviderTestArgs);
+                break;
+              case "server_status":
+                toolResult = await this.handleServerStatus(args as { include_metrics?: boolean });
                 break;
               case "security_audit":
                 toolResult = await this.handleSecurityAudit(args as unknown as SecurityAuditArgs);
@@ -1109,6 +1145,12 @@ class SecureLLMBridgeMCPServer {
               case "github_actions":
                 toolResult = await devToolHandlers.github_actions(args as any);
                 break;
+              case "server_health":
+                toolResult = await this.professionalToolHandlers.server_health(args);
+                break;
+              case "workspace_quality_gate":
+                toolResult = await this.professionalToolHandlers.workspace_quality_gate(args);
+                break;
 
               // Browser Tool handlers
               case "browser_launch_advanced":
@@ -1152,25 +1194,54 @@ class SecureLLMBridgeMCPServer {
           }
         }
 
+        let originalResponseSize = 0;
+        try {
+          originalResponseSize = Buffer.byteLength(stringify(result), "utf8");
+        } catch {
+          originalResponseSize = JSON.stringify(result).length;
+        }
+
+        const { result: compactedResult, stats: compactionStats } =
+          ResponseSummarizer.compactToolResultWithStats(result);
+        snapshot.originalResponseSize = originalResponseSize;
+        snapshot.compactionCharsSaved = compactionStats.savedChars;
+        snapshot.compactionTokensSaved = compactionStats.savedTokens;
+        snapshot.compactionApplied = compactionStats.compactedFields > 0;
+
         // Measure response size (lazy: only if needed for metrics)
         // Use fast-json-stringify if available, otherwise estimate
         try {
-          const responseStr = stringify(result);
+          const responseStr = stringify(compactedResult);
           snapshot.responseSize = Buffer.byteLength(responseStr, "utf8");
         } catch {
           // Fallback: estimate size from result object
-          snapshot.responseSize = JSON.stringify(result).length;
+          snapshot.responseSize = JSON.stringify(compactedResult).length;
         }
 
         // SEMANTIC CACHE: Store result for future lookups
-        if (this.semanticCache && result) {
+        if (
+          this.semanticCache &&
+          compactedResult &&
+          shouldStoreSemanticCache({
+            toolName: name,
+            result: compactedResult,
+            responseSize: snapshot.responseSize,
+          })
+        ) {
           // Use async fire-and-forget to avoid blocking response
           this.semanticCache
             .store({
               toolName: name,
               queryText: cacheKey,
               toolArgs: args,
-              response: result,
+              response: compactedResult,
+              metadata: {
+                tokensSaved: Math.max(
+                  1,
+                  Math.round((requestSize + (snapshot.responseSize || 0)) / 4)
+                ),
+                originalLatency: snapshot.totalTime,
+              },
             })
             .catch((err) => {
               logger.warn({ err, toolName: name }, "Failed to store in semantic cache");
@@ -1180,7 +1251,7 @@ class SecureLLMBridgeMCPServer {
         snapshot.totalTime = Date.now() - startTime;
         this.toolMetricsCollector.recordSnapshot(snapshot);
 
-        return result;
+        return compactedResult;
       } catch (error) {
         snapshot.totalTime = Date.now() - startTime;
         snapshot.error = error instanceof Error ? error.message : String(error);
@@ -1218,46 +1289,62 @@ class SecureLLMBridgeMCPServer {
   }
 
   private setupResourceHandlers() {
-    this.server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-      resources: [
-        {
-          uri: "config://current",
-          name: "Current Configuration",
-          description: "Current SecureLLM Bridge configuration",
-          mimeType: "application/toml",
-        },
-        {
-          uri: "logs://audit",
-          name: "Audit Logs",
-          description: "Recent audit log entries",
-          mimeType: "application/json",
-        },
-        {
-          uri: "metrics://usage",
-          name: "Usage Metrics",
-          description: "Provider usage statistics",
-          mimeType: "application/json",
-        },
-        {
-          uri: "metrics://prometheus",
-          name: "Prometheus Metrics",
-          description: "System metrics in Prometheus text format",
-          mimeType: "text/plain",
-        },
-        {
-          uri: "metrics://semantic-cache",
-          name: "Semantic Cache Metrics",
-          description: "Semantic cache performance statistics",
-          mimeType: "application/json",
-        },
-        {
-          uri: "docs://api",
-          name: "API Documentation",
-          description: "API documentation and examples",
-          mimeType: "text/markdown",
-        },
-      ],
-    }));
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      const dynamicResources = await this.guideManager.listAll();
+
+      return {
+        resources: [
+          {
+            uri: "server://status",
+            name: "Server Status",
+            description: "Current MCP server runtime status and enabled capabilities",
+            mimeType: "application/json",
+          },
+          {
+            uri: "config://current",
+            name: "Current Configuration",
+            description: "Current SecureLLM Bridge configuration",
+            mimeType: "application/toml",
+          },
+          {
+            uri: "logs://audit",
+            name: "Audit Logs",
+            description: "Recent audit log entries",
+            mimeType: "application/json",
+          },
+          {
+            uri: "metrics://usage",
+            name: "Usage Metrics",
+            description: "Provider usage statistics",
+            mimeType: "application/json",
+          },
+          {
+            uri: "metrics://prometheus",
+            name: "Prometheus Metrics",
+            description: "System metrics in Prometheus text format",
+            mimeType: "text/plain",
+          },
+          {
+            uri: "metrics://semantic-cache",
+            name: "Semantic Cache Metrics",
+            description: "Semantic cache performance statistics",
+            mimeType: "application/json",
+          },
+          {
+            uri: "docs://api",
+            name: "API Documentation",
+            description: "API documentation and examples",
+            mimeType: "text/markdown",
+          },
+          ...dynamicResources.map(({ uri, name, description }) => ({
+            uri,
+            name,
+            description,
+            mimeType: "text/markdown",
+          })),
+        ],
+      };
+    });
 
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const { uri } = request.params;
@@ -1308,6 +1395,8 @@ class SecureLLMBridgeMCPServer {
 
         // Handle existing resources
         switch (uri) {
+          case "server://status":
+            return await this.readServerStatusResource();
           case "config://current":
             return await this.readCurrentConfig();
           case "logs://audit":
@@ -1401,6 +1490,77 @@ class SecureLLMBridgeMCPServer {
         isError: true,
       };
     }
+  }
+
+  private buildServerStatus(includeMetrics: boolean = true) {
+    const guideInventory = this.guideManager.listAll();
+    const uptimeMs = Math.max(0, Math.round(process.uptime() * 1000));
+
+    return Promise.resolve(guideInventory).then((resources) => ({
+      name: "securellm-mcp",
+      version: SERVER_VERSION,
+      pid: process.pid,
+      uptimeMs,
+      projectRoot: this.projectRoot,
+      hostname: this.hostname,
+      environment: {
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        logLevel: process.env.LOG_LEVEL || "info",
+      },
+      features: {
+        knowledgeEnabled: ENABLE_KNOWLEDGE,
+        knowledgeReady: this.db !== null,
+        semanticCacheEnabled: this.semanticCache !== null,
+        proactiveReasoningEnabled: this.preActionInterceptor !== null,
+        projectWatcherEnabled: this.projectWatcher !== null,
+      },
+      resources: {
+        total: resources.length + 7,
+        guides: resources.filter((resource) => resource.uri.startsWith("guide://")).length,
+        skills: resources.filter((resource) => resource.uri.startsWith("skill://")).length,
+        prompts: resources.filter((resource) => resource.uri.startsWith("prompt://")).length,
+      },
+      middleware: {
+        rateLimiterProviders: this.rateLimiter.getAllMetrics().size,
+        deduplicator: this.requestDeduplicator.getStats(),
+        toolLimiter: includeMetrics ? this.toolLimiter.getStatus() : undefined,
+      },
+      metrics: includeMetrics
+        ? {
+            semanticCache: this.semanticCache?.getStats() || null,
+            toolMetrics: Object.fromEntries(this.toolMetricsCollector.getAllToolMetrics()),
+          }
+        : undefined,
+    }));
+  }
+
+  private async handleServerStatus(args: { include_metrics?: boolean } = {}) {
+    const status = await this.buildServerStatus(args.include_metrics !== false);
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: stringify(status),
+        },
+      ],
+    };
+  }
+
+  private async readServerStatusResource() {
+    const status = await this.buildServerStatus(true);
+
+    return {
+      contents: [
+        {
+          uri: "server://status",
+          mimeType: "application/json",
+          text: stringify(status),
+        },
+      ],
+    };
   }
 
   private async handleSecurityAudit(args: SecurityAuditArgs) {

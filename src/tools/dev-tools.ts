@@ -1,14 +1,11 @@
 import { z } from "zod";
-import { exec } from "child_process";
-import { promisify } from "util";
 import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 import { zodToMcpSchema } from "../utils/schema-converter.js";
 import * as path from "path";
 import * as fs from "fs";
 import { stringifyGeneric } from "../utils/json-schemas.js";
 import { validatePath } from "../security/path-validator.js";
-
-const execAsync = promisify(exec);
+import { execa } from "execa";
 
 // --- Schemas ---
 
@@ -43,43 +40,74 @@ const manageGithubActionsSchema = z.object({
 
 // --- Implementation Helpers ---
 
-async function detectAndRun(command: string, args: string[], cwd: string = process.cwd()) {
-  try {
-    const fullCommand = `${command} ${args.join(" ")}`;
-    const { stdout, stderr } = await execAsync(fullCommand, { cwd });
-    return {
-      success: true,
-      stdout,
-      stderr,
-      command: fullCommand,
-    };
-  } catch (error: any) {
-    return {
-      success: false,
-      stdout: error.stdout,
-      stderr: error.stderr,
-      command: error.cmd,
-      exitCode: error.code,
-    };
+interface CommandResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  command: string;
+  exitCode: number;
+}
+
+function formatCommand(command: string, args: string[]): string {
+  return [command, ...args]
+    .map((arg) => (/\s/.test(arg) ? JSON.stringify(arg) : arg))
+    .join(" ");
+}
+
+function resolveTarget(target: string): { resolvedTarget: string; stats: fs.Stats } {
+  const resolvedTarget = validatePath(target, process.cwd());
+  const stats = fs.statSync(resolvedTarget);
+  return { resolvedTarget, stats };
+}
+
+function hasPackageJson(startDir: string): boolean {
+  let current = path.resolve(startDir);
+  const root = path.parse(current).root;
+
+  while (true) {
+    if (fs.existsSync(path.join(current, "package.json"))) {
+      return true;
+    }
+    if (current === root) {
+      return false;
+    }
+    current = path.dirname(current);
   }
+}
+
+async function detectAndRun(command: string, args: string[], cwd: string = process.cwd()) {
+  const filteredArgs = args.filter((arg) => arg.length > 0);
+  const result = await execa(command, filteredArgs, {
+    cwd,
+    reject: false,
+    preferLocal: true,
+  });
+
+  return {
+    success: result.exitCode === 0,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    command: formatCommand(command, filteredArgs),
+    exitCode: result.exitCode ?? 0,
+  } satisfies CommandResult;
 }
 
 // --- Tool Implementations ---
 
 async function handleLintCode(args: z.infer<typeof lintCodeSchema>) {
   const { target, fix } = args;
-  validatePath(target, process.cwd());
-  const ext = path.extname(target);
+  const { resolvedTarget, stats } = resolveTarget(target);
+  const ext = path.extname(resolvedTarget);
 
   let cmd = "";
   let cmdArgs: string[] = [];
 
-  if ([".ts", ".js", ".tsx", ".jsx"].includes(ext) || fs.statSync(target).isDirectory()) {
-    cmd = "npx eslint";
-    cmdArgs = [target, fix ? "--fix" : ""];
+  if (stats.isDirectory() || [".ts", ".js", ".tsx", ".jsx", ".mjs", ".cjs"].includes(ext)) {
+    cmd = "eslint";
+    cmdArgs = [resolvedTarget, ...(fix ? ["--fix"] : [])];
   } else if ([".py"].includes(ext)) {
-    cmd = "ruff check";
-    cmdArgs = [target, fix ? "--fix" : ""];
+    cmd = "ruff";
+    cmdArgs = ["check", resolvedTarget, ...(fix ? ["--fix"] : [])];
   } else {
     return {
       content: [{ type: "text", text: `Unsupported file type for linting: ${ext}` }],
@@ -101,18 +129,22 @@ async function handleLintCode(args: z.infer<typeof lintCodeSchema>) {
 
 async function handleFormatCode(args: z.infer<typeof formatCodeSchema>) {
   const { target, check_only } = args;
-  validatePath(target, process.cwd());
-  const ext = path.extname(target);
+  const { resolvedTarget, stats } = resolveTarget(target);
+  const ext = path.extname(resolvedTarget);
 
   let cmd = "";
   let cmdArgs: string[] = [];
 
-  if ([".ts", ".js", ".json", ".md", ".css", ".html"].includes(ext)) {
-    cmd = "npx prettier";
-    cmdArgs = [check_only ? "--check" : "--write", target];
+  if (
+    stats.isDirectory() ||
+    [".ts", ".js", ".tsx", ".jsx", ".mjs", ".cjs", ".json", ".md", ".css", ".html", ".yml", ".yaml"]
+      .includes(ext)
+  ) {
+    cmd = "prettier";
+    cmdArgs = [check_only ? "--check" : "--write", resolvedTarget];
   } else if ([".py"].includes(ext)) {
     cmd = "black";
-    cmdArgs = [check_only ? "--check" : "", target];
+    cmdArgs = [...(check_only ? ["--check"] : []), resolvedTarget];
   } else {
     return {
       content: [{ type: "text", text: `Unsupported file type for formatting: ${ext}` }],
@@ -133,19 +165,46 @@ async function handleFormatCode(args: z.infer<typeof formatCodeSchema>) {
 }
 
 async function handleRunTests(args: z.infer<typeof runTestsSchema>) {
-  const { target } = args;
+  const { target, watch } = args;
+  let resolvedTarget: string | undefined;
+  let stats: fs.Stats | undefined;
+
   if (target) {
-    validatePath(target, process.cwd());
+    const resolved = resolveTarget(target);
+    resolvedTarget = resolved.resolvedTarget;
+    stats = resolved.stats;
   }
 
-  // Detect test runner based on package.json or file extension
-  let cmd = "npm test";
-  let cmdArgs = target ? ["--", target] : [];
+  if (watch) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: "Watch mode is disabled for MCP to avoid long-lived interactive test processes.",
+        },
+      ],
+      isError: true,
+    };
+  }
 
-  // Override for python if detected
-  if (target && target.endsWith(".py")) {
+  let cmd = "npm";
+  let cmdArgs: string[] = ["test"];
+
+  if (resolvedTarget && stats && !stats.isDirectory() && resolvedTarget.endsWith(".py")) {
     cmd = "pytest";
-    cmdArgs = [target];
+    cmdArgs = [resolvedTarget];
+  } else if (hasPackageJson(resolvedTarget ? path.dirname(resolvedTarget) : process.cwd())) {
+    cmdArgs = resolvedTarget ? ["test", "--", resolvedTarget] : ["test"];
+  } else {
+    return {
+      content: [
+        {
+          type: "text",
+          text: "Could not detect a supported test runner. Provide a Python test target or run inside a project with package.json.",
+        },
+      ],
+      isError: true,
+    };
   }
 
   const result = await detectAndRun(cmd, cmdArgs);
@@ -166,25 +225,23 @@ async function handleRunTests(args: z.infer<typeof runTestsSchema>) {
 async function handleGithubActions(args: z.infer<typeof manageGithubActionsSchema>) {
   const { action, workflow, branch } = args;
 
-  let cmd = "gh run";
+  let cmd = "gh";
   let cmdArgs: string[] = [];
 
   switch (action) {
     case "list":
-      cmdArgs = ["list", "--limit", "5"];
+      cmdArgs = ["run", "list", "--limit", "5"];
       break;
     case "status":
-      cmd = "gh workflow";
-      cmdArgs = ["list"];
+      cmdArgs = ["workflow", "list"];
       break;
     case "trigger":
       if (!workflow) throw new Error("Workflow required for trigger");
-      cmd = "gh workflow run";
-      cmdArgs = [workflow, "--ref", branch || "main"];
+      cmdArgs = ["workflow", "run", workflow, "--ref", branch || "main"];
       break;
     case "logs":
       if (!workflow) throw new Error("Run ID required for logs (passed in workflow field)");
-      cmdArgs = ["view", workflow, "--log"];
+      cmdArgs = ["run", "view", workflow, "--log"];
       break;
   }
 

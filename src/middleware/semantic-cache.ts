@@ -69,8 +69,24 @@ export class SemanticCache {
   private stats: SemanticCacheStats;
   private statsMutex: Mutex = new Mutex();
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private statsFlushInterval: NodeJS.Timeout | null = null;
+  private statsDirty = false;
+  private hotCache = new Map<
+    string,
+    { entryId: string; response: unknown; responseText: string; expiresAt: number }
+  >();
   /** PHANTOM client for real semantic similarity — null when disabled/unavailable */
   private phantom: PhantomClient;
+  private readonly selectExactStmt: Database.Statement;
+  private readonly selectExactWithProviderStmt: Database.Statement;
+  private readonly selectExactWithProviderModelStmt: Database.Statement;
+  private readonly countEntriesStmt: Database.Statement;
+  private readonly insertStmt: Database.Statement;
+  private readonly updateHitStmt: Database.Statement;
+  private readonly clearStmt: Database.Statement;
+  private readonly deleteExpiredStmt: Database.Statement;
+  private readonly countCurrentStmt: Database.Statement;
+  private readonly ageStatsStmt: Database.Statement;
 
   constructor(dbPath: string, config: Partial<SemanticCacheConfig> = {}) {
     this.db = new Database(dbPath);
@@ -88,6 +104,48 @@ export class SemanticCache {
 
     this.initialize();
     this.startAutoCleanup();
+    this.startStatsFlush();
+    this.selectExactStmt = this.db.prepare(`
+      SELECT id, response, expires_at
+      FROM semantic_cache
+      WHERE tool_name = ? AND query_text = ? AND expires_at > ?
+      ORDER BY last_accessed_at DESC
+      LIMIT 1
+    `);
+    this.selectExactWithProviderStmt = this.db.prepare(`
+      SELECT id, response, expires_at
+      FROM semantic_cache
+      WHERE tool_name = ? AND query_text = ? AND provider = ? AND expires_at > ?
+      ORDER BY last_accessed_at DESC
+      LIMIT 1
+    `);
+    this.selectExactWithProviderModelStmt = this.db.prepare(`
+      SELECT id, response, expires_at
+      FROM semantic_cache
+      WHERE tool_name = ? AND query_text = ? AND provider = ? AND model = ? AND expires_at > ?
+      ORDER BY last_accessed_at DESC
+      LIMIT 1
+    `);
+    this.countEntriesStmt = this.db.prepare("SELECT COUNT(*) as count FROM semantic_cache");
+    this.insertStmt = this.db.prepare(`
+      INSERT INTO semantic_cache (
+        id, query_text, query_embedding, tool_name, tool_args, response,
+        provider, model, metadata, created_at, expires_at, hit_count, last_accessed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    this.updateHitStmt = this.db.prepare(`
+      UPDATE semantic_cache
+      SET hit_count = hit_count + 1,
+          last_accessed_at = ?
+      WHERE id = ?
+    `);
+    this.clearStmt = this.db.prepare("DELETE FROM semantic_cache");
+    this.deleteExpiredStmt = this.db.prepare("DELETE FROM semantic_cache WHERE expires_at < ?");
+    this.countCurrentStmt = this.db.prepare("SELECT COUNT(*) as count FROM semantic_cache");
+    this.ageStatsStmt = this.db.prepare(`
+      SELECT MIN(created_at) as oldest, MAX(created_at) as newest
+      FROM semantic_cache
+    `);
 
     logger.info(
       {
@@ -119,6 +177,73 @@ export class SemanticCache {
 
     // Prevent interval from keeping process alive
     this.cleanupInterval.unref();
+  }
+
+  private startStatsFlush(): void {
+    this.statsFlushInterval = setInterval(() => {
+      try {
+        if (this.statsDirty) {
+          this.persistStats();
+          this.statsDirty = false;
+        }
+      } catch (error) {
+        logger.error({ err: error }, "Error during semantic cache stats flush");
+      }
+    }, 5_000);
+    this.statsFlushInterval.unref();
+  }
+
+  private buildExactCacheKey(
+    toolName: string,
+    queryText: string,
+    provider?: string,
+    model?: string
+  ): string {
+    return [toolName, provider || "", model || "", queryText].join("::");
+  }
+
+  private getHotCacheValue(
+    key: string
+  ): { entryId: string; response: unknown; responseText: string; expiresAt: number } | null {
+    const now = Date.now();
+    const entry = this.hotCache.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt <= now) {
+      this.hotCache.delete(key);
+      return null;
+    }
+    return entry;
+  }
+
+  private setHotCacheValue(
+    key: string,
+    entryId: string,
+    response: unknown,
+    responseText: string,
+    expiresAt: number
+  ): void {
+    this.hotCache.set(key, { entryId, response, responseText, expiresAt });
+
+    const maxHotEntries = parseInt(process.env.SEMANTIC_CACHE_HOT_MAX_ENTRIES || "256", 10);
+    if (this.hotCache.size > maxHotEntries) {
+      const oldestKey = this.hotCache.keys().next().value;
+      if (oldestKey) {
+        this.hotCache.delete(oldestKey);
+      }
+    }
+  }
+
+  private estimateTokensSaved(queryText: string, responseText: string, metadata?: Record<string, any>): number {
+    if (typeof metadata?.tokensSaved === "number" && metadata.tokensSaved > 0) {
+      return metadata.tokensSaved;
+    }
+
+    const combinedChars = queryText.length + responseText.length;
+    return Math.max(1, Math.round(combinedChars / 4));
+  }
+
+  private markStatsDirty(): void {
+    this.statsDirty = true;
   }
 
   /**
@@ -283,9 +408,56 @@ export class SemanticCache {
     // Protect stats increment with mutex
     await this.statsMutex.runExclusive(async () => {
       this.stats.totalQueries++;
+      this.markStatsDirty();
     });
 
     try {
+      const exactCacheKey = this.buildExactCacheKey(
+        options.toolName,
+        options.queryText,
+        options.provider,
+        options.model
+      );
+
+      const hotHit = this.getHotCacheValue(exactCacheKey);
+      if (hotHit !== null) {
+        await this.recordHit(hotHit.entryId, 1, options.queryText, hotHit.responseText);
+        logger.debug({ toolName: options.toolName }, "Semantic cache HIT (hot exact cache)");
+        return hotHit.response;
+      }
+
+      const now = Date.now();
+      const exactRow = options.provider && options.model
+        ? (this.selectExactWithProviderModelStmt.get(
+            options.toolName,
+            options.queryText,
+            options.provider,
+            options.model,
+            now
+          ) as any)
+        : options.provider
+          ? (this.selectExactWithProviderStmt.get(
+              options.toolName,
+              options.queryText,
+              options.provider,
+              now
+            ) as any)
+          : (this.selectExactStmt.get(options.toolName, options.queryText, now) as any);
+
+      if (exactRow) {
+        const parsed = JSON.parse(exactRow.response as string);
+        this.setHotCacheValue(
+          exactCacheKey,
+          exactRow.id as string,
+          parsed,
+          exactRow.response as string,
+          exactRow.expires_at as number
+        );
+        await this.recordHit(exactRow.id as string, 1, options.queryText, exactRow.response as string);
+        logger.debug({ toolName: options.toolName }, "Semantic cache HIT (exact match)");
+        return parsed;
+      }
+
       // ── PHANTOM semantic lookup (primary path) ──────────────────────────
       // PHANTOM uses sentence-transformers (all-MiniLM-L6-v2, 384 dims) via
       // FAISS — much more accurate than the char-frequency fallback.
@@ -309,12 +481,20 @@ export class SemanticCache {
           if (!row) continue;
 
           // Valid hit — record and return
-          await this.recordHit(row.id as string, hit.score);
+          const parsed = JSON.parse(row.response as string);
+          this.setHotCacheValue(
+            exactCacheKey,
+            row.id as string,
+            parsed,
+            row.response as string,
+            row.expires_at as number
+          );
+          await this.recordHit(row.id as string, hit.score, options.queryText, row.response as string);
           logger.info(
             { toolName: options.toolName, entryId: hit.entryId, similarity: hit.score.toFixed(3) },
             "Semantic cache HIT (PHANTOM)"
           );
-          return JSON.parse(row.response as string);
+          return parsed;
         }
 
         // No PHANTOM hit — fall through to embedding-based lookup
@@ -347,7 +527,6 @@ export class SemanticCache {
       }
 
       // Find similar cached entries (optimized: limit candidates by recency)
-      const now = Date.now();
       const maxCandidates = parseInt(process.env.SEMANTIC_CACHE_MAX_CANDIDATES || "50", 10);
       const highSimilarityThreshold = isFallback
         ? 0.9998
@@ -415,6 +594,14 @@ export class SemanticCache {
       if (bestMatch && bestSimilarity >= effectiveThreshold) {
         // Cache HIT!
         await this.recordHit(bestMatch.entry.id, bestSimilarity);
+        const parsed = JSON.parse(bestMatch.entry.response);
+        this.setHotCacheValue(
+          exactCacheKey,
+          bestMatch.entry.id,
+          parsed,
+          bestMatch.entry.response,
+          bestMatch.entry.expiresAt
+        );
 
         logger.info(
           {
@@ -426,13 +613,14 @@ export class SemanticCache {
           "Semantic cache HIT"
         );
 
-        return JSON.parse(bestMatch.entry.response);
+        return parsed;
       }
 
       // Cache MISS - protect with mutex
       await this.statsMutex.runExclusive(async () => {
         this.stats.cacheMisses++;
         this.updateHitRate();
+        this.markStatsDirty();
       });
 
       logger.debug(
@@ -472,7 +660,7 @@ export class SemanticCache {
 
     try {
       // Check if we're at max capacity
-      const count = this.db.prepare("SELECT COUNT(*) as count FROM semantic_cache").get() as any;
+      const count = this.countEntriesStmt.get() as any;
       if (count.count >= this.config.maxEntries) {
         // Evict oldest entries
         this.evictOldest(Math.floor(this.config.maxEntries * 0.1)); // Evict 10%
@@ -500,30 +688,28 @@ export class SemanticCache {
         lastAccessedAt: now,
       };
 
-      this.db
-        .prepare(
-          `
-        INSERT INTO semantic_cache (
-          id, query_text, query_embedding, tool_name, tool_args, response,
-          provider, model, metadata, created_at, expires_at, hit_count, last_accessed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `
-        )
-        .run(
-          entry.id,
-          entry.queryText,
-          Buffer.from(embedding.buffer),
-          entry.toolName,
-          entry.toolArgs,
-          entry.response,
-          entry.provider || null,
-          entry.model || null,
-          JSON.stringify(entry.metadata),
-          entry.createdAt,
-          entry.expiresAt,
-          entry.hitCount,
-          entry.lastAccessedAt
-        );
+      this.insertStmt.run(
+        entry.id,
+        entry.queryText,
+        Buffer.from(embedding.buffer),
+        entry.toolName,
+        entry.toolArgs,
+        entry.response,
+        entry.provider || null,
+        entry.model || null,
+        JSON.stringify(entry.metadata),
+        entry.createdAt,
+        entry.expiresAt,
+        entry.hitCount,
+        entry.lastAccessedAt
+      );
+      this.setHotCacheValue(
+        this.buildExactCacheKey(options.toolName, options.queryText, options.provider, options.model),
+        entry.id!,
+        options.response,
+        entry.response!,
+        expiresAt
+      );
 
       logger.debug(
         {
@@ -545,31 +731,31 @@ export class SemanticCache {
   /**
    * Record a cache hit
    */
-  private async recordHit(entryId: string, similarity: number): Promise<void> {
+  private async recordHit(
+    entryId: string | undefined,
+    similarity: number,
+    queryText?: string,
+    responseText?: string
+  ): Promise<void> {
     const now = Date.now();
 
-    this.db
-      .prepare(
-        `
-      UPDATE semantic_cache
-      SET hit_count = hit_count + 1,
-          last_accessed_at = ?
-      WHERE id = ?
-    `
-      )
-      .run(now, entryId);
+    if (entryId) {
+      this.updateHitStmt.run(now, entryId);
+    }
 
     // Protect stats updates with mutex to prevent race conditions
     await this.statsMutex.runExclusive(async () => {
       this.stats.cacheHits++;
-      this.stats.tokensSaved += 100; // Rough estimate, can be improved
+      if (queryText && responseText) {
+        this.stats.tokensSaved += this.estimateTokensSaved(queryText, responseText);
+      }
 
       // Update average similarity
       const prevTotal = this.stats.avgSimilarityOnHit * (this.stats.cacheHits - 1);
       this.stats.avgSimilarityOnHit = (prevTotal + similarity) / this.stats.cacheHits;
 
       this.updateHitRate();
-      this.persistStats();
+      this.markStatsDirty();
     });
   }
 
@@ -606,9 +792,7 @@ export class SemanticCache {
    * Clean up expired entries
    */
   cleanExpired(): number {
-    const result = this.db
-      .prepare("DELETE FROM semantic_cache WHERE expires_at < ?")
-      .run(Date.now());
+    const result = this.deleteExpiredStmt.run(Date.now());
 
     const deleted = result.changes;
     if (deleted > 0) {
@@ -622,18 +806,9 @@ export class SemanticCache {
    * Get cache statistics
    */
   getStats(): SemanticCacheStats {
-    this.stats.entriesCount = (
-      this.db.prepare("SELECT COUNT(*) as count FROM semantic_cache").get() as any
-    ).count;
+    this.stats.entriesCount = (this.countCurrentStmt.get() as any).count;
 
-    const ages = this.db
-      .prepare(
-        `
-      SELECT MIN(created_at) as oldest, MAX(created_at) as newest
-      FROM semantic_cache
-    `
-      )
-      .get() as any;
+    const ages = this.ageStatsStmt.get() as any;
 
     if (ages.oldest) {
       this.stats.oldestEntry = ages.oldest;
@@ -694,7 +869,8 @@ export class SemanticCache {
    * Clear all cache entries
    */
   clear(): void {
-    this.db.prepare("DELETE FROM semantic_cache").run();
+    this.clearStmt.run();
+    this.hotCache.clear();
     logger.info("Semantic cache cleared");
   }
 
@@ -706,6 +882,10 @@ export class SemanticCache {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
+    }
+    if (this.statsFlushInterval) {
+      clearInterval(this.statsFlushInterval);
+      this.statsFlushInterval = null;
     }
 
     this.persistStats();

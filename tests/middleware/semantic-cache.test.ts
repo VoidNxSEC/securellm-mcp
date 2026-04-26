@@ -33,6 +33,19 @@ describe("SemanticCache", () => {
     });
   }
 
+  function createCacheAt(dbPath: string, config = {}) {
+    return new SemanticCache(dbPath, {
+      enabled: true,
+      similarityThreshold: 0.8,
+      ttlSeconds: 300,
+      maxEntries: 100,
+      minQueryLength: 3,
+      llamaCppUrl: "http://localhost:8080",
+      embeddingTimeout: 1000,
+      ...config,
+    });
+  }
+
   describe("store and lookup", () => {
     it("should store and retrieve a cached response", async () => {
       cache = createCache({ similarityThreshold: 0.8 });
@@ -52,6 +65,40 @@ describe("SemanticCache", () => {
 
       assert.ok(result !== null, "Expected cache hit for identical query");
       assert.deepEqual(result, { temperature: 55 });
+    });
+
+    it("should serve exact-match lookups without calling remote semantic services", async () => {
+      const dbPath = path.join(tempDir.path, `cache-${Date.now()}-exact.db`);
+      cache = createCacheAt(dbPath, { similarityThreshold: 0.8 });
+
+      await cache.store({
+        toolName: "test_tool",
+        queryText: "identical query should use exact cache path",
+        toolArgs: { exact: true },
+        response: { ok: true, payload: "cached" },
+      });
+      cache.close();
+
+      cache = createCacheAt(dbPath, { similarityThreshold: 0.8 });
+
+      const originalFetch = globalThis.fetch;
+      let fetchCalls = 0;
+      globalThis.fetch = (async () => {
+        fetchCalls++;
+        throw new Error("fetch should not be called for exact cache hits");
+      }) as typeof fetch;
+
+      try {
+        const result = await cache.lookup({
+          toolName: "test_tool",
+          queryText: "identical query should use exact cache path",
+        });
+
+        assert.deepEqual(result, { ok: true, payload: "cached" });
+        assert.equal(fetchCalls, 0);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
 
     it("should return null for cache miss", async () => {
@@ -159,6 +206,25 @@ describe("SemanticCache", () => {
       assert.equal(typeof stats.cacheMisses, "number");
       assert.equal(typeof stats.hitRate, "number");
       assert.equal(typeof stats.entriesCount, "number");
+    });
+
+    it("should estimate saved tokens from cached payload size instead of fixed values", async () => {
+      cache = createCache();
+
+      await cache.store({
+        toolName: "test_tool",
+        queryText: "very detailed request that should produce a larger token estimate",
+        toolArgs: {},
+        response: { text: "x".repeat(1200) },
+      });
+
+      await cache.lookup({
+        toolName: "test_tool",
+        queryText: "very detailed request that should produce a larger token estimate",
+      });
+
+      const stats = cache.getStats();
+      assert.ok(stats.tokensSaved > 100);
     });
   });
 

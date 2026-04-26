@@ -29,6 +29,12 @@ export interface ToolMetrics {
   averageQueueWaitTime: number;
   averageRequestSize: number;
   averageResponseSize: number;
+  averageOriginalResponseSize: number;
+  averageCompactedResponseSize: number;
+  totalCompactionCharsSaved: number;
+  totalCompactionTokensSaved: number;
+  compactionRate: number;
+  compactionAppliedCount: number;
   errorsByCategory: Record<string, number>;
   timeWindow: {
     startTime: number;
@@ -48,7 +54,11 @@ export interface ToolMetricsSnapshot {
   serializationTime?: number;
   totalTime: number;
   requestSize?: number;
+  originalResponseSize?: number;
   responseSize?: number;
+  compactionCharsSaved?: number;
+  compactionTokensSaved?: number;
+  compactionApplied?: boolean;
   error?: string;
   errorCategory?: string;
 }
@@ -59,6 +69,15 @@ export class ToolMetricsCollector {
   private queueWaitTimes: Map<string, number[]> = new Map();
   private requestSizes: Map<string, number[]> = new Map();
   private responseSizes: Map<string, number[]> = new Map();
+  private originalResponseSizes: Map<string, number[]> = new Map();
+  private compactionStats: Map<
+    string,
+    {
+      charsSaved: number;
+      tokensSaved: number;
+      appliedCount: number;
+    }
+  > = new Map();
   private readonly maxSamples = 1000;
 
   /**
@@ -74,6 +93,8 @@ export class ToolMetricsCollector {
       this.queueWaitTimes.set(toolName, []);
       this.requestSizes.set(toolName, []);
       this.responseSizes.set(toolName, []);
+      this.originalResponseSizes.set(toolName, []);
+      this.compactionStats.set(toolName, { charsSaved: 0, tokensSaved: 0, appliedCount: 0 });
     }
 
     const collector = this.collectors.get(toolName)!;
@@ -114,6 +135,27 @@ export class ToolMetricsCollector {
       }
     }
 
+    if (snapshot.originalResponseSize !== undefined) {
+      const sizes = this.originalResponseSizes.get(toolName)!;
+      sizes.push(snapshot.originalResponseSize);
+      if (sizes.length > this.maxSamples) {
+        sizes.shift();
+      }
+    }
+
+    if (
+      snapshot.compactionCharsSaved !== undefined ||
+      snapshot.compactionTokensSaved !== undefined ||
+      snapshot.compactionApplied
+    ) {
+      const compaction = this.compactionStats.get(toolName)!;
+      compaction.charsSaved += snapshot.compactionCharsSaved || 0;
+      compaction.tokensSaved += snapshot.compactionTokensSaved || 0;
+      if (snapshot.compactionApplied) {
+        compaction.appliedCount++;
+      }
+    }
+
     // Record success/failure
     const latency = snapshot.totalTime || 0;
     if (snapshot.error) {
@@ -132,6 +174,10 @@ export class ToolMetricsCollector {
         cacheLookupTime: snapshot.cacheLookupTime,
         queueWaitTime: snapshot.queueWaitTime,
         executionTime: snapshot.executionTime,
+        originalResponseSize: snapshot.originalResponseSize,
+        responseSize: snapshot.responseSize,
+        compactionCharsSaved: snapshot.compactionCharsSaved,
+        compactionTokensSaved: snapshot.compactionTokensSaved,
         error: snapshot.error,
       },
       "Tool execution metrics"
@@ -152,6 +198,8 @@ export class ToolMetricsCollector {
     const queueTimes = this.queueWaitTimes.get(toolName)!;
     const reqSizes = this.requestSizes.get(toolName)!;
     const respSizes = this.responseSizes.get(toolName)!;
+    const originalRespSizes = this.originalResponseSizes.get(toolName)!;
+    const compaction = this.compactionStats.get(toolName)!;
 
     // Calculate percentiles for queue wait times
     const sortedQueueTimes = [...queueTimes].sort((a, b) => a - b);
@@ -164,6 +212,14 @@ export class ToolMetricsCollector {
       reqSizes.length > 0 ? reqSizes.reduce((a, b) => a + b, 0) / reqSizes.length : 0;
     const avgResponseSize =
       respSizes.length > 0 ? respSizes.reduce((a, b) => a + b, 0) / respSizes.length : 0;
+    const avgOriginalResponseSize =
+      originalRespSizes.length > 0
+        ? originalRespSizes.reduce((a, b) => a + b, 0) / originalRespSizes.length
+        : avgResponseSize;
+    const compactionRate =
+      avgOriginalResponseSize > 0
+        ? Math.max(0, (avgOriginalResponseSize - avgResponseSize) / avgOriginalResponseSize)
+        : 0;
 
     return {
       toolName,
@@ -178,6 +234,12 @@ export class ToolMetricsCollector {
         queueTimes.length > 0 ? queueTimes.reduce((a, b) => a + b, 0) / queueTimes.length : 0,
       averageRequestSize: avgRequestSize,
       averageResponseSize: avgResponseSize,
+      averageOriginalResponseSize: avgOriginalResponseSize,
+      averageCompactedResponseSize: avgResponseSize,
+      totalCompactionCharsSaved: compaction.charsSaved,
+      totalCompactionTokensSaved: compaction.tokensSaved,
+      compactionRate,
+      compactionAppliedCount: compaction.appliedCount,
       errorsByCategory: metrics.errorsByCategory,
       timeWindow: metrics.timeWindow,
     };
@@ -215,6 +277,10 @@ export class ToolMetricsCollector {
     lines.push(`# TYPE ${prefix}_cache_misses_total counter`);
     lines.push(`# HELP ${prefix}_queue_wait_seconds Queue wait time in seconds`);
     lines.push(`# TYPE ${prefix}_queue_wait_seconds histogram`);
+    lines.push(`# HELP ${prefix}_response_compaction_ratio Average response compaction ratio`);
+    lines.push(`# TYPE ${prefix}_response_compaction_ratio gauge`);
+    lines.push(`# HELP ${prefix}_response_compaction_tokens_saved_total Estimated tokens saved by response compaction`);
+    lines.push(`# TYPE ${prefix}_response_compaction_tokens_saved_total counter`);
 
     for (const [toolName, metrics] of this.getAllToolMetrics().entries()) {
       const toolLabel = `tool="${toolName}"`;
@@ -258,6 +324,15 @@ export class ToolMetricsCollector {
       lines.push(
         `${prefix}_response_size_bytes{${toolLabel}} ${metrics.averageResponseSize.toFixed(0)}`
       );
+      lines.push(
+        `${prefix}_response_original_size_bytes{${toolLabel}} ${metrics.averageOriginalResponseSize.toFixed(0)}`
+      );
+      lines.push(
+        `${prefix}_response_compaction_ratio{${toolLabel}} ${metrics.compactionRate.toFixed(4)}`
+      );
+      lines.push(
+        `${prefix}_response_compaction_tokens_saved_total{${toolLabel}} ${metrics.totalCompactionTokensSaved}`
+      );
     }
 
     return lines.join("\n");
@@ -281,6 +356,8 @@ export class ToolMetricsCollector {
     this.queueWaitTimes.delete(toolName);
     this.requestSizes.delete(toolName);
     this.responseSizes.delete(toolName);
+    this.originalResponseSizes.delete(toolName);
+    this.compactionStats.delete(toolName);
   }
 
   /**
@@ -292,5 +369,7 @@ export class ToolMetricsCollector {
     this.queueWaitTimes.clear();
     this.requestSizes.clear();
     this.responseSizes.clear();
+    this.originalResponseSizes.clear();
+    this.compactionStats.clear();
   }
 }

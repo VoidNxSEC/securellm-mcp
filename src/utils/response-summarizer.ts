@@ -18,7 +18,153 @@ interface ModelInfo {
   vram_estimate_gb: number;
 }
 
+interface TextContentItem {
+  type: string;
+  text?: string;
+  [key: string]: unknown;
+}
+
+interface ToolLikeResult {
+  content?: TextContentItem[];
+  [key: string]: unknown;
+}
+
+export interface CompactionStats {
+  originalChars: number;
+  compactedChars: number;
+  savedChars: number;
+  originalTokens: number;
+  compactedTokens: number;
+  savedTokens: number;
+  compactedFields: number;
+}
+
 export class ResponseSummarizer {
+  static compactText(
+    text: string,
+    options: {
+      maxChars?: number;
+      headChars?: number;
+      tailChars?: number;
+    } = {}
+  ): string {
+    const maxChars = options.maxChars ?? parseInt(process.env.RESPONSE_TEXT_MAX_CHARS || "16000", 10);
+    const headChars = options.headChars ?? parseInt(process.env.RESPONSE_TEXT_HEAD_CHARS || "6000", 10);
+    const tailChars = options.tailChars ?? parseInt(process.env.RESPONSE_TEXT_TAIL_CHARS || "3000", 10);
+
+    if (text.length <= maxChars) {
+      return text;
+    }
+
+    const head = text.slice(0, headChars);
+    const tail = text.slice(-tailChars);
+    const removedChars = text.length - head.length - tail.length;
+    const originalTokens = this.estimateTokens(text);
+    const compactedTokens = this.estimateTokens(head + tail);
+    const savedTokens = Math.max(0, originalTokens - compactedTokens);
+    const summary = this.describeTextShape(text);
+
+    return [
+      head,
+      "",
+      `...[response compacted: removed ${removedChars} chars, saved ~${savedTokens} tokens; ${summary}]...`,
+      "",
+      tail,
+    ].join("\n");
+  }
+
+  static compactToolResult<T extends ToolLikeResult>(result: T): T {
+    return this.compactToolResultWithStats(result).result;
+  }
+
+  static compactToolResultWithStats<T extends ToolLikeResult>(result: T): {
+    result: T;
+    stats: CompactionStats;
+  } {
+    if (!result.content || !Array.isArray(result.content)) {
+      return {
+        result,
+        stats: {
+          originalChars: 0,
+          compactedChars: 0,
+          savedChars: 0,
+          originalTokens: 0,
+          compactedTokens: 0,
+          savedTokens: 0,
+          compactedFields: 0,
+        },
+      };
+    }
+
+    const stats: CompactionStats = {
+      originalChars: 0,
+      compactedChars: 0,
+      savedChars: 0,
+      originalTokens: 0,
+      compactedTokens: 0,
+      savedTokens: 0,
+      compactedFields: 0,
+    };
+
+    const compactedContent = result.content.map((item) => {
+      if (item.type !== "text" || typeof item.text !== "string") {
+        return item;
+      }
+
+      const originalText = item.text;
+      const compacted = this.compactText(item.text);
+      stats.originalChars += originalText.length;
+      stats.compactedChars += compacted.length;
+      stats.originalTokens += this.estimateTokens(originalText);
+      stats.compactedTokens += this.estimateTokens(compacted);
+
+      if (compacted === item.text) {
+        return item;
+      }
+
+      stats.compactedFields++;
+
+      return {
+        ...item,
+        text: compacted,
+      };
+    });
+
+    stats.savedChars = Math.max(0, stats.originalChars - stats.compactedChars);
+    stats.savedTokens = Math.max(0, stats.originalTokens - stats.compactedTokens);
+
+    return {
+      result: {
+        ...result,
+        content: compactedContent,
+      },
+      stats,
+    };
+  }
+
+  private static describeTextShape(text: string): string {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return "empty text";
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return `JSON array with ${parsed.length} items`;
+      }
+      if (parsed && typeof parsed === "object") {
+        return `JSON object with ${Object.keys(parsed as Record<string, unknown>).length} top-level keys`;
+      }
+    } catch {
+      // Non-JSON text, fall through
+    }
+
+    const lines = text.split(/\r?\n/).length;
+    const words = text.trim().split(/\s+/).length;
+    return `${lines} lines, ${words} words`;
+  }
+
   /**
    * Summarize model list (most token-heavy response)
    */

@@ -16,6 +16,7 @@ import { mkdirSync, existsSync } from "fs";
 // Determine log directory
 const LOG_DIR = process.env.LOG_DIR || join(homedir(), ".local", "state", "securellm-mcp");
 const LOG_FILE = join(LOG_DIR, "mcp.log");
+const isNodeTestRunner = process.execArgv.includes("--test") || process.env.NODE_ENV === "test";
 
 // Ensure log directory exists
 if (!existsSync(LOG_DIR)) {
@@ -63,7 +64,7 @@ export const logger = pino(
   },
   pino.destination({
     dest: LOG_FILE,
-    sync: false, // CRITICAL: async writes - non-blocking
+    sync: isNodeTestRunner, // Tests prefer deterministic shutdown over async throughput
     mkdir: true,
   })
 );
@@ -113,9 +114,13 @@ export function logStartupError(message: string, error?: Error): void {
  */
 export async function flushLogs(): Promise<void> {
   return new Promise((resolve) => {
-    logger.flush(() => {
+    try {
+      logger.flush(() => {
+        resolve();
+      });
+    } catch {
       resolve();
-    });
+    }
   });
 }
 

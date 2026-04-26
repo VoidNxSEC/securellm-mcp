@@ -1,4 +1,5 @@
 import * as fs from "fs/promises";
+import { existsSync } from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
@@ -20,10 +21,26 @@ export class GuideManager {
   private promptsPath: string;
 
   constructor(baseDir?: string) {
-    const docsPath = baseDir || path.join(__dirname, "../../docs");
+    const docsPath = baseDir || this.resolveDocsPath();
     this.guidesPath = path.join(docsPath, "guides");
     this.skillsPath = path.join(docsPath, "skills");
     this.promptsPath = path.join(docsPath, "prompts");
+  }
+
+  private resolveDocsPath(): string {
+    const candidates = [
+      path.join(__dirname, "../../docs"),
+      path.join(__dirname, "../../../docs"),
+      path.join(process.cwd(), "docs"),
+    ];
+
+    for (const candidate of candidates) {
+      if (requireAccessiblePath(candidate)) {
+        return candidate;
+      }
+    }
+
+    return candidates[0];
   }
 
   async loadGuide(name: string): Promise<string> {
@@ -129,4 +146,8 @@ export class GuideManager {
     }
     return "No description available";
   }
+}
+
+function requireAccessiblePath(targetPath: string): boolean {
+  return existsSync(targetPath);
 }
