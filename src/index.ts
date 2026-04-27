@@ -1185,6 +1185,9 @@ class SecureLLMBridgeMCPServer {
               case "tool_control_plane":
                 toolResult = await this.professionalToolHandlers.tool_control_plane(args);
                 break;
+              case "ci_batch_triage":
+                toolResult = await this.professionalToolHandlers.ci_batch_triage(args);
+                break;
 
               // Browser Tool handlers
               case "browser_launch_advanced":

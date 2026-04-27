@@ -380,4 +380,92 @@ describe("professional tools", () => {
     assert.ok(payload.guidance.some((line: string) => line.includes("failed job 'test'")));
     assert.equal(calls.length, 2);
   });
+
+  it("should triage recent CI runs across multiple repositories", async () => {
+    const handlers = createProfessionalToolHandlers({
+      getProjectRoot: () => process.cwd(),
+      getServerStatus: async () => ({}),
+      runCommand: async (_program, args) => {
+        const repo = args[args.indexOf("--repo") + 1];
+
+        if (args[0] === "workflow" && args[1] === "run") {
+          return { exitCode: 0, stdout: "", stderr: "" };
+        }
+
+        if (args[0] === "run" && args[1] === "list") {
+          return {
+            exitCode: 0,
+            stdout: JSON.stringify([
+              {
+                databaseId: repo === "org/repo-a" ? 101 : 202,
+                workflowName: "CI",
+                displayTitle: repo === "org/repo-a" ? "Repo A CI" : "Repo B CI",
+                conclusion: "failure",
+                status: "completed",
+                url: `https://github.com/${repo}/actions/runs/1`,
+                headBranch: "main",
+                event: "push",
+              },
+            ]),
+            stderr: "",
+          };
+        }
+
+        if (args[0] === "run" && args[1] === "view" && args.includes("--log-failed")) {
+          return {
+            exitCode: 0,
+            stdout:
+              repo === "org/repo-a"
+                ? "src/index.ts: error TS2304: Cannot find name 'broken'.\n##[error]Process completed with exit code 2."
+                : "AssertionError [ERR_ASSERTION]: Expected true but got false.\n##[error]Process completed with exit code 1.",
+            stderr: "",
+          };
+        }
+
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            workflowName: "CI",
+            name: repo === "org/repo-a" ? "Repo A CI" : "Repo B CI",
+            conclusion: "failure",
+            status: "completed",
+            event: "push",
+            headBranch: "main",
+            url: `https://github.com/${repo}/actions/runs/1`,
+            jobs: [
+              {
+                name: repo === "org/repo-a" ? "build" : "test",
+                conclusion: "failure",
+                status: "completed",
+                steps: [
+                  {
+                    name: repo === "org/repo-a" ? "Compile" : "Run tests",
+                    conclusion: "failure",
+                  },
+                ],
+              },
+            ],
+          }),
+          stderr: "",
+        };
+      },
+    });
+
+    const result = await handlers.ci_batch_triage({
+      repos: ["org/repo-a", "org/repo-b"],
+      action: "trigger_and_triage",
+      workflow: "ci.yml",
+      limit_per_repo: 1,
+    });
+    const payload = JSON.parse(result.content[0].text);
+
+    assert.equal(payload.repo_count, 2);
+    assert.equal(payload.totals.runs_analyzed, 2);
+    assert.equal(payload.top_categories[0].count, 1);
+    assert.ok(payload.top_categories.some((item: { category: string }) => item.category === "typescript"));
+    assert.ok(payload.top_categories.some((item: { category: string }) => item.category === "tests"));
+    assert.ok(payload.top_failed_jobs.some((item: { job: string }) => item.job === "build"));
+    assert.ok(payload.top_failed_jobs.some((item: { job: string }) => item.job === "test"));
+    assert.equal(payload.repositories.length, 2);
+  });
 });

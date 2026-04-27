@@ -121,6 +121,44 @@ const toolControlPlaneSchema = z.object({
     .describe("Include per-tool governance metadata and enforcement decision"),
 });
 
+const ciBatchTriageSchema = z.object({
+  repos: z
+    .array(z.string().min(3))
+    .min(1)
+    .max(50)
+    .describe("GitHub repositories in owner/repo format"),
+  workflow: z
+    .string()
+    .optional()
+    .describe("Optional workflow name or file to trigger/filter in each repository"),
+  branch: z
+    .string()
+    .optional()
+    .default("main")
+    .describe("Branch to target when triggering workflows"),
+  action: z
+    .enum(["triage_recent", "trigger_and_triage"])
+    .optional()
+    .default("triage_recent")
+    .describe("Either inspect recent workflow runs or trigger a workflow before collecting recent runs"),
+  limit_per_repo: z
+    .number()
+    .int()
+    .min(1)
+    .max(10)
+    .optional()
+    .default(2)
+    .describe("How many recent runs to inspect per repository"),
+  max_log_chars: z
+    .number()
+    .int()
+    .min(1000)
+    .max(100000)
+    .optional()
+    .default(16000)
+    .describe("Maximum chars of failed log text to analyze per run"),
+});
+
 type ServerStatus = Awaited<ReturnType<ProfessionalToolDeps["getServerStatus"]>>;
 
 interface ProfessionalToolDeps {
@@ -194,6 +232,17 @@ interface GithubRunMetadata {
   number?: number;
   url?: string;
   jobs?: GithubRunJob[];
+}
+
+interface GithubRunListItem {
+  databaseId?: number;
+  workflowName?: string;
+  displayTitle?: string;
+  conclusion?: string;
+  status?: string;
+  url?: string;
+  headBranch?: string;
+  event?: string;
 }
 
 function buildCommand(program: string, args: string[]): string {
@@ -537,6 +586,66 @@ function summarizeGithubRunMetadata(metadata: GithubRunMetadata | null | undefin
   };
 }
 
+async function triageGithubRun(
+  projectRoot: string,
+  repo: string,
+  runId: string,
+  maxLogChars: number,
+  runCommand: (
+    program: string,
+    args: string[],
+    options: { cwd: string }
+  ) => Promise<{ exitCode: number; stdout: string; stderr: string }>
+) {
+  const [logResult, metadataResult] = await Promise.all([
+    runCommand("gh", ["run", "view", runId, "--repo", repo, "--log-failed"], { cwd: projectRoot }),
+    runCommand(
+      "gh",
+      [
+        "run",
+        "view",
+        runId,
+        "--repo",
+        repo,
+        "--json",
+        "workflowName,name,conclusion,status,event,headBranch,number,url,jobs",
+      ],
+      { cwd: projectRoot }
+    ),
+  ]);
+
+  const logText = logResult.stdout || logResult.stderr || "";
+  const summary = summarizeCiFailure(trimLogForAnalysis(logText, maxLogChars));
+  let githubRun = null as ReturnType<typeof summarizeGithubRunMetadata> | null;
+
+  if (metadataResult.exitCode === 0 && metadataResult.stdout.trim()) {
+    try {
+      githubRun = summarizeGithubRunMetadata(JSON.parse(metadataResult.stdout));
+    } catch {
+      githubRun = null;
+    }
+  }
+
+  return {
+    run_id: runId,
+    repo,
+    source: `gh run ${runId} --repo ${repo}`,
+    summary: summary.summary,
+    likely_cause: summary.likely_cause,
+    category: summary.category,
+    confidence: summary.confidence,
+    failure_signals: summary.failure_signals,
+    github_actions_step: summary.github_actions_context.likelyStepName,
+    github_actions_annotations: summary.github_actions_context.annotations,
+    github_run: githubRun,
+    log_available: Boolean(logText.trim()),
+    log_error:
+      logResult.exitCode === 0
+        ? null
+        : logResult.stderr.trim() || "Unable to fetch failed-step logs for this run.",
+  };
+}
+
 async function collectChangeImpact(
   projectRoot: string,
   target: string,
@@ -816,6 +925,16 @@ export const professionalTools: ExtendedTool[] = [
     priority: "high",
     execution_class: "diagnostic",
     cost_tier: "cheap",
+    volatile: true,
+  },
+  {
+    name: "ci_batch_triage",
+    description: "Trigger and/or triage recent GitHub Actions runs across multiple repositories",
+    inputSchema: zodToMcpSchema(ciBatchTriageSchema),
+    defer_loading: true,
+    priority: "high",
+    execution_class: "diagnostic",
+    cost_tier: "moderate",
     volatile: true,
   },
 ];
@@ -1314,6 +1433,150 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
                 "Mark expensive batch-style tools carefully; they are the safest first candidates to shed during incident load.",
                 "Use degraded mode only as a temporary protection mechanism, then review blocked tools through this report.",
               ],
+            }),
+          },
+        ],
+      };
+    },
+
+    async ci_batch_triage(rawArgs: unknown) {
+      const args = ciBatchTriageSchema.parse(rawArgs ?? {});
+      const projectRoot = deps.getProjectRoot();
+      const repoReports: Array<Record<string, unknown>> = [];
+      const categoryCounts = new Map<string, number>();
+      const failedJobs = new Map<string, number>();
+      const triggerFailures: string[] = [];
+
+      for (const repo of args.repos) {
+        let triggerResult: { success: boolean; stderr?: string } | null = null;
+
+        if (args.action === "trigger_and_triage" && args.workflow) {
+          const trigger = await runCommand(
+            "gh",
+            ["workflow", "run", args.workflow, "--repo", repo, "--ref", args.branch],
+            { cwd: projectRoot }
+          );
+          triggerResult = {
+            success: trigger.exitCode === 0,
+            stderr: trigger.stderr.trim() || undefined,
+          };
+
+          if (trigger.exitCode !== 0) {
+            triggerFailures.push(`${repo}: ${trigger.stderr.trim() || "trigger failed"}`);
+          }
+        }
+
+        const runListArgs = [
+          "run",
+          "list",
+          "--repo",
+          repo,
+          "--limit",
+          String(args.limit_per_repo),
+          "--json",
+          "databaseId,workflowName,displayTitle,conclusion,status,url,headBranch,event",
+        ];
+        if (args.workflow) {
+          runListArgs.push("--workflow", args.workflow);
+        }
+
+        const runListResult = await runCommand("gh", runListArgs, { cwd: projectRoot });
+        if (runListResult.exitCode !== 0) {
+          repoReports.push({
+            repo,
+            trigger: triggerResult,
+            error: runListResult.stderr.trim() || "Unable to list workflow runs for repository.",
+            runs: [],
+          });
+          continue;
+        }
+
+        let runs: GithubRunListItem[] = [];
+        try {
+          runs = JSON.parse(runListResult.stdout);
+        } catch {
+          runs = [];
+        }
+
+        const triagedRuns: Array<Record<string, unknown>> = [];
+        for (const run of runs) {
+          if (!run.databaseId) continue;
+          const triagedRun = await triageGithubRun(
+            projectRoot,
+            repo,
+            String(run.databaseId),
+            args.max_log_chars,
+            runCommand
+          );
+
+          triagedRuns.push({
+            workflow_name: run.workflowName || null,
+            display_title: run.displayTitle || null,
+            conclusion: run.conclusion || null,
+            status: run.status || null,
+            url: run.url || null,
+            head_branch: run.headBranch || null,
+            event: run.event || null,
+            ...triagedRun,
+          });
+
+          categoryCounts.set(
+            String(triagedRun.category),
+            (categoryCounts.get(String(triagedRun.category)) || 0) + 1
+          );
+
+          const failedJobName = (triagedRun.github_run as { failed_job?: { name?: string } } | null)
+            ?.failed_job?.name;
+          if (failedJobName) {
+            failedJobs.set(failedJobName, (failedJobs.get(failedJobName) || 0) + 1);
+          }
+        }
+
+        repoReports.push({
+          repo,
+          trigger: triggerResult,
+          runs: triagedRuns,
+        });
+      }
+
+      const topCategories = Array.from(categoryCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([category, count]) => ({ category, count }));
+
+      const topFailedJobs = Array.from(failedJobs.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([job, count]) => ({ job, count }));
+
+      const allRuns = repoReports.flatMap((repoReport) => (repoReport.runs as Array<Record<string, unknown>>) || []);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: stringifyGeneric({
+              generated_at: new Date().toISOString(),
+              action: args.action,
+              workflow: args.workflow || null,
+              branch: args.branch,
+              repo_count: args.repos.length,
+              trigger_failures: triggerFailures,
+              top_categories: topCategories,
+              top_failed_jobs: topFailedJobs,
+              totals: {
+                repos_analyzed: repoReports.length,
+                runs_analyzed: allRuns.length,
+                failures_detected: allRuns.filter((run) => run.conclusion === "failure").length,
+              },
+              recommendations: [
+                "Start with the most repeated failure category across repositories before drilling into repo-specific edge cases.",
+                "If one failed job dominates across repos, fix that job template or shared action first.",
+                ...(triggerFailures.length > 0
+                  ? ["Some workflow triggers failed immediately; check workflow name, branch, and repository permissions first."]
+                  : []),
+              ],
+              repositories: repoReports,
             }),
           },
         ],

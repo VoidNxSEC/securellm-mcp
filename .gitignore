@@ -37,6 +37,7 @@ coverage/
 # Temporary files
 *.tmp
 .cache/
+.codex
 
 # Databases
 *.db
