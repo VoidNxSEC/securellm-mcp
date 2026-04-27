@@ -16,7 +16,9 @@ import * as path from "path";
  * @returns The resolved absolute path (safe to use)
  */
 export function validatePath(userPath: string, allowedRoot: string): string {
-  const resolved = path.resolve(userPath);
+  const resolved = path.isAbsolute(userPath)
+    ? path.resolve(userPath)
+    : path.resolve(allowedRoot, userPath);
   const normalizedRoot = path.resolve(allowedRoot);
 
   if (resolved !== normalizedRoot && !resolved.startsWith(normalizedRoot + path.sep)) {

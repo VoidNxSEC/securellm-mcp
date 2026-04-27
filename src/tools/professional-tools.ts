@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { execa } from "execa";
-import { access, readFile } from "fs/promises";
+import { access, readFile, readdir, stat } from "fs/promises";
 import { existsSync } from "fs";
 import * as path from "path";
 import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 import { zodToMcpSchema } from "../utils/schema-converter.js";
 import { stringifyGeneric } from "../utils/json-schemas.js";
+import { validatePath } from "../security/path-validator.js";
 
 const serverHealthSchema = z.object({
   include_external_services: z
@@ -55,11 +56,82 @@ const performanceReportSchema = z.object({
     .describe("Include prioritized optimization recommendations"),
 });
 
+const cacheTuningAdvisorSchema = z.object({
+  top_n: z
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .optional()
+    .default(5)
+    .describe("How many tools to include in each advisory section"),
+});
+
+const changeImpactSchema = z.object({
+  target: z
+    .string()
+    .describe("File or directory to inspect for downstream impact, relative to project root or absolute"),
+  max_files: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .default(40)
+    .describe("Maximum number of related files to return"),
+});
+
+const ciFailureSummarySchema = z
+  .object({
+    log_text: z
+      .string()
+      .optional()
+      .describe("Raw CI log text to summarize. Best option when logs are already available."),
+    log_file: z
+      .string()
+      .optional()
+      .describe("Path to a local CI log file, relative to project root or absolute."),
+    run_id: z
+      .string()
+      .optional()
+      .describe("Optional GitHub Actions run ID. When provided, the tool will try `gh run view <id> --log`."),
+    include_github_metadata: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("When run_id is provided, also fetch workflow and job metadata from GitHub CLI."),
+    max_log_chars: z
+      .number()
+      .int()
+      .min(1000)
+      .max(200000)
+      .optional()
+      .default(40000)
+      .describe("Maximum amount of log text to analyze after trimming"),
+  })
+  .refine((value) => Boolean(value.log_text || value.log_file || value.run_id), {
+    message: "Provide at least one of log_text, log_file, or run_id",
+  });
+
+const toolControlPlaneSchema = z.object({
+  include_tools: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe("Include per-tool governance metadata and enforcement decision"),
+});
+
 type ServerStatus = Awaited<ReturnType<ProfessionalToolDeps["getServerStatus"]>>;
 
 interface ProfessionalToolDeps {
   getProjectRoot: () => string;
   getServerStatus: (includeMetrics: boolean) => Promise<Record<string, unknown>>;
+  getToolGovernanceSummary?: (includeTools: boolean) => Record<string, unknown>;
+  runCommand?: (
+    program: string,
+    args: string[],
+    options: { cwd: string }
+  ) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
 }
 
 interface ToolMetricRecord extends Record<string, unknown> {
@@ -75,6 +147,53 @@ interface QualityGateStep {
   summary: string;
   stdout?: string;
   stderr?: string;
+}
+
+interface FileImpactRecord {
+  file: string;
+  relation: "direct_import" | "re_export" | "symbol_reference";
+  score: number;
+}
+
+interface CiPatternMatch {
+  type:
+    | "typescript"
+    | "eslint"
+    | "prettier"
+    | "tests"
+    | "module_resolution"
+    | "npm"
+    | "github_actions"
+    | "generic";
+  confidence: number;
+  title: string;
+  cause: string;
+  suggestions: string[];
+}
+
+interface GithubActionsContext {
+  likelyStepName: string | null;
+  annotations: string[];
+  runnerLines: string[];
+}
+
+interface GithubRunJob {
+  name?: string;
+  conclusion?: string;
+  status?: string;
+  steps?: Array<{ name?: string; conclusion?: string; status?: string }>;
+}
+
+interface GithubRunMetadata {
+  workflowName?: string;
+  name?: string;
+  conclusion?: string;
+  status?: string;
+  event?: string;
+  headBranch?: string;
+  number?: number;
+  url?: string;
+  jobs?: GithubRunJob[];
 }
 
 function buildCommand(program: string, args: string[]): string {
@@ -119,6 +238,410 @@ async function readPackageScripts(projectRoot: string): Promise<Record<string, s
   } catch {
     return {};
   }
+}
+
+async function safeReadText(filePath: string): Promise<string | null> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+async function listProjectFiles(
+  rootDir: string,
+  extensions: string[],
+  limit: number
+): Promise<string[]> {
+  const queue = [rootDir];
+  const results: string[] = [];
+
+  while (queue.length > 0 && results.length < limit) {
+    const current = queue.shift()!;
+    let entries;
+    try {
+      entries = await readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (results.length >= limit) break;
+      if (entry.name.startsWith(".")) continue;
+      if (["node_modules", "build", "dist", "coverage"].includes(entry.name)) continue;
+
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        queue.push(fullPath);
+        continue;
+      }
+
+      if (extensions.includes(path.extname(entry.name))) {
+        results.push(fullPath);
+      }
+    }
+  }
+
+  return results;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeImportSpec(specifier: string): string {
+  return specifier.replaceAll(path.sep, "/").replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "");
+}
+
+function trimLogForAnalysis(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const head = text.slice(0, Math.floor(maxChars * 0.6));
+  const tail = text.slice(-Math.floor(maxChars * 0.4));
+  return `${head}\n...[trimmed for analysis]...\n${tail}`;
+}
+
+function uniqueLines(lines: string[], limit: number): string[] {
+  return Array.from(new Set(lines.map((line) => line.trim()).filter(Boolean))).slice(0, limit);
+}
+
+function extractGithubActionsContext(logText: string): GithubActionsContext {
+  const lines = logText.split("\n");
+  let currentStep: string | null = null;
+  let likelyStepName: string | null = null;
+  const annotations: string[] = [];
+  const runnerLines: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const stepMatch =
+      line.match(/^##\[group\]Run\s+(.+)$/) ||
+      line.match(/^Run\s+(.+)$/) ||
+      line.match(/^##\[group\](.+)$/);
+
+    if (stepMatch?.[1]) {
+      currentStep = stepMatch[1].trim();
+    }
+
+    if (/##\[error\]|Process completed with exit code/i.test(line)) {
+      likelyStepName = likelyStepName || currentStep;
+      if (annotations.length < 6) {
+        annotations.push(line);
+      }
+    }
+
+    if (/Current runner version:|Operating System|Runner Image|Runner Image Provisioner/i.test(line)) {
+      runnerLines.push(line);
+    }
+  }
+
+  return {
+    likelyStepName,
+    annotations: uniqueLines(annotations, 6),
+    runnerLines: uniqueLines(runnerLines, 4),
+  };
+}
+
+function detectCiPatterns(logText: string): CiPatternMatch[] {
+  const patterns: CiPatternMatch[] = [];
+  const lower = logText.toLowerCase();
+
+  if (/error TS\d+:/i.test(logText)) {
+    patterns.push({
+      type: "typescript",
+      confidence: 0.95,
+      title: "TypeScript compilation failure",
+      cause: "The CI log contains TypeScript compiler errors (`TSxxxx`), which usually means type drift or invalid imports.",
+      suggestions: [
+        "Run `npm run build` locally and fix the first TypeScript error before chasing follow-on errors.",
+        "Check recently changed interfaces, renamed exports, and path aliases.",
+      ],
+    });
+  }
+
+  if (/eslint|no-unused-vars|Parsing error|Expected .* but found/i.test(logText)) {
+    patterns.push({
+      type: "eslint",
+      confidence: 0.9,
+      title: "Lint failure",
+      cause: "The log looks like an ESLint failure rather than a runtime or compile error.",
+      suggestions: [
+        "Run `npm run lint` locally to reproduce the exact offending file and rule.",
+        "If the rule is expected, align the code style or update the lint config intentionally.",
+      ],
+    });
+  }
+
+  if (/prettier|Code style issues found|--check/i.test(logText)) {
+    patterns.push({
+      type: "prettier",
+      confidence: 0.82,
+      title: "Formatting check failure",
+      cause: "The log indicates formatting drift detected by Prettier or an equivalent formatter.",
+      suggestions: [
+        "Run `npm run format` or the repository formatter command and commit the resulting diffs.",
+      ],
+    });
+  }
+
+  if (/AssertionError|not ok \d+|failing|failed tests?|expected:|received:/i.test(logText)) {
+    patterns.push({
+      type: "tests",
+      confidence: 0.88,
+      title: "Test suite failure",
+      cause: "The log contains test assertion markers, suggesting behavioral regression instead of infra-only failure.",
+      suggestions: [
+        "Re-run the failing test file locally first to isolate whether this is deterministic.",
+        "Compare expected outputs with recent code-path changes and fixtures.",
+      ],
+    });
+  }
+
+  if (/Cannot find module|module not found|ERR_MODULE_NOT_FOUND/i.test(logText)) {
+    patterns.push({
+      type: "module_resolution",
+      confidence: 0.91,
+      title: "Module resolution failure",
+      cause: "CI could not resolve a required module, file, or export at build/test time.",
+      suggestions: [
+        "Check import paths, file casing, and whether generated build artifacts are required but missing.",
+        "Verify the dependency exists in `package.json` and is available in the lockfile.",
+      ],
+    });
+  }
+
+  if (/npm ERR!|pnpm ERR!|yarn error/i.test(logText)) {
+    patterns.push({
+      type: "npm",
+      confidence: 0.78,
+      title: "Package manager failure",
+      cause: "The package manager reported an install or script execution failure.",
+      suggestions: [
+        "Inspect the first `npm ERR!` block; later errors are often secondary symptoms.",
+        "Check whether the failure happened during install, build, or test command execution.",
+      ],
+    });
+  }
+
+  if (/Process completed with exit code \d+|Error: Process completed with exit code/i.test(logText)) {
+    patterns.push({
+      type: "github_actions",
+      confidence: 0.65,
+      title: "GitHub Actions step failure",
+      cause: "The workflow step exited non-zero. This usually wraps another underlying compile, test, or script failure.",
+      suggestions: [
+        "Scroll upward to the first error block in the same step; the exit code line is usually not the root cause.",
+      ],
+    });
+  }
+
+  if (patterns.length === 0 && lower.includes("error")) {
+    patterns.push({
+      type: "generic",
+      confidence: 0.45,
+      title: "Generic CI error",
+      cause: "The log contains error markers, but it does not strongly match a known failure family.",
+      suggestions: [
+        "Review the earliest stack trace or command failure in the log for the actual root cause.",
+      ],
+    });
+  }
+
+  return patterns.sort((a, b) => b.confidence - a.confidence);
+}
+
+function extractFailureSignals(logText: string): string[] {
+  const lines = logText.split("\n");
+  const matches = lines.filter((line) =>
+    /error TS\d+:|AssertionError|Cannot find module|module not found|npm ERR!|eslint|prettier|not ok \d+|failed/i.test(
+      line
+    )
+  );
+  return uniqueLines(matches, 8);
+}
+
+function summarizeCiFailure(logText: string) {
+  const patterns = detectCiPatterns(logText);
+  const topPattern = patterns[0];
+  const failureSignals = extractFailureSignals(logText);
+  const actionsContext = extractGithubActionsContext(logText);
+
+  return {
+    summary: topPattern?.title || "Unknown CI failure",
+    likely_cause:
+      topPattern?.cause ||
+      "The log does not match a strong known pattern yet. Manual review of the first failure block is recommended.",
+    category: topPattern?.type || "generic",
+    confidence: topPattern?.confidence || 0.3,
+    failure_signals: failureSignals,
+    suggested_fixes: uniqueLines(patterns.flatMap((pattern) => pattern.suggestions), 6),
+    github_actions_context: actionsContext,
+  };
+}
+
+function summarizeGithubRunMetadata(metadata: GithubRunMetadata | null | undefined) {
+  if (!metadata) {
+    return {
+      workflow_name: null,
+      run_name: null,
+      run_conclusion: null,
+      status: null,
+      event: null,
+      head_branch: null,
+      url: null,
+      failed_job: null as null | {
+        name: string | null;
+        conclusion: string | null;
+        failed_steps: string[];
+      },
+      job_summaries: [] as Array<{ name: string | null; conclusion: string | null; status: string | null }>,
+    };
+  }
+
+  const jobs = Array.isArray(metadata.jobs) ? metadata.jobs : [];
+  const failedJob =
+    jobs.find((job) => ["failure", "cancelled", "timed_out", "startup_failure", "action_required"].includes(job.conclusion || "")) ||
+    jobs.find((job) => (job.status || "").toLowerCase() === "failed") ||
+    null;
+
+  return {
+    workflow_name: metadata.workflowName || null,
+    run_name: metadata.name || null,
+    run_conclusion: metadata.conclusion || null,
+    status: metadata.status || null,
+    event: metadata.event || null,
+    head_branch: metadata.headBranch || null,
+    url: metadata.url || null,
+    failed_job: failedJob
+      ? {
+          name: failedJob.name || null,
+          conclusion: failedJob.conclusion || null,
+          failed_steps: Array.isArray(failedJob.steps)
+            ? uniqueLines(
+                failedJob.steps
+                  .filter((step) =>
+                    ["failure", "cancelled", "timed_out", "action_required"].includes(
+                      step.conclusion || ""
+                    )
+                  )
+                  .map((step) => step.name || "UNKNOWN STEP"),
+                8
+              )
+            : [],
+        }
+      : null,
+    job_summaries: jobs.slice(0, 12).map((job) => ({
+      name: job.name || null,
+      conclusion: job.conclusion || null,
+      status: job.status || null,
+    })),
+  };
+}
+
+async function collectChangeImpact(
+  projectRoot: string,
+  target: string,
+  maxFiles: number
+): Promise<{
+  target: string;
+  targetType: "file" | "directory";
+  relatedFiles: FileImpactRecord[];
+  summary: {
+    directImporters: number;
+    reExporters: number;
+    symbolReferences: number;
+  };
+}> {
+  const safeTarget = validatePath(target, projectRoot);
+  const targetStats = await stat(safeTarget);
+  const targetType = targetStats.isDirectory() ? "directory" : "file";
+  const projectFiles = await listProjectFiles(
+    projectRoot,
+    [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"],
+    2000
+  );
+
+  const relativeTarget = path.relative(projectRoot, safeTarget).replaceAll(path.sep, "/");
+
+  const symbolNames =
+    targetType === "file"
+      ? Array.from(
+          new Set(
+            ((await safeReadText(safeTarget)) || "")
+              .match(/export\s+(?:const|function|class|interface|type)\s+([A-Za-z_]\w*)/g)?.map(
+                (match) => match.replace(/.*\s+([A-Za-z_]\w*)$/, "$1")
+              ) || []
+          )
+        )
+      : [];
+
+  const relatedFiles: FileImpactRecord[] = [];
+
+  for (const file of projectFiles) {
+    if (file === safeTarget) continue;
+    const text = await safeReadText(file);
+    if (!text) continue;
+
+    const relativeFile = path.relative(projectRoot, file).replaceAll(path.sep, "/");
+    const relativeSpecifier = normalizeImportSpec(
+      path.relative(path.dirname(file), safeTarget).replaceAll(path.sep, "/")
+    );
+    const localSpecifier = relativeSpecifier.startsWith(".")
+      ? relativeSpecifier
+      : `./${relativeSpecifier}`;
+    const importNeedles = new Set([
+      localSpecifier,
+      normalizeImportSpec(relativeTarget),
+      relativeTarget,
+    ]);
+    let score = 0;
+    let relation: FileImpactRecord["relation"] | null = null;
+
+    for (const needle of importNeedles) {
+      if (text.includes(`export * from "${needle}"`) || text.includes(`export * from '${needle}'`)) {
+        relation = "re_export";
+        score = 4;
+        break;
+      }
+      if (text.includes(`from "${needle}"`) || text.includes(`from '${needle}'`)) {
+        relation = "direct_import";
+        score = 3;
+        break;
+      }
+    }
+
+    if (!relation && symbolNames.length > 0) {
+      for (const symbol of symbolNames) {
+        const regex = new RegExp(`\\b${escapeRegex(symbol)}\\b`);
+        if (regex.test(text)) {
+          relation = "symbol_reference";
+          score = 1;
+          break;
+        }
+      }
+    }
+
+    if (relation) {
+      relatedFiles.push({
+        file: relativeFile,
+        relation,
+        score,
+      });
+    }
+  }
+
+  relatedFiles.sort((a, b) => b.score - a.score || a.file.localeCompare(b.file));
+  const trimmed = relatedFiles.slice(0, maxFiles);
+
+  return {
+    target: relativeTarget,
+    targetType,
+    relatedFiles: trimmed,
+    summary: {
+      directImporters: trimmed.filter((item) => item.relation === "direct_import").length,
+      reExporters: trimmed.filter((item) => item.relation === "re_export").length,
+      symbolReferences: trimmed.filter((item) => item.relation === "symbol_reference").length,
+    },
+  };
 }
 
 async function runQualityStep(
@@ -263,6 +786,38 @@ export const professionalTools: ExtendedTool[] = [
     inputSchema: zodToMcpSchema(performanceReportSchema),
     defer_loading: true,
   },
+  {
+    name: "cache_tuning_advisor",
+    description: "Recommend semantic cache and response compaction tuning based on observed tool metrics",
+    inputSchema: zodToMcpSchema(cacheTuningAdvisorSchema),
+    defer_loading: true,
+  },
+  {
+    name: "change_impact",
+    description: "Estimate which files are most likely to be affected by a change in a target file or directory",
+    inputSchema: zodToMcpSchema(changeImpactSchema),
+    defer_loading: true,
+  },
+  {
+    name: "ci_failure_summary",
+    description: "Summarize CI logs into likely root cause, confidence, failure signals, and next fixes",
+    inputSchema: zodToMcpSchema(ciFailureSummarySchema),
+    defer_loading: true,
+    priority: "high",
+    execution_class: "diagnostic",
+    cost_tier: "cheap",
+    volatile: true,
+  },
+  {
+    name: "tool_control_plane",
+    description: "Inspect tool priority, degraded-mode policy, and enforcement decisions for MCP tools",
+    inputSchema: zodToMcpSchema(toolControlPlaneSchema),
+    defer_loading: true,
+    priority: "high",
+    execution_class: "diagnostic",
+    cost_tier: "cheap",
+    volatile: true,
+  },
 ];
 
 function rankTools<T>(
@@ -276,6 +831,21 @@ function rankTools<T>(
 }
 
 export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
+  const runCommand =
+    deps.runCommand ||
+    (async (program: string, args: string[], options: { cwd: string }) => {
+      const result = await execa(program, args, {
+        cwd: options.cwd,
+        reject: false,
+        preferLocal: true,
+      });
+      return {
+        exitCode: result.exitCode ?? 0,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      };
+    });
+
   return {
     async server_health(rawArgs: unknown) {
       const args = serverHealthSchema.parse(rawArgs ?? {});
@@ -488,6 +1058,262 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
               top_token_savers: topTokenSavings,
               top_compaction_candidates: topCompactionCandidates,
               recommendations,
+            }),
+          },
+        ],
+      };
+    },
+
+    async cache_tuning_advisor(rawArgs: unknown) {
+      const args = cacheTuningAdvisorSchema.parse(rawArgs ?? {});
+      const status = (await deps.getServerStatus(true)) as ServerStatus;
+      const statusMetrics = ((status as Record<string, unknown>).metrics || {}) as Record<string, unknown>;
+      const rawToolMetrics = (statusMetrics.toolMetrics || {}) as Record<string, Record<string, unknown>>;
+      const metricsList: ToolMetricRecord[] = Object.entries(rawToolMetrics).map(([toolName, metric]) => ({
+        toolName,
+        ...metric,
+      }));
+
+      const cacheCandidates = rankTools(
+        metricsList.filter((metric) => Number(metric.cacheMisses || 0) > 0),
+        args.top_n,
+        (metric) => Number(metric.cacheMisses || 0) * Number(metric.averageLatency || 0)
+      ).map((metric) => ({
+        tool: metric.toolName,
+        cache_misses: Number(metric.cacheMisses || 0),
+        average_latency_ms: Math.round(Number(metric.averageLatency || 0)),
+        suggestion:
+          Number(metric.cacheHits || 0) === 0
+            ? "Consider making this tool more cache-friendly or explicitly excluding it if results are highly volatile."
+            : "Consider raising TTL or stabilizing cache keys to improve hit rate.",
+      }));
+
+      const compactionCandidates = rankTools(
+        metricsList.filter((metric) => Number(metric.averageOriginalResponseSize || 0) > 0),
+        args.top_n,
+        (metric) => Number(metric.averageOriginalResponseSize || 0) - Number(metric.averageResponseSize || 0)
+      ).map((metric) => ({
+        tool: metric.toolName,
+        average_original_response_bytes: Math.round(Number(metric.averageOriginalResponseSize || 0)),
+        average_compacted_response_bytes: Math.round(Number(metric.averageResponseSize || 0)),
+        compaction_rate: Number(metric.compactionRate || 0),
+        suggestion:
+          Number(metric.compactionAppliedCount || 0) > 0
+            ? "Response compaction is already helping; consider tailoring tool-specific summaries for even better compression."
+            : "Large responses without compaction suggest a good candidate for custom summarization.",
+      }));
+
+      const volatileCandidates = rankTools(
+        metricsList,
+        args.top_n,
+        (metric) => Number(metric.averageLatency || 0)
+      )
+        .filter(
+          (metric) =>
+            Number(metric.cacheHits || 0) === 0 &&
+            Number(metric.cacheMisses || 0) > 0 &&
+            Number(metric.averageLatency || 0) > 200
+        )
+        .map((metric) => ({
+          tool: metric.toolName,
+          cache_hit_rate:
+            Number(metric.totalRequests || 0) > 0
+              ? Number(metric.cacheHits || 0) / Number(metric.totalRequests || 0)
+              : 0,
+          average_latency_ms: Math.round(Number(metric.averageLatency || 0)),
+          suggestion:
+            "If this tool is time-sensitive or stateful, consider excluding it from semantic cache to avoid lookup overhead.",
+        }));
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: stringifyGeneric({
+              generated_at: new Date().toISOString(),
+              semantic_cache_defaults: {
+                threshold: process.env.SEMANTIC_CACHE_THRESHOLD || "0.85",
+                ttl_seconds: process.env.SEMANTIC_CACHE_TTL || "3600",
+                max_response_bytes: process.env.SEMANTIC_CACHE_MAX_RESPONSE_BYTES || "131072",
+              },
+              cache_candidates: cacheCandidates,
+              compaction_candidates: compactionCandidates,
+              volatile_or_low_yield_tools: volatileCandidates,
+              recommendations: [
+                ...(cacheCandidates.length > 0
+                  ? ["Prioritize the highest miss x latency tools for cache-key stabilization or TTL tuning."]
+                  : []),
+                ...(compactionCandidates.length > 0
+                  ? ["The largest original-vs-compacted payload gaps are the best places for custom summaries."]
+                  : []),
+                ...(volatileCandidates.length > 0
+                  ? ["Some tools may cost more to look up in cache than they save; consider explicit exclusion."]
+                  : []),
+              ],
+            }),
+          },
+        ],
+      };
+    },
+
+    async change_impact(rawArgs: unknown) {
+      const args = changeImpactSchema.parse(rawArgs ?? {});
+      const projectRoot = deps.getProjectRoot();
+      const impact = await collectChangeImpact(projectRoot, args.target, args.max_files);
+
+      const risk =
+        impact.summary.reExporters > 0
+          ? "high"
+          : impact.summary.directImporters > 8
+            ? "high"
+            : impact.summary.directImporters > 3 || impact.summary.symbolReferences > 8
+              ? "medium"
+              : "low";
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: stringifyGeneric({
+              generated_at: new Date().toISOString(),
+              target: impact.target,
+              target_type: impact.targetType,
+              estimated_risk: risk,
+              summary: impact.summary,
+              related_files: impact.relatedFiles,
+              guidance: [
+                "Review direct importers first; they are the most likely to break behaviorally.",
+                "Re-exporters increase blast radius because they fan changes into wider module surfaces.",
+                "Symbol-reference matches are heuristic and best used as review hints rather than definitive dependency edges.",
+              ],
+            }),
+          },
+        ],
+      };
+    },
+
+    async ci_failure_summary(rawArgs: unknown) {
+      const args = ciFailureSummarySchema.parse(rawArgs ?? {});
+      const projectRoot = deps.getProjectRoot();
+
+      let logText = args.log_text || "";
+      let source = "inline";
+
+      if (!logText && args.log_file) {
+        const safeLogPath = validatePath(args.log_file, projectRoot);
+        logText = (await safeReadText(safeLogPath)) || "";
+        source = path.relative(projectRoot, safeLogPath).replaceAll(path.sep, "/");
+      }
+
+      if (!logText && args.run_id) {
+        const result = await runCommand("gh", ["run", "view", args.run_id, "--log"], {
+          cwd: projectRoot,
+        });
+
+        if (result.exitCode !== 0 || !result.stdout.trim()) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: stringifyGeneric({
+                  source: `gh run ${args.run_id}`,
+                  summary: "Unable to fetch CI logs",
+                  likely_cause:
+                    result.stderr.trim() ||
+                    "GitHub CLI could not fetch the workflow log. Check authentication, run ID, and repository context.",
+                  category: "github_actions",
+                  confidence: 0.2,
+                  failure_signals: [],
+                  suggested_fixes: [
+                    "Verify `gh auth status`, repository permissions, and that the run ID exists in this repository.",
+                  ],
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        logText = result.stdout;
+        source = `gh run ${args.run_id}`;
+      }
+
+      const trimmedLog = trimLogForAnalysis(logText, args.max_log_chars);
+      const summary = summarizeCiFailure(trimmedLog);
+      let githubRun = null as ReturnType<typeof summarizeGithubRunMetadata> | null;
+
+      if (args.run_id && args.include_github_metadata) {
+        const metadataResult = await runCommand(
+          "gh",
+          [
+            "run",
+            "view",
+            args.run_id,
+            "--json",
+            "workflowName,name,conclusion,status,event,headBranch,number,url,jobs",
+          ],
+          { cwd: projectRoot }
+        );
+
+        if (metadataResult.exitCode === 0 && metadataResult.stdout.trim()) {
+          try {
+            githubRun = summarizeGithubRunMetadata(JSON.parse(metadataResult.stdout));
+          } catch {
+            githubRun = null;
+          }
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: stringifyGeneric({
+              generated_at: new Date().toISOString(),
+              source,
+              analyzed_chars: trimmedLog.length,
+              ...summary,
+              github_actions_step: summary.github_actions_context.likelyStepName,
+              github_actions_annotations: summary.github_actions_context.annotations,
+              runner_context: summary.github_actions_context.runnerLines,
+              github_run: githubRun,
+              guidance: [
+                "Start from the first concrete compiler, test, or module error rather than the final exit-code line.",
+                "If the same error repeats across many files, fix the earliest upstream type or export breakage first.",
+                ...(summary.github_actions_context.likelyStepName
+                  ? [
+                      `Prioritize the workflow step '${summary.github_actions_context.likelyStepName}' before investigating downstream steps.`,
+                    ]
+                  : []),
+                ...(githubRun?.failed_job?.name
+                  ? [`Start with the failed job '${githubRun.failed_job.name}' before reviewing successful jobs.`]
+                  : []),
+              ],
+            }),
+          },
+        ],
+        isError: summary.confidence < 0.35,
+      };
+    },
+
+    async tool_control_plane(rawArgs: unknown) {
+      const args = toolControlPlaneSchema.parse(rawArgs ?? {});
+      const status = (await deps.getServerStatus(true)) as Record<string, unknown>;
+      const governance = deps.getToolGovernanceSummary?.(args.include_tools) || {};
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: stringifyGeneric({
+              generated_at: new Date().toISOString(),
+              governance,
+              metrics_available: Boolean((status.metrics as Record<string, unknown> | undefined)?.toolMetrics),
+              recommendations: [
+                "Keep critical diagnostics and incident-response tools in high priority so they bypass degraded-mode surprises.",
+                "Mark expensive batch-style tools carefully; they are the safest first candidates to shed during incident load.",
+                "Use degraded mode only as a temporary protection mechanism, then review blocked tools through this report.",
+              ],
             }),
           },
         ],

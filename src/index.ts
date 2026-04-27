@@ -129,6 +129,7 @@ import {
   shouldAttemptSemanticCache,
   shouldStoreSemanticCache,
 } from "./utils/cache-policy.js";
+import { ToolGovernanceManager } from "./utils/tool-governance.js";
 
 const shouldPrettyPrint = process.env.NODE_ENV === "development";
 const SERVER_VERSION = process.env.SECURELLM_MCP_VERSION || "2.1.0";
@@ -213,6 +214,7 @@ class SecureLLMBridgeMCPServer {
   private requestDeduplicator: RequestDeduplicator;
   private disposables: DisposableRegistry = new DisposableRegistry();
   private professionalToolHandlers: ReturnType<typeof createProfessionalToolHandlers>;
+  private toolGovernance: ToolGovernanceManager;
 
   /**
    * Parse tool configuration from environment variable
@@ -254,9 +256,12 @@ class SecureLLMBridgeMCPServer {
       parseInt(process.env.REQUEST_DEDUPE_STALE_TIMEOUT || "60000", 10),
       parseInt(process.env.REQUEST_DEDUPE_CLEANUP_INTERVAL || "30000", 10)
     );
+    this.toolGovernance = new ToolGovernanceManager();
     this.professionalToolHandlers = createProfessionalToolHandlers({
       getProjectRoot: () => this.projectRoot,
       getServerStatus: (includeMetrics: boolean) => this.buildServerStatus(includeMetrics),
+      getToolGovernanceSummary: (includeTools: boolean) =>
+        this.buildToolGovernanceSummary(includeTools),
     });
 
     this.server = new Server(
@@ -475,9 +480,8 @@ class SecureLLMBridgeMCPServer {
     }
   }
 
-  private setupToolHandlers() {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
+  private buildToolCatalog(): ExtendedTool[] {
+    return [
         {
           name: "server_status",
           description: "Get current MCP server status, feature flags, and runtime health",
@@ -821,13 +825,28 @@ class SecureLLMBridgeMCPServer {
         browserInteractFormSchema,
         browserMonitorChangesSchema,
         browserSearchAggregateSchema,
-      ] as ExtendedTool[],
+      ] as ExtendedTool[];
+  }
+
+  private setupToolHandlers() {
+    const toolCatalog = this.buildToolCatalog();
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: this.toolGovernance.sortTools(toolCatalog),
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const requestId = crypto.randomUUID();
       const startTime = Date.now();
       const { name, arguments: args } = request.params;
+      const toolDefinition = toolCatalog.find((tool) => tool.name === name) || { name };
+      const governanceDecision = this.toolGovernance.canExecute(toolDefinition);
+
+      if (!governanceDecision.allowed) {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          `Tool '${name}' blocked by governance policy: ${governanceDecision.reason}`
+        );
+      }
 
       // Generate stable cache key
       const cacheKey = stableStringify({ name, args });
@@ -1150,6 +1169,21 @@ class SecureLLMBridgeMCPServer {
                 break;
               case "workspace_quality_gate":
                 toolResult = await this.professionalToolHandlers.workspace_quality_gate(args);
+                break;
+              case "performance_report":
+                toolResult = await this.professionalToolHandlers.performance_report(args);
+                break;
+              case "cache_tuning_advisor":
+                toolResult = await this.professionalToolHandlers.cache_tuning_advisor(args);
+                break;
+              case "change_impact":
+                toolResult = await this.professionalToolHandlers.change_impact(args);
+                break;
+              case "ci_failure_summary":
+                toolResult = await this.professionalToolHandlers.ci_failure_summary(args);
+                break;
+              case "tool_control_plane":
+                toolResult = await this.professionalToolHandlers.tool_control_plane(args);
                 break;
 
               // Browser Tool handlers
@@ -1495,6 +1529,7 @@ class SecureLLMBridgeMCPServer {
   private buildServerStatus(includeMetrics: boolean = true) {
     const guideInventory = this.guideManager.listAll();
     const uptimeMs = Math.max(0, Math.round(process.uptime() * 1000));
+    const toolCatalog = this.buildToolCatalog();
 
     return Promise.resolve(guideInventory).then((resources) => ({
       name: "securellm-mcp",
@@ -1527,13 +1562,38 @@ class SecureLLMBridgeMCPServer {
         deduplicator: this.requestDeduplicator.getStats(),
         toolLimiter: includeMetrics ? this.toolLimiter.getStatus() : undefined,
       },
+      governance: this.buildToolGovernanceSummary(includeMetrics),
       metrics: includeMetrics
         ? {
             semanticCache: this.semanticCache?.getStats() || null,
             toolMetrics: Object.fromEntries(this.toolMetricsCollector.getAllToolMetrics()),
           }
         : undefined,
+      tools: {
+        total: toolCatalog.length,
+      },
     }));
+  }
+
+  private buildToolGovernanceSummary(includeTools: boolean = false) {
+    const toolCatalog = this.buildToolCatalog();
+    const summary = this.toolGovernance.summarize(toolCatalog);
+
+    if (!includeTools) {
+      return summary;
+    }
+
+    return {
+      ...summary,
+      tools: toolCatalog.map((tool) => {
+        const decision = this.toolGovernance.canExecute(tool);
+        return {
+          ...decision.metadata,
+          allowed: decision.allowed,
+          reason: decision.reason,
+        };
+      }),
+    };
   }
 
   private async handleServerStatus(args: { include_metrics?: boolean } = {}) {
