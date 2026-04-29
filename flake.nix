@@ -40,7 +40,7 @@
             PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "1";
           };
 
-          npmDepsHash = "sha256-LP7yF6QSYLjd+U4tNFmhRDKeo1FcTBltrnAklQyC/Ss=";
+          npmDepsHash = "sha256-JJLDZxL3T3MOzVs30q9K3JiMGu/mb2NvwWSUT+yIHkk=";
 
           buildPhase = ''
             npm run build
