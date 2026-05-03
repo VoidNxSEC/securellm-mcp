@@ -1,4 +1,4 @@
-name: Release
+name: Publish GitHub Release
 
 on:
   push:
@@ -7,36 +7,38 @@ on:
 
 jobs:
   release:
-    name: Create Release
-    runs-on: ubuntu-latest
+    name: Create GitHub Release
+    runs-on: self-hosted
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: 22.x
-          registry-url: 'https://registry.npmjs.org'
+          fetch-depth: 0
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Extract tag name
+        id: tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Build
-        run: npm run build
+      - name: Check for Release Notes
+        id: notes
+        run: |
+          NOTES_FILE="RELEASE-${{ steps.tag.outputs.tag }}.md"
+          if [ -f "$NOTES_FILE" ]; then
+            echo "notes_file=$NOTES_FILE" >> $GITHUB_OUTPUT
+            echo "Release notes found: $NOTES_FILE"
+          else
+            echo "notes_file=" >> $GITHUB_OUTPUT
+            echo "No specific release notes found for ${{ steps.tag.outputs.tag }}. Will use auto-generated."
+          fi
 
-      - name: Publish to npm
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          name: Release ${{ steps.tag.outputs.tag }}
+          body_path: ${{ steps.notes.outputs.notes_file }}
+          generate_release_notes: ${{ steps.notes.outputs.notes_file == '' }}
           draft: false
           prerelease: false
