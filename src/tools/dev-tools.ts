@@ -49,9 +49,7 @@ interface CommandResult {
 }
 
 function formatCommand(command: string, args: string[]): string {
-  return [command, ...args]
-    .map((arg) => (/\s/.test(arg) ? JSON.stringify(arg) : arg))
-    .join(" ");
+  return [command, ...args].map((arg) => (/\s/.test(arg) ? JSON.stringify(arg) : arg)).join(" ");
 }
 
 function resolveTarget(target: string): { resolvedTarget: string; stats: fs.Stats } {
@@ -137,8 +135,20 @@ async function handleFormatCode(args: z.infer<typeof formatCodeSchema>) {
 
   if (
     stats.isDirectory() ||
-    [".ts", ".js", ".tsx", ".jsx", ".mjs", ".cjs", ".json", ".md", ".css", ".html", ".yml", ".yaml"]
-      .includes(ext)
+    [
+      ".ts",
+      ".js",
+      ".tsx",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".json",
+      ".md",
+      ".css",
+      ".html",
+      ".yml",
+      ".yaml",
+    ].includes(ext)
   ) {
     cmd = "prettier";
     cmdArgs = [check_only ? "--check" : "--write", resolvedTarget];
@@ -225,7 +235,7 @@ async function handleRunTests(args: z.infer<typeof runTestsSchema>) {
 async function handleGithubActions(args: z.infer<typeof manageGithubActionsSchema>) {
   const { action, workflow, branch } = args;
 
-  let cmd = "gh";
+  const cmd = "gh";
   let cmdArgs: string[] = [];
 
   switch (action) {

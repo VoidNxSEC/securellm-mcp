@@ -82,10 +82,7 @@ import {
 import { socketDebugReportTool, handleSocketDebugReport } from "./tools/socket-debug-report.js";
 import { zodToMcpSchema } from "./utils/schema-converter.js";
 import { devTools, devToolHandlers } from "./tools/dev-tools.js";
-import {
-  professionalTools,
-  createProfessionalToolHandlers,
-} from "./tools/professional-tools.js";
+import { professionalTools, createProfessionalToolHandlers } from "./tools/professional-tools.js";
 import {
   sshExecuteSchema,
   sshFileTransferSchema,
@@ -125,10 +122,7 @@ import { ADRHygieneMiddleware } from "./middleware/adr-hygiene.js";
 import crypto from "crypto";
 import { DisposableRegistry } from "./utils/disposable.js";
 import { ResponseSummarizer } from "./utils/response-summarizer.js";
-import {
-  shouldAttemptSemanticCache,
-  shouldStoreSemanticCache,
-} from "./utils/cache-policy.js";
+import { shouldAttemptSemanticCache, shouldStoreSemanticCache } from "./utils/cache-policy.js";
 import { ToolGovernanceManager } from "./utils/tool-governance.js";
 
 const shouldPrettyPrint = process.env.NODE_ENV === "development";
@@ -411,7 +405,8 @@ class SecureLLMBridgeMCPServer {
       logger.info({ dbPath: KNOWLEDGE_DB_PATH }, "Knowledge database initialized");
 
       // Initialize Project Watcher if we have a project root
-      // IMPORTANT: Skip system directories like /etc/nixos - too large and inappropriate for watching
+      // System directories like /etc/nixos are skipped by default to avoid
+      // watching huge file trees, but can be explicitly enabled via env var.
       const isSystemDir =
         this.projectRoot.startsWith("/etc") ||
         this.projectRoot.startsWith("/usr") ||
@@ -419,7 +414,14 @@ class SecureLLMBridgeMCPServer {
         this.projectRoot.startsWith("/proc") ||
         this.projectRoot === "/nix/store";
 
-      if (this.projectRoot && !isSystemDir && process.env.ENABLE_PROJECT_WATCHER !== "false") {
+      const watcherExplicitlyEnabled = process.env.ENABLE_PROJECT_WATCHER === "true";
+      const watcherExplicitlyDisabled = process.env.ENABLE_PROJECT_WATCHER === "false";
+      const shouldStartWatcher =
+        this.projectRoot &&
+        (!isSystemDir || watcherExplicitlyEnabled) &&
+        !watcherExplicitlyDisabled;
+
+      if (shouldStartWatcher) {
         this.projectWatcher = new ProjectWatcher(this.projectRoot);
         this.projectWatcher.setDatabase(this.db);
         this.projectWatcher.start();
@@ -431,14 +433,21 @@ class SecureLLMBridgeMCPServer {
         });
 
         // Initialize Proactive Logic components
-        this.contextManager = new ContextManager(this.projectRoot, this.db as any); // Cast to any to avoid type mismatch if different SQLite wrapper
+        // These are always safe to initialize - they operate on the knowledge DB,
+        // not on the filesystem directly. Decoupled from ProjectWatcher lifecycle.
+        this.contextManager = new ContextManager(this.projectRoot, this.db as any);
         this.preActionInterceptor = new PreActionInterceptor(this.contextManager);
         this.adrHygieneMiddleware = new ADRHygieneMiddleware();
         logger.info("Proactive Logic Layer initialized (incl. ADR Hygiene)");
-      } else if (isSystemDir) {
+      } else if (isSystemDir && !watcherExplicitlyEnabled) {
+        // Even without filesystem watcher, we can still initialize the reasoning
+        // layer - it works purely off the knowledge DB, not the filesystem.
+        this.contextManager = new ContextManager(this.projectRoot, this.db as any);
+        this.preActionInterceptor = new PreActionInterceptor(this.contextManager);
+        this.adrHygieneMiddleware = new ADRHygieneMiddleware();
         logger.info(
           { projectRoot: this.projectRoot },
-          "Skipping ProjectWatcher for system directory - use ENABLE_PROJECT_WATCHER=true to override"
+          "ProjectWatcher skipped (system dir), but Proactive Logic Layer initialized (DB-only mode). Use ENABLE_PROJECT_WATCHER=true for full filesystem watching."
         );
       }
     } catch (error) {
@@ -482,350 +491,350 @@ class SecureLLMBridgeMCPServer {
 
   private buildToolCatalog(): ExtendedTool[] {
     return [
-        {
-          name: "server_status",
-          description: "Get current MCP server status, feature flags, and runtime health",
-          defer_loading: true,
-          inputSchema: {
-            type: "object",
-            properties: {
-              include_metrics: {
-                type: "boolean",
-                description: "Include per-tool metrics and queue state",
-                default: true,
-              },
+      {
+        name: "server_status",
+        description: "Get current MCP server status, feature flags, and runtime health",
+        defer_loading: true,
+        inputSchema: {
+          type: "object",
+          properties: {
+            include_metrics: {
+              type: "boolean",
+              description: "Include per-tool metrics and queue state",
+              default: true,
             },
           },
         },
-        {
-          name: "provider_test",
-          description: "Test LLM provider connectivity",
-          defer_loading: true,
-          inputSchema: {
-            type: "object",
-            properties: {
-              provider: {
-                type: "string",
-                description: "Provider name (deepseek, openai, anthropic, ollama)",
-                enum: ["deepseek", "openai", "anthropic", "ollama"],
-              },
-              prompt: {
-                type: "string",
-                description: "Test prompt to send to the provider",
-              },
-              model: {
-                type: "string",
-                description: "Model name (optional, uses default if not specified)",
-              },
+      },
+      {
+        name: "provider_test",
+        description: "Test LLM provider connectivity",
+        defer_loading: true,
+        inputSchema: {
+          type: "object",
+          properties: {
+            provider: {
+              type: "string",
+              description: "Provider name (deepseek, openai, anthropic, ollama)",
+              enum: ["deepseek", "openai", "anthropic", "ollama"],
             },
-            required: ["provider", "prompt"],
-          },
-        },
-        {
-          name: "security_audit",
-          description: "Audit project configuration security",
-          defer_loading: true,
-          inputSchema: {
-            type: "object",
-            properties: {
-              config_file: {
-                type: "string",
-                description: "Path to configuration file to audit",
-              },
+            prompt: {
+              type: "string",
+              description: "Test prompt to send to the provider",
             },
-            required: ["config_file"],
-          },
-        },
-        {
-          name: "rate_limit_check",
-          description: "Check provider rate limit status",
-          defer_loading: true,
-          inputSchema: {
-            type: "object",
-            properties: {
-              provider: {
-                type: "string",
-                description: "Provider name to check",
-                enum: ["deepseek", "openai", "anthropic", "ollama"],
-              },
+            model: {
+              type: "string",
+              description: "Model name (optional, uses default if not specified)",
             },
-            required: ["provider"],
           },
+          required: ["provider", "prompt"],
         },
-        {
-          name: "build_and_test",
-          description: "Build project and run tests",
-          defer_loading: true,
-          inputSchema: {
-            type: "object",
-            properties: {
-              test_type: {
-                type: "string",
-                description: "Type of tests to run",
-                enum: ["unit", "integration", "all"],
-              },
+      },
+      {
+        name: "security_audit",
+        description: "Audit project configuration security",
+        defer_loading: true,
+        inputSchema: {
+          type: "object",
+          properties: {
+            config_file: {
+              type: "string",
+              description: "Path to configuration file to audit",
             },
-            required: ["test_type"],
           },
+          required: ["config_file"],
         },
-        {
-          name: "provider_config_validate",
-          description: "Validate provider config format",
-          defer_loading: true,
-          inputSchema: {
-            type: "object",
-            properties: {
-              provider: {
-                type: "string",
-                description: "Provider name",
-              },
-              config_data: {
-                type: "string",
-                description: "Configuration data in TOML format",
-              },
+      },
+      {
+        name: "rate_limit_check",
+        description: "Check provider rate limit status",
+        defer_loading: true,
+        inputSchema: {
+          type: "object",
+          properties: {
+            provider: {
+              type: "string",
+              description: "Provider name to check",
+              enum: ["deepseek", "openai", "anthropic", "ollama"],
             },
-            required: ["provider", "config_data"],
           },
+          required: ["provider"],
         },
-        {
-          name: "crypto_key_generate",
-          description: "Generate TLS certificates and keys",
-          defer_loading: true,
-          inputSchema: {
-            type: "object",
-            properties: {
-              key_type: {
-                type: "string",
-                description: "Type of key to generate",
-                enum: ["server", "client"],
-              },
-              output_path: {
-                type: "string",
-                description: "Directory path where keys should be saved",
-              },
+      },
+      {
+        name: "build_and_test",
+        description: "Build project and run tests",
+        defer_loading: true,
+        inputSchema: {
+          type: "object",
+          properties: {
+            test_type: {
+              type: "string",
+              description: "Type of tests to run",
+              enum: ["unit", "integration", "all"],
             },
-            required: ["key_type", "output_path"],
           },
+          required: ["test_type"],
         },
-        {
-          name: "rate_limiter_status",
-          description: "Get rate limiter status for all providers",
-          defer_loading: true,
-          allowed_callers: ["code_execution_20250825"],
-          inputSchema: {
-            type: "object",
-            properties: {},
-          },
-        },
-        {
-          name: "cache_stats",
-          description: "Get cache statistics (Semantic Cache, Nix Package Cache)",
-          defer_loading: true,
-          inputSchema: {
-            type: "object",
-            properties: {},
-          },
-        },
-        {
-          name: "package_diagnose",
-          description: "Diagnose package configuration issues",
-          defer_loading: true,
-          inputSchema: {
-            type: "object",
-            properties: {
-              package_path: {
-                type: "string",
-                description: "Path to the package .nix file",
-              },
-              package_type: {
-                type: "string",
-                enum: ["tar", "deb", "js"],
-                description: "Type of package system",
-              },
-              build_test: {
-                type: "boolean",
-                description: "Whether to perform a test build",
-                default: true,
-              },
+      },
+      {
+        name: "provider_config_validate",
+        description: "Validate provider config format",
+        defer_loading: true,
+        inputSchema: {
+          type: "object",
+          properties: {
+            provider: {
+              type: "string",
+              description: "Provider name",
             },
-            required: ["package_path", "package_type"],
+            config_data: {
+              type: "string",
+              description: "Configuration data in TOML format",
+            },
           },
+          required: ["provider", "config_data"],
         },
-        {
-          name: "package_download",
-          description: "Download package from GitHub/npm/URL with automatic hash calculation",
-          defer_loading: true,
-          inputSchema: {
-            type: "object",
-            properties: {
-              package_name: {
-                type: "string",
-                description: "Name of the package",
-              },
-              package_type: {
-                type: "string",
-                enum: ["tar", "deb", "js"],
-                description: "Type of package system",
-              },
-              source: {
-                type: "object",
-                properties: {
-                  type: {
-                    type: "string",
-                    enum: ["github_release", "npm", "url"],
-                    description: "Source type",
-                  },
-                  url: {
-                    type: "string",
-                    description: "Direct URL (for type: url)",
-                  },
-                  github: {
-                    type: "object",
-                    properties: {
-                      repo: { type: "string" },
-                      tag: { type: "string" },
-                      asset_pattern: { type: "string" },
-                    },
-                    required: ["repo"],
-                  },
-                  npm: {
-                    type: "object",
-                    properties: {
-                      package: { type: "string" },
-                      version: { type: "string" },
-                    },
-                    required: ["package"],
-                  },
+      },
+      {
+        name: "crypto_key_generate",
+        description: "Generate TLS certificates and keys",
+        defer_loading: true,
+        inputSchema: {
+          type: "object",
+          properties: {
+            key_type: {
+              type: "string",
+              description: "Type of key to generate",
+              enum: ["server", "client"],
+            },
+            output_path: {
+              type: "string",
+              description: "Directory path where keys should be saved",
+            },
+          },
+          required: ["key_type", "output_path"],
+        },
+      },
+      {
+        name: "rate_limiter_status",
+        description: "Get rate limiter status for all providers",
+        defer_loading: true,
+        allowed_callers: ["code_execution_20250825"],
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      },
+      {
+        name: "cache_stats",
+        description: "Get cache statistics (Semantic Cache, Nix Package Cache)",
+        defer_loading: true,
+        inputSchema: {
+          type: "object",
+          properties: {},
+        },
+      },
+      {
+        name: "package_diagnose",
+        description: "Diagnose package configuration issues",
+        defer_loading: true,
+        inputSchema: {
+          type: "object",
+          properties: {
+            package_path: {
+              type: "string",
+              description: "Path to the package .nix file",
+            },
+            package_type: {
+              type: "string",
+              enum: ["tar", "deb", "js"],
+              description: "Type of package system",
+            },
+            build_test: {
+              type: "boolean",
+              description: "Whether to perform a test build",
+              default: true,
+            },
+          },
+          required: ["package_path", "package_type"],
+        },
+      },
+      {
+        name: "package_download",
+        description: "Download package from GitHub/npm/URL with automatic hash calculation",
+        defer_loading: true,
+        inputSchema: {
+          type: "object",
+          properties: {
+            package_name: {
+              type: "string",
+              description: "Name of the package",
+            },
+            package_type: {
+              type: "string",
+              enum: ["tar", "deb", "js"],
+              description: "Type of package system",
+            },
+            source: {
+              type: "object",
+              properties: {
+                type: {
+                  type: "string",
+                  enum: ["github_release", "npm", "url"],
+                  description: "Source type",
                 },
-                required: ["type"],
-              },
-            },
-            required: ["package_name", "package_type", "source"],
-          },
-        },
-        {
-          name: "package_configure",
-          description: "Generate Nix package configuration from downloaded file",
-          defer_loading: true,
-          inputSchema: {
-            type: "object",
-            properties: {
-              package_name: {
-                type: "string",
-                description: "Name of the package",
-              },
-              package_type: {
-                type: "string",
-                enum: ["tar", "deb", "js"],
-                description: "Type of package system",
-              },
-              storage_file: {
-                type: "string",
-                description: "Path to downloaded file in storage",
-              },
-              sha256: {
-                type: "string",
-                description: "SHA256 hash of the file",
-              },
-              options: {
-                type: "object",
-                properties: {
-                  method: {
-                    type: "string",
-                    enum: ["auto", "native", "fhs"],
+                url: {
+                  type: "string",
+                  description: "Direct URL (for type: url)",
+                },
+                github: {
+                  type: "object",
+                  properties: {
+                    repo: { type: "string" },
+                    tag: { type: "string" },
+                    asset_pattern: { type: "string" },
                   },
-                  sandbox: { type: "boolean" },
-                  audit: { type: "boolean" },
-                  executable: { type: "string" },
-                  npm_flags: {
-                    type: "array",
-                    items: { type: "string" },
+                  required: ["repo"],
+                },
+                npm: {
+                  type: "object",
+                  properties: {
+                    package: { type: "string" },
+                    version: { type: "string" },
                   },
+                  required: ["package"],
                 },
               },
+              required: ["type"],
             },
-            required: ["package_name", "package_type", "storage_file", "sha256"],
           },
+          required: ["package_name", "package_type", "source"],
         },
-        // Add knowledge tools if enabled
-        ...(ENABLE_KNOWLEDGE && this.db ? knowledgeTools : []),
-        // Add Emergency Framework tools
-        ...emergencyTools,
-        // Add Laptop Defense Framework tools
-        ...laptopDefenseTools,
-        // Add Web Search tools
-        ...webSearchTools,
-        // Add Research Agent tool
-        researchAgentTool,
-        // Add ADR (Architecture Decision Records) tools
-        ...adrTools,
-        // Add Codebase Analysis Tools
-        {
-          name: "analyze_complexity",
-          description: "Analyze code complexity and file size statistics",
-          defer_loading: true,
-          inputSchema: zodToMcpSchema(analyzeComplexitySchema),
+      },
+      {
+        name: "package_configure",
+        description: "Generate Nix package configuration from downloaded file",
+        defer_loading: true,
+        inputSchema: {
+          type: "object",
+          properties: {
+            package_name: {
+              type: "string",
+              description: "Name of the package",
+            },
+            package_type: {
+              type: "string",
+              enum: ["tar", "deb", "js"],
+              description: "Type of package system",
+            },
+            storage_file: {
+              type: "string",
+              description: "Path to downloaded file in storage",
+            },
+            sha256: {
+              type: "string",
+              description: "SHA256 hash of the file",
+            },
+            options: {
+              type: "object",
+              properties: {
+                method: {
+                  type: "string",
+                  enum: ["auto", "native", "fhs"],
+                },
+                sandbox: { type: "boolean" },
+                audit: { type: "boolean" },
+                executable: { type: "string" },
+                npm_flags: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+              },
+            },
+          },
+          required: ["package_name", "package_type", "storage_file", "sha256"],
         },
-        {
-          name: "find_dead_code",
-          description: "Heuristic search for unused exports (potentially dead code)",
-          defer_loading: true,
-          inputSchema: zodToMcpSchema(findDeadCodeSchema),
-        },
-        // Advanced Code Analysis Tool (low-friction debugging)
-        advancedCodeAnalysisTool,
-        // Read-only socket debugging report (for human decision-making)
-        socketDebugReportTool,
-        // Add Secure Execution Tool
-        executeInSandboxTool,
-        // Add SSH Tools
-        {
-          name: sshExecuteSchema.name,
-          description: sshExecuteSchema.description,
-          defer_loading: true,
-          inputSchema: sshExecuteSchema.inputSchema,
-        },
-        {
-          name: sshFileTransferSchema.name,
-          description: sshFileTransferSchema.description,
-          defer_loading: true,
-          inputSchema: sshFileTransferSchema.inputSchema,
-        },
-        {
-          name: sshMaintenanceCheckSchema.name,
-          description: sshMaintenanceCheckSchema.description,
-          defer_loading: true,
-          inputSchema: sshMaintenanceCheckSchema.inputSchema,
-        },
-        {
-          name: sshTunnelSchema.name,
-          description: sshTunnelSchema.description,
-          defer_loading: true,
-          inputSchema: sshTunnelSchema.inputSchema,
-        },
-        {
-          name: sshJumpHostSchema.name,
-          description: sshJumpHostSchema.description,
-          defer_loading: true,
-          inputSchema: sshJumpHostSchema.inputSchema,
-        },
-        {
-          name: sshSessionSchema.name,
-          description: sshSessionSchema.description,
-          defer_loading: true,
-          inputSchema: sshSessionSchema.inputSchema,
-        },
-        // Add DX Tools
-        ...devTools,
-        // Add Professional Operations Tools
-        ...professionalTools,
-        // Add Browser Tools
-        browserLaunchAdvancedSchema,
-        browserExtractDataSchema,
-        browserInteractFormSchema,
-        browserMonitorChangesSchema,
-        browserSearchAggregateSchema,
-      ] as ExtendedTool[];
+      },
+      // Add knowledge tools if enabled
+      ...(ENABLE_KNOWLEDGE && this.db ? knowledgeTools : []),
+      // Add Emergency Framework tools
+      ...emergencyTools,
+      // Add Laptop Defense Framework tools
+      ...laptopDefenseTools,
+      // Add Web Search tools
+      ...webSearchTools,
+      // Add Research Agent tool
+      researchAgentTool,
+      // Add ADR (Architecture Decision Records) tools
+      ...adrTools,
+      // Add Codebase Analysis Tools
+      {
+        name: "analyze_complexity",
+        description: "Analyze code complexity and file size statistics",
+        defer_loading: true,
+        inputSchema: zodToMcpSchema(analyzeComplexitySchema),
+      },
+      {
+        name: "find_dead_code",
+        description: "Heuristic search for unused exports (potentially dead code)",
+        defer_loading: true,
+        inputSchema: zodToMcpSchema(findDeadCodeSchema),
+      },
+      // Advanced Code Analysis Tool (low-friction debugging)
+      advancedCodeAnalysisTool,
+      // Read-only socket debugging report (for human decision-making)
+      socketDebugReportTool,
+      // Add Secure Execution Tool
+      executeInSandboxTool,
+      // Add SSH Tools
+      {
+        name: sshExecuteSchema.name,
+        description: sshExecuteSchema.description,
+        defer_loading: true,
+        inputSchema: sshExecuteSchema.inputSchema,
+      },
+      {
+        name: sshFileTransferSchema.name,
+        description: sshFileTransferSchema.description,
+        defer_loading: true,
+        inputSchema: sshFileTransferSchema.inputSchema,
+      },
+      {
+        name: sshMaintenanceCheckSchema.name,
+        description: sshMaintenanceCheckSchema.description,
+        defer_loading: true,
+        inputSchema: sshMaintenanceCheckSchema.inputSchema,
+      },
+      {
+        name: sshTunnelSchema.name,
+        description: sshTunnelSchema.description,
+        defer_loading: true,
+        inputSchema: sshTunnelSchema.inputSchema,
+      },
+      {
+        name: sshJumpHostSchema.name,
+        description: sshJumpHostSchema.description,
+        defer_loading: true,
+        inputSchema: sshJumpHostSchema.inputSchema,
+      },
+      {
+        name: sshSessionSchema.name,
+        description: sshSessionSchema.description,
+        defer_loading: true,
+        inputSchema: sshSessionSchema.inputSchema,
+      },
+      // Add DX Tools
+      ...devTools,
+      // Add Professional Operations Tools
+      ...professionalTools,
+      // Add Browser Tools
+      browserLaunchAdvancedSchema,
+      browserExtractDataSchema,
+      browserInteractFormSchema,
+      browserMonitorChangesSchema,
+      browserSearchAggregateSchema,
+    ] as ExtendedTool[]; // end buildToolCatalog
   }
 
   private setupToolHandlers() {

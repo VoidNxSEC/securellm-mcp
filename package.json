@@ -25,8 +25,11 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc && chmod +x build/src/index.js",
+    "build": "tsc && chmod +x build/src/index.js && npx tsx scripts/curate-tools.ts",
     "dev": "nodemon --watch src --ext ts --exec 'npm run build && node build/src/index.js'",
+    "curate": "npx tsx scripts/curate-tools.ts",
+    "build:manifest": "npx tsx scripts/generate-mcp-manifest.ts",
+    "check:manifest": "npx tsx scripts/generate-mcp-manifest.ts --check",
     "watch": "tsc --watch",
     "prepare": "npm run build",
     "test": "npm run build && node --test build/tests/**/*.test.js",
