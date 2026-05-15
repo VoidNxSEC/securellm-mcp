@@ -122,6 +122,10 @@ import { ADRHygieneMiddleware } from "./middleware/adr-hygiene.js";
 import { sessionBridgeTool, handleSessionBridge } from "./tools/session-bridge.js";
 import { linuxDebuggingTools, handleJournalAnalyze, handleProcessInspect, handleSystemdDelta, handleNetworkDiag, handleDiskAnalyze, handleSecurityScan } from "./tools/linux-debugging.js";
 import { nvimContextTool, handleNvimContext } from "./tools/nvim-context.js";
+import { nixDaemonTool, handleNixDaemon } from "./tools/nix-daemon.js";
+import { gitSherlockTool, handleGitSherlock } from "./tools/git-sherlock.js";
+import { notifyHookTool, handleNotifyHook } from "./tools/notify-hook.js";
+import { metaToolTool, handleMetaTool } from "./tools/meta-tool.js";
 import crypto from "crypto";
 import { DisposableRegistry } from "./utils/disposable.js";
 import { ResponseSummarizer } from "./utils/response-summarizer.js";
@@ -839,6 +843,10 @@ class SecureLLMBridgeMCPServer {
       browserSearchAggregateSchema,
       sessionBridgeTool,
       nvimContextTool,
+      nixDaemonTool,
+      gitSherlockTool,
+      notifyHookTool,
+      metaToolTool,
       ...linuxDebuggingTools,
     ] as ExtendedTool[]; // end buildToolCatalog
   }
@@ -1224,6 +1232,27 @@ class SecureLLMBridgeMCPServer {
               case "session_bridge":
               case "nvim_context":
                 toolResult = await handleNvimContext(args as any);
+                break;
+              case "nix_daemon":
+                toolResult = await handleNixDaemon(args as any);
+                break;
+              case "git_sherlock":
+                toolResult = await handleGitSherlock(args as any);
+                break;
+              case "notify_hook":
+                toolResult = await handleNotifyHook(args as any);
+                break;
+              case "meta_tool":
+                toolResult = await handleMetaTool(args as any, async (toolName, toolArgs) => {
+                  // Execute a tool dynamically — reuses the same governance/cache/dedup pipeline
+                  const fakeHandler = new Promise((resolve, reject) => {
+                    try {
+                      const handler = (this as any)._executeToolDirect(toolName, toolArgs);
+                      resolve(handler);
+                    } catch(e) { reject(e); }
+                  });
+                  return fakeHandler;
+                });
                 break;
                 toolResult = await handleSessionBridge(args as any, {
                   db: this.db,
