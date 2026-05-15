@@ -60,26 +60,26 @@
 - [ ] Schema Zod + handler
 - [ ] Testes unitários
 
-### 3.3 nix_daemon (ADR-0004)
+### 3.3 nix_daemon (ADR-0004) ✅ IMPLEMENTADO
 - [ ] Criar `src/tools/nix-daemon.ts`
 - [ ] `store_health`, `gc`, `diff_generation`, `list_generations`, `optimise`, `verify`
 - [ ] Schema Zod + handler
 - [ ] Testes unitários
 
-### 3.4 git_sherlock (ADR-0006)
+### 3.4 git_sherlock (ADR-0006) ✅ IMPLEMENTADO
 - [ ] Criar `src/tools/git-sherlock.ts`
 - [ ] `blame_heatmap`, `what_changed`, `review_uncommitted`, `churn`, `authors`, `file_history`
 - [ ] Schema Zod + handler
 - [ ] Testes unitários
 
-### 3.5 notify_hook (ADR-0005)
+### 3.5 notify_hook (ADR-0005) ✅ IMPLEMENTADO
 - [ ] Criar `src/tools/notify-hook.ts`
 - [ ] `send`: ntfy.sh, Gotify, Discord, notify-send
 - [ ] `watch`: monitor PID
 - [ ] Schema Zod + handler
 - [ ] Testes unitários
 
-### 3.6 meta_tool (ADR-0007) — POR ÚLTIMO
+### 3.6 meta_tool (ADR-0007) ✅ IMPLEMENTADO
 - [ ] Criar `src/tools/meta-tool.ts`
 - [ ] Parser de referências ($prefix.field)
 - [ ] Executor sequencial + paralelo
