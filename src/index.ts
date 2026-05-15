@@ -119,6 +119,9 @@ import { ToolExecutionLimiter } from "./middleware/tool-limiter.js";
 import { RequestDeduplicator, stableStringify } from "./middleware/request-deduplicator.js";
 import { adrTools, adrHandlers } from "./tools/adr/index.js";
 import { ADRHygieneMiddleware } from "./middleware/adr-hygiene.js";
+import { sessionBridgeTool, handleSessionBridge } from "./tools/session-bridge.js";
+import { linuxDebuggingTools, handleJournalAnalyze, handleProcessInspect, handleSystemdDelta, handleNetworkDiag, handleDiskAnalyze, handleSecurityScan } from "./tools/linux-debugging.js";
+import { nvimContextTool, handleNvimContext } from "./tools/nvim-context.js";
 import crypto from "crypto";
 import { DisposableRegistry } from "./utils/disposable.js";
 import { ResponseSummarizer } from "./utils/response-summarizer.js";
@@ -834,6 +837,9 @@ class SecureLLMBridgeMCPServer {
       browserInteractFormSchema,
       browserMonitorChangesSchema,
       browserSearchAggregateSchema,
+      sessionBridgeTool,
+      nvimContextTool,
+      ...linuxDebuggingTools,
     ] as ExtendedTool[]; // end buildToolCatalog
   }
 
@@ -1215,6 +1221,34 @@ class SecureLLMBridgeMCPServer {
                 toolResult = await new BrowserSearchAggregateTool().execute(args as any);
                 break;
 
+              case "session_bridge":
+              case "nvim_context":
+                toolResult = await handleNvimContext(args as any);
+                break;
+                toolResult = await handleSessionBridge(args as any, {
+                  db: this.db,
+                  semanticCache: this.semanticCache,
+                  projectRoot: this.projectRoot,
+                });
+                break;
+              case "journal_analyze":
+                toolResult = await handleJournalAnalyze(args as any);
+                break;
+              case "process_inspect":
+                toolResult = await handleProcessInspect(args as any);
+                break;
+              case "systemd_delta":
+                toolResult = await handleSystemdDelta(args as any);
+                break;
+              case "network_diag":
+                toolResult = await handleNetworkDiag(args as any);
+                break;
+              case "disk_analyze":
+                toolResult = await handleDiskAnalyze(args as any);
+                break;
+              case "security_scan":
+                toolResult = await handleSecurityScan(args as any);
+                break;
               default:
                 throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
             }
