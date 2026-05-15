@@ -41,7 +41,7 @@
 
 ## Fase 3: Novas Tools (ADR-0002 a 0007) 🟡
 
-### 3.1 session_bridge (ADR-0003) — PRIORIDADE MÁXIMA
+### 3.1 session_bridge (ADR-0003) ✅ IMPLEMENTADO
 - [ ] Criar `src/tools/session-bridge.ts`
 - [ ] `recall`: FTS5 local + Cerebro API (`GET localhost:8009/api/rag/query`)
 - [ ] `snapshot`: inserir knowledge DB + opcional Cerebro ingest
@@ -52,7 +52,7 @@
 - [ ] Registrar no `buildToolCatalog()` e `setupToolHandlers()`
 - [ ] Testes unitários
 
-### 3.2 nvim_context (ADR-0002)
+### 3.2 nvim_context (ADR-0002) ✅ IMPLEMENTADO
 - [ ] Criar `src/tools/nvim-context.ts`
 - [ ] Conexão socket UNIX + msgpack-RPC
 - [ ] `get_buffer`, `get_selection`, `get_diagnostics`, `get_visible_range`
