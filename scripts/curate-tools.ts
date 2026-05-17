@@ -19,7 +19,7 @@ const REMOVED_TOOLS = [
 ];
 
 const DRY_RUN = process.argv.includes("--dry-run");
-const BUILD_PATH = "build/src/index.js";
+const BUILD_PATH = "build/src/server/tool-registry.js";
 
 let content = readFileSync(BUILD_PATH, "utf-8");
 

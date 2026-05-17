@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+// Load SOPS-encrypted secrets into process.env before anything reads it
+import { loadSecrets } from "./config/secrets-loader.js";
+loadSecrets();
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -10,17 +14,9 @@ import {
   ErrorCode,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { exec } from "child_process";
-import { promisify } from "util";
 import * as fs from "fs/promises";
 import { createKnowledgeDatabase } from "./knowledge/database.js";
-import { knowledgeTools } from "./tools/knowledge.js";
-import type {
-  KnowledgeDatabase,
-  CreateSessionInput,
-  SaveKnowledgeInput,
-  SearchKnowledgeInput,
-} from "./types/knowledge.js";
+import { type KnowledgeDatabase, type CreateSessionInput, type SaveKnowledgeInput, type SearchKnowledgeInput } from "./types/knowledge.js";
 import type { ExtendedTool } from "./types/mcp-tool-extensions.js";
 import { GuideManager } from "./resources/guides.js";
 import * as path from "path";
@@ -33,83 +29,6 @@ import { detectProjectRoot } from "./utils/project-detection.js";
 import { detectNixOSHost } from "./utils/host-detection.js";
 import { logger, logStartupError } from "./utils/logger.js";
 import { ProjectWatcher } from "./system/watcher.js";
-import {
-  emergencyTools,
-  handleEmergencyStatus,
-  handleEmergencyAbort,
-  handleEmergencyCooldown,
-  handleEmergencyNuke,
-  handleEmergencySwap,
-  handleSystemHealthCheck,
-  handleSafeRebuildCheck,
-} from "./tools/emergency/index.js";
-import {
-  laptopDefenseTools,
-  handleThermalCheck,
-  handleRebuildSafetyCheck,
-  handleThermalForensics,
-  handleThermalWarroom,
-  handleLaptopVerdict,
-  handleFullInvestigation,
-  handleForceCooldown,
-  handleResetPerformance,
-} from "./tools/laptop-defense/index.js";
-import {
-  webSearchTools,
-  handleWebSearch,
-  handleNixSearch,
-  handleGithubSearch,
-  handleTechNewsSearch,
-  handleDiscourseSearch,
-  handleStackOverflowSearch,
-  handleOsintDns,
-  handleOsintSubdomains,
-  handleOsintPortScan,
-  handleWebCrawl,
-  getNixCacheStats,
-} from "./tools/web-search.js";
-import { researchAgentTool, handleResearchAgent } from "./tools/research-agent.js";
-import {
-  analyzeComplexity,
-  findDeadCode,
-  analyzeComplexitySchema,
-  findDeadCodeSchema,
-} from "./tools/codebase-analysis.js";
-import {
-  advancedCodeAnalysisTool,
-  handleAdvancedCodeAnalysis,
-} from "./tools/advanced-code-analysis.js";
-import { socketDebugReportTool, handleSocketDebugReport } from "./tools/socket-debug-report.js";
-import { zodToMcpSchema } from "./utils/schema-converter.js";
-import { devTools, devToolHandlers } from "./tools/dev-tools.js";
-import { professionalTools, createProfessionalToolHandlers } from "./tools/professional-tools.js";
-import {
-  sshExecuteSchema,
-  sshFileTransferSchema,
-  sshMaintenanceCheckSchema,
-  sshTunnelSchema,
-  sshJumpHostSchema,
-  sshSessionSchema,
-  SSHExecuteTool,
-  SSHFileTransferTool,
-  SSHMaintenanceCheckTool,
-  SSHTunnelTool,
-  SSHJumpHostTool,
-  SSHSessionTool,
-} from "./tools/ssh/index.js";
-import { executeInSandboxTool, handleExecuteInSandbox } from "./tools/secure-execution.js";
-import {
-  BrowserLaunchAdvancedTool,
-  BrowserExtractDataTool,
-  BrowserInteractFormTool,
-  BrowserMonitorChangesTool,
-  BrowserSearchAggregateTool,
-  browserLaunchAdvancedSchema,
-  browserExtractDataSchema,
-  browserInteractFormSchema,
-  browserMonitorChangesSchema,
-  browserSearchAggregateSchema,
-} from "./tools/browser/index.js";
 import { SemanticCache } from "./middleware/semantic-cache.js";
 import { ContextManager } from "./reasoning/context-manager.js";
 import { PreActionInterceptor } from "./reasoning/proactive/pre-action-interceptor.js";
@@ -117,44 +36,33 @@ import { stringifyGeneric } from "./utils/json-schemas.js";
 import { ToolMetricsCollector } from "./middleware/tool-metrics.js";
 import { ToolExecutionLimiter } from "./middleware/tool-limiter.js";
 import { RequestDeduplicator, stableStringify } from "./middleware/request-deduplicator.js";
-import { adrTools, adrHandlers } from "./tools/adr/index.js";
 import { ADRHygieneMiddleware } from "./middleware/adr-hygiene.js";
-import { sessionBridgeTool, handleSessionBridge } from "./tools/session-bridge.js";
-import { linuxDebuggingTools, handleJournalAnalyze, handleProcessInspect, handleSystemdDelta, handleNetworkDiag, handleDiskAnalyze, handleSecurityScan } from "./tools/linux-debugging.js";
-import { nvimContextTool, handleNvimContext } from "./tools/nvim-context.js";
-import { nixDaemonTool, handleNixDaemon } from "./tools/nix-daemon.js";
-import { gitSherlockTool, handleGitSherlock } from "./tools/git-sherlock.js";
-import { notifyHookTool, handleNotifyHook } from "./tools/notify-hook.js";
-import { metaToolTool, handleMetaTool } from "./tools/meta-tool.js";
-import crypto from "crypto";
-import { DisposableRegistry } from "./utils/disposable.js";
+import { createProfessionalToolHandlers } from "./tools/professional-tools.js";
 import { ResponseSummarizer } from "./utils/response-summarizer.js";
 import { shouldAttemptSemanticCache, shouldStoreSemanticCache } from "./utils/cache-policy.js";
 import { ToolGovernanceManager } from "./utils/tool-governance.js";
+import { DisposableRegistry } from "./utils/disposable.js";
+import crypto from "crypto";
+
+import { buildToolCatalog } from "./server/tool-registry.js";
+import { buildDispatchMap, type DispatchDeps } from "./server/dispatcher.js";
+import type { McpToolResult } from "./server/wrap.js";
+import { usageTracker } from "./telemetry/usage-tracker.js";
 
 const shouldPrettyPrint = process.env.NODE_ENV === "development";
 const SERVER_VERSION = process.env.SECURELLM_MCP_VERSION || "2.1.0";
 
 function stringify(obj: unknown): string {
-  if (shouldPrettyPrint) {
-    return JSON.stringify(obj, null, 2);
-  }
+  if (shouldPrettyPrint) return JSON.stringify(obj, null, 2);
   return stringifyGeneric(obj as Record<string, unknown>);
 }
 
-const execAsync = promisify(exec);
-
-// Legacy constants for backward compatibility - will be overridden by auto-detection
 const PROJECT_ROOT = process.env.PROJECT_ROOT || process.cwd();
 const KNOWLEDGE_DB_PATH =
   process.env.KNOWLEDGE_DB_PATH ||
-  path.join(
-    process.env.HOME || process.env.USERPROFILE || ".",
-    ".local/share/securellm/knowledge.db"
-  );
+  path.join(process.env.HOME || process.env.USERPROFILE || ".", ".local/share/securellm/knowledge.db");
 const ENABLE_KNOWLEDGE = process.env.ENABLE_KNOWLEDGE !== "false";
 
-// Provider API keys from environment (loaded from SOPS-decrypted secrets)
 const API_KEYS = {
   anthropic: process.env.ANTHROPIC_API_KEY || "",
   openai: process.env.OPENAI_API_KEY || "",
@@ -166,34 +74,6 @@ const API_KEYS = {
   nvidia: process.env.NVIDIA_API_KEY || "",
   replicate: process.env.REPLICATE_API_TOKEN || "",
 };
-
-interface ProviderTestArgs {
-  provider: string;
-  prompt: string;
-  model?: string;
-}
-
-interface SecurityAuditArgs {
-  config_file: string;
-}
-
-interface RateLimitCheckArgs {
-  provider: string;
-}
-
-interface BuildAndTestArgs {
-  test_type: "unit" | "integration" | "all";
-}
-
-interface ProviderConfigValidateArgs {
-  provider: string;
-  config_data: string;
-}
-
-interface CryptoKeyGenerateArgs {
-  key_type: "server" | "client";
-  output_path: string;
-}
 
 class SecureLLMBridgeMCPServer {
   private server: Server;
@@ -217,34 +97,23 @@ class SecureLLMBridgeMCPServer {
   private professionalToolHandlers: ReturnType<typeof createProfessionalToolHandlers>;
   private toolGovernance: ToolGovernanceManager;
 
-  /**
-   * Parse tool configuration from environment variable
-   * Format: "tool1:value1,tool2:value2"
-   */
   private parseToolConfig(envValue?: string): Record<string, number> {
     if (!envValue) return {};
     const config: Record<string, number> = {};
-    const pairs = envValue.split(",");
-    for (const pair of pairs) {
+    for (const pair of envValue.split(",")) {
       const [tool, value] = pair.split(":").map((s) => s.trim());
       if (tool && value) {
         const numValue = parseInt(value, 10);
-        if (!isNaN(numValue)) {
-          config[tool] = numValue;
-        }
+        if (!isNaN(numValue)) config[tool] = numValue;
       }
     }
     return config;
   }
 
   constructor() {
-    // Initialize smart rate limiter for API protection
-    // Convert Record to Map for SmartRateLimiter
     const configMap = new Map(Object.entries(RATE_LIMIT_CONFIGS));
     this.rateLimiter = new SmartRateLimiter(configMap);
     this.guideManager = new GuideManager();
-
-    // Initialize performance optimization components
     this.toolMetricsCollector = new ToolMetricsCollector();
     this.toolLimiter = new ToolExecutionLimiter({
       globalMaxConcurrency: parseInt(process.env.TOOL_LIMITER_GLOBAL_MAX_CONCURRENCY || "50", 10),
@@ -261,21 +130,12 @@ class SecureLLMBridgeMCPServer {
     this.professionalToolHandlers = createProfessionalToolHandlers({
       getProjectRoot: () => this.projectRoot,
       getServerStatus: (includeMetrics: boolean) => this.buildServerStatus(includeMetrics),
-      getToolGovernanceSummary: (includeTools: boolean) =>
-        this.buildToolGovernanceSummary(includeTools),
+      getToolGovernanceSummary: (includeTools: boolean) => this.buildToolGovernanceSummary(includeTools),
     });
 
     this.server = new Server(
-      {
-        name: "securellm-mcp",
-        version: SERVER_VERSION,
-      },
-      {
-        capabilities: {
-          tools: {},
-          resources: {},
-        },
-      }
+      { name: "securellm-mcp", version: SERVER_VERSION },
+      { capabilities: { tools: {}, resources: {} } }
     );
 
     this.setupToolHandlers();
@@ -283,48 +143,30 @@ class SecureLLMBridgeMCPServer {
 
     this.server.onerror = (error) => logger.error({ err: error }, "MCP server error");
 
-    // Register core resources for cleanup (order matters: first registered = last disposed)
     this.disposables.register("mcp-server", () => this.server.close());
     this.disposables.register("request-deduplicator", () => this.requestDeduplicator.close());
+    this.disposables.register("usage-tracker", () => usageTracker.close());
 
-    // Register shutdown handlers for graceful cleanup
     const shutdownHandler = () => {
       logger.info("Received shutdown signal, cleaning up resources");
-
       this.disposables
         .disposeAll()
-        .then(() => {
-          process.exit(0);
-        })
+        .then(() => process.exit(0))
         .catch((error) => {
           logger.error({ err: error }, "Error during shutdown");
           process.exit(1);
         });
     };
-
     process.on("SIGINT", shutdownHandler);
     process.on("SIGTERM", shutdownHandler);
   }
 
-  /**
-   * Initialize async resources (PROJECT_ROOT, hostname, knowledge DB)
-   * Must be called before starting the server
-   */
   async initialize(): Promise<void> {
     try {
-      // Detect project root
       const rootDetection = await detectProjectRoot();
       this.projectRoot = rootDetection.projectRoot;
-      logger.info(
-        {
-          projectRoot: this.projectRoot,
-          method: rootDetection.method,
-          flakeFound: rootDetection.flakeFound,
-        },
-        "Project root detected"
-      );
+      logger.info({ projectRoot: this.projectRoot, method: rootDetection.method, flakeFound: rootDetection.flakeFound }, "Project root detected");
 
-      // Log available API keys (masked)
       const availableKeys = Object.entries(API_KEYS)
         .filter(([_, key]) => key.length > 0)
         .map(([name, key]) => `${name}(${key.substring(0, 8)}...)`);
@@ -334,7 +176,6 @@ class SecureLLMBridgeMCPServer {
         logger.warn("No API keys loaded - provider tools will fail");
       }
 
-      // Detect NixOS hostname
       if (rootDetection.flakeFound) {
         try {
           const hostDetection = await detectNixOSHost(this.projectRoot);
@@ -343,55 +184,40 @@ class SecureLLMBridgeMCPServer {
             logger.warn({ warnings: hostDetection.warnings }, "Host detection warnings");
           }
         } catch (error) {
-          logger.warn(
-            { err: error, defaultHostname: "default" },
-            "Failed to detect NixOS host, using default hostname"
-          );
+          logger.warn({ err: error, defaultHostname: "default" }, "Failed to detect NixOS host, using default hostname");
           this.hostname = "default";
         }
       } else {
-        logger.warn(
-          { defaultHostname: "default" },
-          "No flake.nix found, using default hostname - package tools may not work correctly"
-        );
+        logger.warn({ defaultHostname: "default" }, "No flake.nix found, using default hostname");
         this.hostname = "default";
       }
 
-      // Initialize package tools with detected values
       this.packageDiagnose = new PackageDiagnoseTool(this.projectRoot, this.hostname);
       this.packageDownload = new PackageDownloadTool(this.projectRoot);
       this.packageConfigure = new PackageConfigureTool(this.projectRoot);
 
-      // Initialize knowledge database if enabled
-      if (ENABLE_KNOWLEDGE) {
-        this.initKnowledge();
-      }
+      if (ENABLE_KNOWLEDGE) this.initKnowledge();
 
-      // Initialize Semantic Cache
       this.initSemanticCache();
 
-      // Health probe for optional PHANTOM + CEREBRO-Reranker services.
-      // Non-fatal: offline services degrade gracefully (semantic cache falls back to
-      // SQLite embeddings; reranker falls back to keyword scoring).
       const [phantomResult, rerankerResult] = await Promise.allSettled([
-        fetch(`${process.env.PHANTOM_URL ?? "http://localhost:8008"}/health`, {
-          signal: AbortSignal.timeout(2_000),
-        })
+        fetch(`${process.env.PHANTOM_URL ?? "http://localhost:8008"}/health`, { signal: AbortSignal.timeout(2_000) })
           .then((r) => r.ok)
           .catch(() => false),
-        fetch(`${process.env.CEREBRO_RERANKER_URL ?? "http://localhost:8016"}/health`, {
-          signal: AbortSignal.timeout(2_000),
-        })
+        fetch(`${process.env.CEREBRO_RERANKER_URL ?? "http://localhost:8016"}/health`, { signal: AbortSignal.timeout(2_000) })
           .then((r) => r.ok)
           .catch(() => false),
       ]);
-      logger.info(
-        {
-          phantomHealth: phantomResult.status === "fulfilled" && phantomResult.value,
-          rerankerHealth: rerankerResult.status === "fulfilled" && rerankerResult.value,
-        },
-        "[Startup] Optional service health"
-      );
+
+      const phantomHealthy = phantomResult.status === "fulfilled" && phantomResult.value;
+      const rerankerHealthy = rerankerResult.status === "fulfilled" && rerankerResult.value;
+
+      if (phantomHealthy) {
+        logger.info("✓ Semantic cache ACTIVE via PHANTOM (http://localhost:8008)");
+      } else {
+        logger.warn("⚠ Semantic cache DEGRADED — PHANTOM unavailable, falling back to SQLite embeddings");
+      }
+      logger.info({ phantomHealth: phantomHealthy, rerankerHealth: rerankerHealthy }, "[Startup] Optional service health");
 
       logger.info("MCP Server initialization complete");
     } catch (error) {
@@ -404,76 +230,43 @@ class SecureLLMBridgeMCPServer {
     try {
       this.db = createKnowledgeDatabase(KNOWLEDGE_DB_PATH);
       this.disposables.register("knowledge-db", () => {
-        if (this.db) {
-          this.db.close();
-          this.db = null;
-        }
+        if (this.db) { this.db.close(); this.db = null; }
       });
       logger.info({ dbPath: KNOWLEDGE_DB_PATH }, "Knowledge database initialized");
 
-      // Initialize Project Watcher if we have a project root
-      // System directories like /etc/nixos are skipped by default to avoid
-      // watching huge file trees, but can be explicitly enabled via env var.
-      const isSystemDir =
-        this.projectRoot.startsWith("/etc") ||
-        this.projectRoot.startsWith("/usr") ||
-        this.projectRoot.startsWith("/sys") ||
-        this.projectRoot.startsWith("/proc") ||
-        this.projectRoot === "/nix/store";
-
+      const isSystemDir = this.projectRoot.startsWith("/etc") || this.projectRoot.startsWith("/usr") ||
+        this.projectRoot.startsWith("/sys") || this.projectRoot.startsWith("/proc") || this.projectRoot === "/nix/store";
       const watcherExplicitlyEnabled = process.env.ENABLE_PROJECT_WATCHER === "true";
       const watcherExplicitlyDisabled = process.env.ENABLE_PROJECT_WATCHER === "false";
-      const shouldStartWatcher =
-        this.projectRoot &&
-        (!isSystemDir || watcherExplicitlyEnabled) &&
-        !watcherExplicitlyDisabled;
+      const shouldStartWatcher = this.projectRoot && (!isSystemDir || watcherExplicitlyEnabled) && !watcherExplicitlyDisabled;
 
       if (shouldStartWatcher) {
         this.projectWatcher = new ProjectWatcher(this.projectRoot);
         this.projectWatcher.setDatabase(this.db);
         this.projectWatcher.start();
         this.disposables.register("project-watcher", () => {
-          if (this.projectWatcher) {
-            this.projectWatcher.stop();
-            this.projectWatcher = null;
-          }
+          if (this.projectWatcher) { this.projectWatcher.stop(); this.projectWatcher = null; }
         });
-
-        // Initialize Proactive Logic components
-        // These are always safe to initialize - they operate on the knowledge DB,
-        // not on the filesystem directly. Decoupled from ProjectWatcher lifecycle.
         this.contextManager = new ContextManager(this.projectRoot, this.db as any);
         this.preActionInterceptor = new PreActionInterceptor(this.contextManager);
         this.adrHygieneMiddleware = new ADRHygieneMiddleware();
         logger.info("Proactive Logic Layer initialized (incl. ADR Hygiene)");
       } else if (isSystemDir && !watcherExplicitlyEnabled) {
-        // Even without filesystem watcher, we can still initialize the reasoning
-        // layer - it works purely off the knowledge DB, not the filesystem.
         this.contextManager = new ContextManager(this.projectRoot, this.db as any);
         this.preActionInterceptor = new PreActionInterceptor(this.contextManager);
         this.adrHygieneMiddleware = new ADRHygieneMiddleware();
-        logger.info(
-          { projectRoot: this.projectRoot },
-          "ProjectWatcher skipped (system dir), but Proactive Logic Layer initialized (DB-only mode). Use ENABLE_PROJECT_WATCHER=true for full filesystem watching."
-        );
+        logger.info({ projectRoot: this.projectRoot }, "ProjectWatcher skipped (system dir), Proactive Logic Layer initialized (DB-only mode)");
       }
     } catch (error) {
-      logger.error(
-        { err: error, dbPath: KNOWLEDGE_DB_PATH },
-        "Failed to initialize knowledge database"
-      );
+      logger.error({ err: error, dbPath: KNOWLEDGE_DB_PATH }, "Failed to initialize knowledge database");
       this.db = null;
     }
   }
 
   private initSemanticCache() {
     try {
-      const cacheDbPath =
-        process.env.SEMANTIC_CACHE_DB_PATH ||
-        path.join(
-          process.env.HOME || process.env.USERPROFILE || ".",
-          ".local/share/securellm/semantic_cache.db"
-        );
+      const cacheDbPath = process.env.SEMANTIC_CACHE_DB_PATH ||
+        path.join(process.env.HOME || process.env.USERPROFILE || ".", ".local/share/securellm/semantic_cache.db");
 
       this.semanticCache = new SemanticCache(cacheDbPath, {
         enabled: process.env.ENABLE_SEMANTIC_CACHE !== "false",
@@ -482,430 +275,165 @@ class SecureLLMBridgeMCPServer {
         llamaCppUrl: process.env.LLAMA_CPP_URL || "http://localhost:8081",
       });
       this.disposables.register("semantic-cache", () => {
-        if (this.semanticCache) {
-          this.semanticCache.close();
-          this.semanticCache = null;
-        }
+        if (this.semanticCache) { this.semanticCache.close(); this.semanticCache = null; }
       });
-
       logger.info({ dbPath: cacheDbPath }, "Semantic cache initialized");
-      // Note: SemanticCache handles its own cleanup interval internally
     } catch (error) {
       logger.error({ err: error }, "Failed to initialize semantic cache");
       this.semanticCache = null;
     }
   }
 
-  private buildToolCatalog(): ExtendedTool[] {
-    return [
-      {
-        name: "server_status",
-        description: "Get current MCP server status, feature flags, and runtime health",
-        defer_loading: true,
-        inputSchema: {
-          type: "object",
-          properties: {
-            include_metrics: {
-              type: "boolean",
-              description: "Include per-tool metrics and queue state",
-              default: true,
-            },
-          },
-        },
-      },
-      {
-        name: "provider_test",
-        description: "Test LLM provider connectivity",
-        defer_loading: true,
-        inputSchema: {
-          type: "object",
-          properties: {
-            provider: {
-              type: "string",
-              description: "Provider name (deepseek, openai, anthropic, ollama)",
-              enum: ["deepseek", "openai", "anthropic", "ollama"],
-            },
-            prompt: {
-              type: "string",
-              description: "Test prompt to send to the provider",
-            },
-            model: {
-              type: "string",
-              description: "Model name (optional, uses default if not specified)",
-            },
-          },
-          required: ["provider", "prompt"],
-        },
-      },
-      {
-        name: "security_audit",
-        description: "Audit project configuration security",
-        defer_loading: true,
-        inputSchema: {
-          type: "object",
-          properties: {
-            config_file: {
-              type: "string",
-              description: "Path to configuration file to audit",
-            },
-          },
-          required: ["config_file"],
-        },
-      },
-      {
-        name: "rate_limit_check",
-        description: "Check provider rate limit status",
-        defer_loading: true,
-        inputSchema: {
-          type: "object",
-          properties: {
-            provider: {
-              type: "string",
-              description: "Provider name to check",
-              enum: ["deepseek", "openai", "anthropic", "ollama"],
-            },
-          },
-          required: ["provider"],
-        },
-      },
-      {
-        name: "build_and_test",
-        description: "Build project and run tests",
-        defer_loading: true,
-        inputSchema: {
-          type: "object",
-          properties: {
-            test_type: {
-              type: "string",
-              description: "Type of tests to run",
-              enum: ["unit", "integration", "all"],
-            },
-          },
-          required: ["test_type"],
-        },
-      },
-      {
-        name: "provider_config_validate",
-        description: "Validate provider config format",
-        defer_loading: true,
-        inputSchema: {
-          type: "object",
-          properties: {
-            provider: {
-              type: "string",
-              description: "Provider name",
-            },
-            config_data: {
-              type: "string",
-              description: "Configuration data in TOML format",
-            },
-          },
-          required: ["provider", "config_data"],
-        },
-      },
-      {
-        name: "crypto_key_generate",
-        description: "Generate TLS certificates and keys",
-        defer_loading: true,
-        inputSchema: {
-          type: "object",
-          properties: {
-            key_type: {
-              type: "string",
-              description: "Type of key to generate",
-              enum: ["server", "client"],
-            },
-            output_path: {
-              type: "string",
-              description: "Directory path where keys should be saved",
-            },
-          },
-          required: ["key_type", "output_path"],
-        },
-      },
-      {
-        name: "rate_limiter_status",
-        description: "Get rate limiter status for all providers",
-        defer_loading: true,
-        allowed_callers: ["code_execution_20250825"],
-        inputSchema: {
-          type: "object",
-          properties: {},
-        },
-      },
-      {
-        name: "cache_stats",
-        description: "Get cache statistics (Semantic Cache, Nix Package Cache)",
-        defer_loading: true,
-        inputSchema: {
-          type: "object",
-          properties: {},
-        },
-      },
-      {
-        name: "package_diagnose",
-        description: "Diagnose package configuration issues",
-        defer_loading: true,
-        inputSchema: {
-          type: "object",
-          properties: {
-            package_path: {
-              type: "string",
-              description: "Path to the package .nix file",
-            },
-            package_type: {
-              type: "string",
-              enum: ["tar", "deb", "js"],
-              description: "Type of package system",
-            },
-            build_test: {
-              type: "boolean",
-              description: "Whether to perform a test build",
-              default: true,
-            },
-          },
-          required: ["package_path", "package_type"],
-        },
-      },
-      {
-        name: "package_download",
-        description: "Download package from GitHub/npm/URL with automatic hash calculation",
-        defer_loading: true,
-        inputSchema: {
-          type: "object",
-          properties: {
-            package_name: {
-              type: "string",
-              description: "Name of the package",
-            },
-            package_type: {
-              type: "string",
-              enum: ["tar", "deb", "js"],
-              description: "Type of package system",
-            },
-            source: {
-              type: "object",
-              properties: {
-                type: {
-                  type: "string",
-                  enum: ["github_release", "npm", "url"],
-                  description: "Source type",
-                },
-                url: {
-                  type: "string",
-                  description: "Direct URL (for type: url)",
-                },
-                github: {
-                  type: "object",
-                  properties: {
-                    repo: { type: "string" },
-                    tag: { type: "string" },
-                    asset_pattern: { type: "string" },
-                  },
-                  required: ["repo"],
-                },
-                npm: {
-                  type: "object",
-                  properties: {
-                    package: { type: "string" },
-                    version: { type: "string" },
-                  },
-                  required: ["package"],
-                },
-              },
-              required: ["type"],
-            },
-          },
-          required: ["package_name", "package_type", "source"],
-        },
-      },
-      {
-        name: "package_configure",
-        description: "Generate Nix package configuration from downloaded file",
-        defer_loading: true,
-        inputSchema: {
-          type: "object",
-          properties: {
-            package_name: {
-              type: "string",
-              description: "Name of the package",
-            },
-            package_type: {
-              type: "string",
-              enum: ["tar", "deb", "js"],
-              description: "Type of package system",
-            },
-            storage_file: {
-              type: "string",
-              description: "Path to downloaded file in storage",
-            },
-            sha256: {
-              type: "string",
-              description: "SHA256 hash of the file",
-            },
-            options: {
-              type: "object",
-              properties: {
-                method: {
-                  type: "string",
-                  enum: ["auto", "native", "fhs"],
-                },
-                sandbox: { type: "boolean" },
-                audit: { type: "boolean" },
-                executable: { type: "string" },
-                npm_flags: {
-                  type: "array",
-                  items: { type: "string" },
-                },
-              },
-            },
-          },
-          required: ["package_name", "package_type", "storage_file", "sha256"],
-        },
-      },
-      // Add knowledge tools if enabled
-      ...(ENABLE_KNOWLEDGE && this.db ? knowledgeTools : []),
-      // Add Emergency Framework tools
-      ...emergencyTools,
-      // Add Laptop Defense Framework tools
-      ...laptopDefenseTools,
-      // Add Web Search tools
-      ...webSearchTools,
-      // Add Research Agent tool
-      researchAgentTool,
-      // Add ADR (Architecture Decision Records) tools
-      ...adrTools,
-      // Add Codebase Analysis Tools
-      {
-        name: "analyze_complexity",
-        description: "Analyze code complexity and file size statistics",
-        defer_loading: true,
-        inputSchema: zodToMcpSchema(analyzeComplexitySchema),
-      },
-      {
-        name: "find_dead_code",
-        description: "Heuristic search for unused exports (potentially dead code)",
-        defer_loading: true,
-        inputSchema: zodToMcpSchema(findDeadCodeSchema),
-      },
-      // Advanced Code Analysis Tool (low-friction debugging)
-      advancedCodeAnalysisTool,
-      // Read-only socket debugging report (for human decision-making)
-      socketDebugReportTool,
-      // Add Secure Execution Tool
-      executeInSandboxTool,
-      // Add SSH Tools
-      {
-        name: sshExecuteSchema.name,
-        description: sshExecuteSchema.description,
-        defer_loading: true,
-        inputSchema: sshExecuteSchema.inputSchema,
-      },
-      {
-        name: sshFileTransferSchema.name,
-        description: sshFileTransferSchema.description,
-        defer_loading: true,
-        inputSchema: sshFileTransferSchema.inputSchema,
-      },
-      {
-        name: sshMaintenanceCheckSchema.name,
-        description: sshMaintenanceCheckSchema.description,
-        defer_loading: true,
-        inputSchema: sshMaintenanceCheckSchema.inputSchema,
-      },
-      {
-        name: sshTunnelSchema.name,
-        description: sshTunnelSchema.description,
-        defer_loading: true,
-        inputSchema: sshTunnelSchema.inputSchema,
-      },
-      {
-        name: sshJumpHostSchema.name,
-        description: sshJumpHostSchema.description,
-        defer_loading: true,
-        inputSchema: sshJumpHostSchema.inputSchema,
-      },
-      {
-        name: sshSessionSchema.name,
-        description: sshSessionSchema.description,
-        defer_loading: true,
-        inputSchema: sshSessionSchema.inputSchema,
-      },
-      // Add DX Tools
-      ...devTools,
-      // Add Professional Operations Tools
-      ...professionalTools,
-      // Add Browser Tools
-      browserLaunchAdvancedSchema,
-      browserExtractDataSchema,
-      browserInteractFormSchema,
-      browserMonitorChangesSchema,
-      browserSearchAggregateSchema,
-      sessionBridgeTool,
-      nvimContextTool,
-      nixDaemonTool,
-      gitSherlockTool,
-      notifyHookTool,
-      metaToolTool,
-      ...linuxDebuggingTools,
-    ] as ExtendedTool[]; // end buildToolCatalog
+  // ── Knowledge dispatcher (consolidates 7 DB handlers) ────────────────────────
+
+  private async dispatchKnowledge(name: string, args: any): Promise<McpToolResult> {
+    if (!this.db) {
+      return { content: [{ type: "text", text: "Knowledge database not available" }], isError: true };
+    }
+    try {
+      let result: any;
+      switch (name) {
+        case "create_session":
+          result = { session: await this.db.createSession(args as CreateSessionInput), message: "Session created successfully" };
+          break;
+        case "save_knowledge":
+          result = { entry: await this.db.saveKnowledge(args as SaveKnowledgeInput), message: "Knowledge saved successfully" };
+          break;
+        case "search_knowledge": {
+          const results = await this.db.searchKnowledge(args as SearchKnowledgeInput);
+          result = { results, count: results.length };
+          break;
+        }
+        case "load_session": {
+          const session = await this.db.getSession(args.session_id);
+          if (!session) return { content: [{ type: "text", text: "Session not found" }], isError: true };
+          const entries = await this.db.getRecentKnowledge(args.session_id, 100);
+          result = { session, entries, count: entries.length };
+          break;
+        }
+        case "list_sessions": {
+          const sessions = await this.db.listSessions(args.limit || 20, args.offset || 0);
+          result = { sessions, count: sessions.length };
+          break;
+        }
+        case "get_recent_knowledge": {
+          const entries = await this.db.getRecentKnowledge(args.session_id, args.limit || 20);
+          result = { entries, count: entries.length };
+          break;
+        }
+        case "knowledge_maintenance":
+          await this.db.maintenance();
+          result = { message: "Maintenance completed successfully", stats: await this.db.getStats() };
+          break;
+        default:
+          return { content: [{ type: "text", text: `Unknown knowledge operation: ${name}` }], isError: true };
+      }
+      return { content: [{ type: "text", text: stringify(result) }] };
+    } catch (error: any) {
+      return { content: [{ type: "text", text: stringify({ error: error.message }) }], isError: true };
+    }
   }
 
+  // ── Rate limiter status ───────────────────────────────────────────────────────
+
+  private async handleRateLimiterStatus(): Promise<McpToolResult> {
+    try {
+      const allMetrics = this.rateLimiter.getAllMetrics();
+      const status: Record<string, any> = {};
+      for (const [provider, metrics] of allMetrics.entries()) {
+        const queueStatus = this.rateLimiter.getQueueStatus(provider);
+        status[provider] = {
+          performance: {
+            totalRequests: metrics.totalRequests,
+            successRate: metrics.totalRequests > 0
+              ? `${((metrics.successfulRequests / metrics.totalRequests) * 100).toFixed(2)}%`
+              : "0%",
+            requestsPerMinute: metrics.requestsPerMinute.toFixed(1),
+            retriedRequests: metrics.retriedRequests,
+            averageRetries: metrics.retriedRequests > 0
+              ? (metrics.totalRetries / metrics.retriedRequests).toFixed(1)
+              : "0",
+          },
+          latency: {
+            average: `${metrics.averageLatency.toFixed(0)}ms`,
+            p50: `${metrics.latencyPercentiles.p50}ms`,
+            p95: `${metrics.latencyPercentiles.p95}ms`,
+            p99: `${metrics.latencyPercentiles.p99}ms`,
+            max: `${metrics.latencyPercentiles.max}ms`,
+          },
+          errors: { total: metrics.failedRequests },
+          queue: {
+            current: queueStatus?.queueLength || 0,
+            averageLength: metrics.queueMetrics.averageQueueLength.toFixed(1),
+            maxLength: metrics.queueMetrics.maxQueueLength,
+            averageWaitTime: metrics.totalRequests > 0
+              ? `${(metrics.queueMetrics.totalTimeInQueue / metrics.totalRequests).toFixed(0)}ms`
+              : "0ms",
+          },
+          timeWindow: {
+            duration: `${(metrics.timeWindow.durationMs / 1000).toFixed(0)}s`,
+            since: new Date(metrics.timeWindow.startTime).toISOString(),
+          },
+        };
+      }
+      return { content: [{ type: "text", text: stringify({ success: true, timestamp: new Date().toISOString(), providers: status }) }] };
+    } catch (error: any) {
+      return { content: [{ type: "text", text: stringify({ success: false, error: error.message }) }], isError: true };
+    }
+  }
+
+  // ── Tool handlers setup ───────────────────────────────────────────────────────
+
   private setupToolHandlers() {
-    const toolCatalog = this.buildToolCatalog();
+    // Live getters — deps read current values at call time, not at setup time
+    const self = this;
+    const deps: DispatchDeps = {
+      get db() { return self.db; },
+      get rateLimiter() { return self.rateLimiter; },
+      get semanticCache() { return self.semanticCache; },
+      get projectRoot() { return self.projectRoot; },
+      get packageDiagnose() { return self.packageDiagnose; },
+      get packageDownload() { return self.packageDownload; },
+      get packageConfigure() { return self.packageConfigure; },
+      get professionalToolHandlers() { return self.professionalToolHandlers; },
+      stringify,
+      getServerStatus: (includeMetrics) => self.buildServerStatus(includeMetrics),
+      getRateLimiterStatus: () => self.handleRateLimiterStatus(),
+      handleKnowledge: (name, args) => self.dispatchKnowledge(name, args),
+    };
+    const dispatchMap = buildDispatchMap(deps);
+
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: this.toolGovernance.sortTools(toolCatalog),
+      tools: this.toolGovernance.sortTools(buildToolCatalog(this.db, ENABLE_KNOWLEDGE)),
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const requestId = crypto.randomUUID();
       const startTime = Date.now();
       const { name, arguments: args } = request.params;
+      const toolCatalog = buildToolCatalog(this.db, ENABLE_KNOWLEDGE) as ExtendedTool[];
       const toolDefinition = toolCatalog.find((tool) => tool.name === name) || { name };
       const governanceDecision = this.toolGovernance.canExecute(toolDefinition);
 
       if (!governanceDecision.allowed) {
-        throw new McpError(
-          ErrorCode.InvalidRequest,
-          `Tool '${name}' blocked by governance policy: ${governanceDecision.reason}`
-        );
+        throw new McpError(ErrorCode.InvalidRequest, `Tool '${name}' blocked by governance policy: ${governanceDecision.reason}`);
       }
 
-      // Generate stable cache key
       const cacheKey = stableStringify({ name, args });
       const requestSize = Buffer.byteLength(cacheKey, "utf8");
-
-      const snapshot: any = {
-        requestId,
-        toolName: name,
-        startTime,
-        requestSize,
-      };
-
+      const snapshot: any = { requestId, toolName: name, startTime, requestSize };
       let permit: any = null;
 
       try {
-        // SEMANTIC CACHE: Check cache before executing tool
+        // SEMANTIC CACHE: check before executing
         let cached: any = null;
-        const shouldUseSemanticCache = shouldAttemptSemanticCache(name);
-        if (this.semanticCache && shouldUseSemanticCache) {
+        if (this.semanticCache && shouldAttemptSemanticCache(name)) {
           const cacheLookupStart = Date.now();
-          cached = await this.semanticCache.lookup({
-            toolName: name,
-            queryText: cacheKey,
-            toolArgs: args,
-          });
+          cached = await this.semanticCache.lookup({ toolName: name, queryText: cacheKey, toolArgs: args });
           snapshot.cacheLookupTime = Date.now() - cacheLookupStart;
           snapshot.cacheHit = cached !== null;
-
           if (cached) {
-            // Return cached response
-            // Estimate size without full serialization
-            try {
-              snapshot.responseSize = Buffer.byteLength(stringify(cached), "utf8");
-            } catch {
-              snapshot.responseSize = JSON.stringify(cached).length;
-            }
+            try { snapshot.responseSize = Buffer.byteLength(stringify(cached), "utf8"); } catch { snapshot.responseSize = JSON.stringify(cached).length; }
             snapshot.totalTime = Date.now() - startTime;
             snapshot.cacheHit = true;
             this.toolMetricsCollector.recordSnapshot(snapshot);
@@ -913,7 +441,7 @@ class SecureLLMBridgeMCPServer {
           }
         }
 
-        // ACQUIRE PERMIT: Backpressure control
+        // BACKPRESSURE: acquire permit
         const queueWaitStart = Date.now();
         try {
           permit = await this.toolLimiter.acquire(name, requestId);
@@ -927,368 +455,30 @@ class SecureLLMBridgeMCPServer {
           throw queueError;
         }
 
-        // PROACTIVE LOGIC: Pre-action checks
+        // PROACTIVE LOGIC: pre-action checks
         if (this.preActionInterceptor) {
           const preActionStart = Date.now();
           const interception = await this.preActionInterceptor.intercept(name, args);
           snapshot.preActionTime = Date.now() - preActionStart;
-
           if (!interception.shouldProceed) {
-            throw new McpError(
-              ErrorCode.InvalidParams,
-              interception.reason || "Tool execution blocked by proactive checks"
-            );
+            throw new McpError(ErrorCode.InvalidParams, interception.reason || "Tool execution blocked by proactive checks");
           }
         }
 
-        // DEDUPLICATE: Check for in-flight duplicate requests
+        // DEDUPLICATE + DISPATCH
         const executionStart = Date.now();
         const result = await this.requestDeduplicator.deduplicate(
           name,
           { toolName: name, args },
           async () => {
-            // Execute tool
-            let toolResult;
-            switch (name) {
-              case "provider_test":
-                toolResult = await this.handleProviderTest(args as unknown as ProviderTestArgs);
-                break;
-              case "server_status":
-                toolResult = await this.handleServerStatus(args as { include_metrics?: boolean });
-                break;
-              case "security_audit":
-                toolResult = await this.handleSecurityAudit(args as unknown as SecurityAuditArgs);
-                break;
-              case "rate_limit_check":
-                toolResult = await this.handleRateLimitCheck(args as unknown as RateLimitCheckArgs);
-                break;
-              case "build_and_test":
-                toolResult = await this.handleBuildAndTest(args as unknown as BuildAndTestArgs);
-                break;
-              case "provider_config_validate":
-                toolResult = await this.handleProviderConfigValidate(
-                  args as unknown as ProviderConfigValidateArgs
-                );
-                break;
-              case "crypto_key_generate":
-                toolResult = await this.handleCryptoKeyGenerate(
-                  args as unknown as CryptoKeyGenerateArgs
-                );
-                break;
-              case "rate_limiter_status":
-                toolResult = await this.handleRateLimiterStatus();
-                break;
-              case "cache_stats":
-                toolResult = {
-                  content: [
-                    {
-                      type: "text",
-                      text: stringify({
-                        semantic_cache: this.semanticCache?.getStats() || null,
-                        nix_cache: getNixCacheStats(),
-                      }),
-                    },
-                  ],
-                };
-                break;
-              case "package_diagnose":
-                toolResult = await this.handlePackageDiagnose(args);
-                break;
-              case "package_download":
-                toolResult = await this.handlePackageDownload(args);
-                break;
-              case "package_configure":
-                toolResult = await this.handlePackageConfigure(args);
-                break;
-              case "create_session":
-                toolResult = await this.handleCreateSession(args);
-                break;
-              case "save_knowledge":
-                toolResult = await this.handleSaveKnowledge(args);
-                break;
-              case "search_knowledge":
-                toolResult = await this.handleSearchKnowledge(args);
-                break;
-              case "load_session":
-                toolResult = await this.handleLoadSession(args);
-                break;
-              case "list_sessions":
-                toolResult = await this.handleListSessions(args);
-                break;
-              case "get_recent_knowledge":
-                toolResult = await this.handleGetRecentKnowledge(args);
-                break;
-              case "knowledge_maintenance":
-                toolResult = await this.handleKnowledgeMaintenance();
-                break;
-
-              // Emergency Framework handlers
-              case "emergency_status":
-                toolResult = await this.handleEmergencyStatus();
-                break;
-              case "emergency_abort":
-                toolResult = await this.handleEmergencyAbort(args);
-                break;
-              case "emergency_cooldown":
-                toolResult = await this.handleEmergencyCooldown();
-                break;
-              case "emergency_nuke":
-                toolResult = await this.handleEmergencyNuke(args);
-                break;
-              case "emergency_swap":
-                toolResult = await this.handleEmergencySwap();
-                break;
-              case "system_health_check":
-                toolResult = await this.handleSystemHealthCheck(args);
-                break;
-              case "safe_rebuild_check":
-                toolResult = await this.handleSafeRebuildCheck();
-                break;
-
-              // Laptop Defense handlers
-              case "thermal_check":
-                toolResult = await this.handleThermalCheck(args);
-                break;
-              case "rebuild_safety_check":
-                toolResult = await this.handleRebuildSafetyCheck();
-                break;
-              case "thermal_forensics":
-                toolResult = await this.handleThermalForensics(args);
-                break;
-              case "thermal_warroom":
-                toolResult = await this.handleThermalWarroom(args);
-                break;
-              case "laptop_verdict":
-                toolResult = await this.handleLaptopVerdict(args);
-                break;
-              case "full_investigation":
-                toolResult = await this.handleFullInvestigation();
-                break;
-              case "force_cooldown":
-                toolResult = await this.handleForceCooldown();
-                break;
-              case "reset_performance":
-                toolResult = await this.handleResetPerformance();
-                break;
-
-              // Web Search handlers
-              case "web_search":
-                toolResult = await this.handleWebSearch(args);
-                break;
-              case "nix_search":
-                toolResult = await this.handleNixSearch(args);
-                break;
-              case "github_search":
-                toolResult = await this.handleGithubSearch(args);
-                break;
-              case "tech_news_search":
-                toolResult = await this.handleTechNewsSearch(args);
-                break;
-              case "nixos_discourse_search":
-                toolResult = await this.handleDiscourseSearch(args);
-                break;
-              case "stackoverflow_search":
-                toolResult = await this.handleStackOverflowSearch(args);
-                break;
-
-              // OSINT handlers (spider-nix integration)
-              case "osint_dns":
-                toolResult = await this.handleOsintDns(args);
-                break;
-              case "osint_subdomains":
-                toolResult = await this.handleOsintSubdomains(args);
-                break;
-              case "osint_portscan":
-                toolResult = await this.handleOsintPortScan(args);
-                break;
-              case "web_crawl":
-                toolResult = await this.handleWebCrawl(args);
-                break;
-
-              // Research Agent handler
-              case "research_agent":
-                toolResult = await handleResearchAgent(args as any);
-                break;
-
-              // ADR (Architecture Decision Records) handlers — dynamic dispatch
-              case "adr_new":
-              case "adr_new_from_research":
-              case "adr_list":
-              case "adr_show":
-              case "adr_search":
-              case "adr_relations":
-              case "adr_validate":
-              case "governance_rules":
-              case "chain_status":
-              case "chain_verify":
-              case "chain_prove":
-              case "provenance_trace":
-              case "snapshot_latest":
-              case "economics_report":
-              case "sbom_status":
-              case "adr_accept":
-              case "adr_supersede":
-              case "adr_pre_sign":
-              case "chain_sign":
-              case "snapshot_create":
-              case "sbom_generate":
-                toolResult = await adrHandlers[name](args as any);
-                break;
-
-              // Codebase Analysis handlers
-              case "analyze_complexity":
-                toolResult = await analyzeComplexity(args as any);
-                break;
-              case "find_dead_code":
-                toolResult = await findDeadCode(args as any);
-                break;
-              case "advanced_code_analysis":
-                toolResult = await handleAdvancedCodeAnalysis(args as any);
-                break;
-              case "socket_debug_report":
-                toolResult = await handleSocketDebugReport(args as any);
-                break;
-
-              // Secure Execution handler
-              case "execute_in_sandbox":
-                toolResult = await handleExecuteInSandbox(args as any);
-                break;
-
-              // SSH Tool handlers
-              case "ssh_execute":
-                toolResult = await new SSHExecuteTool().execute(args as any);
-                break;
-              case "ssh_file_transfer":
-                toolResult = await new SSHFileTransferTool().execute(args as any);
-                break;
-              case "ssh_maintenance_check":
-                toolResult = await new SSHMaintenanceCheckTool().execute(args as any);
-                break;
-              case "ssh_tunnel":
-                toolResult = await new SSHTunnelTool().execute(args as any);
-                break;
-              case "ssh_jump_host":
-                toolResult = await new SSHJumpHostTool().execute(args as any);
-                break;
-              case "ssh_session_manager":
-                toolResult = await new SSHSessionTool().execute(args as any);
-                break;
-
-              // DX Tool handlers
-              case "lint_code":
-                toolResult = await devToolHandlers.lint_code(args as any);
-                break;
-              case "format_code":
-                toolResult = await devToolHandlers.format_code(args as any);
-                break;
-              case "run_tests":
-                toolResult = await devToolHandlers.run_tests(args as any);
-                break;
-              case "github_actions":
-                toolResult = await devToolHandlers.github_actions(args as any);
-                break;
-              case "server_health":
-                toolResult = await this.professionalToolHandlers.server_health(args);
-                break;
-              case "workspace_quality_gate":
-                toolResult = await this.professionalToolHandlers.workspace_quality_gate(args);
-                break;
-              case "performance_report":
-                toolResult = await this.professionalToolHandlers.performance_report(args);
-                break;
-              case "cache_tuning_advisor":
-                toolResult = await this.professionalToolHandlers.cache_tuning_advisor(args);
-                break;
-              case "change_impact":
-                toolResult = await this.professionalToolHandlers.change_impact(args);
-                break;
-              case "ci_failure_summary":
-                toolResult = await this.professionalToolHandlers.ci_failure_summary(args);
-                break;
-              case "tool_control_plane":
-                toolResult = await this.professionalToolHandlers.tool_control_plane(args);
-                break;
-              case "ci_batch_triage":
-                toolResult = await this.professionalToolHandlers.ci_batch_triage(args);
-                break;
-
-              // Browser Tool handlers
-              case "browser_launch_advanced":
-                toolResult = await new BrowserLaunchAdvancedTool().execute(args as any);
-                break;
-              case "browser_extract_data":
-                toolResult = await new BrowserExtractDataTool().execute(args as any);
-                break;
-              case "browser_interact_form":
-                toolResult = await new BrowserInteractFormTool().execute(args as any);
-                break;
-              case "browser_monitor_changes":
-                toolResult = await new BrowserMonitorChangesTool().execute(args as any);
-                break;
-              case "browser_search_aggregate":
-                toolResult = await new BrowserSearchAggregateTool().execute(args as any);
-                break;
-
-              case "session_bridge":
-              case "nvim_context":
-                toolResult = await handleNvimContext(args as any);
-                break;
-              case "nix_daemon":
-                toolResult = await handleNixDaemon(args as any);
-                break;
-              case "git_sherlock":
-                toolResult = await handleGitSherlock(args as any);
-                break;
-              case "notify_hook":
-                toolResult = await handleNotifyHook(args as any);
-                break;
-              case "meta_tool":
-                toolResult = await handleMetaTool(args as any, async (toolName, toolArgs) => {
-                  // Execute a tool dynamically — reuses the same governance/cache/dedup pipeline
-                  const fakeHandler = new Promise((resolve, reject) => {
-                    try {
-                      const handler = (this as any)._executeToolDirect(toolName, toolArgs);
-                      resolve(handler);
-                    } catch(e) { reject(e); }
-                  });
-                  return fakeHandler;
-                });
-                break;
-                toolResult = await handleSessionBridge(args as any, {
-                  db: this.db,
-                  semanticCache: this.semanticCache,
-                  projectRoot: this.projectRoot,
-                });
-                break;
-              case "journal_analyze":
-                toolResult = await handleJournalAnalyze(args as any);
-                break;
-              case "process_inspect":
-                toolResult = await handleProcessInspect(args as any);
-                break;
-              case "systemd_delta":
-                toolResult = await handleSystemdDelta(args as any);
-                break;
-              case "network_diag":
-                toolResult = await handleNetworkDiag(args as any);
-                break;
-              case "disk_analyze":
-                toolResult = await handleDiskAnalyze(args as any);
-                break;
-              case "security_scan":
-                toolResult = await handleSecurityScan(args as any);
-                break;
-              default:
-                throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
-            }
-
-            return toolResult;
+            const handler = dispatchMap[name];
+            if (!handler) throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+            return handler(args);
           }
         );
-
         snapshot.executionTime = Date.now() - executionStart;
 
-        // ADR HYGIENE: Periodic check (non-blocking, appends to result)
+        // ADR HYGIENE: periodic check (non-blocking)
         if (this.adrHygieneMiddleware) {
           try {
             const hygieneReport = await this.adrHygieneMiddleware.onToolCall();
@@ -1298,314 +488,134 @@ class SecureLLMBridgeMCPServer {
                 text: `\n---\n${hygieneReport.summary}\n${hygieneReport.details.join("\n")}`,
               });
             }
-          } catch {
-            // Non-blocking — hygiene failures should never affect tool execution
-          }
+          } catch { /* non-blocking */ }
         }
 
+        // RESPONSE COMPACTION
         let originalResponseSize = 0;
-        try {
-          originalResponseSize = Buffer.byteLength(stringify(result), "utf8");
-        } catch {
-          originalResponseSize = JSON.stringify(result).length;
-        }
-
-        const { result: compactedResult, stats: compactionStats } =
-          ResponseSummarizer.compactToolResultWithStats(result);
+        try { originalResponseSize = Buffer.byteLength(stringify(result), "utf8"); } catch { originalResponseSize = JSON.stringify(result).length; }
+        const { result: compactedResult, stats: compactionStats } = ResponseSummarizer.compactToolResultWithStats(result);
         snapshot.originalResponseSize = originalResponseSize;
         snapshot.compactionCharsSaved = compactionStats.savedChars;
         snapshot.compactionTokensSaved = compactionStats.savedTokens;
         snapshot.compactionApplied = compactionStats.compactedFields > 0;
+        try { snapshot.responseSize = Buffer.byteLength(stringify(compactedResult), "utf8"); } catch { snapshot.responseSize = JSON.stringify(compactedResult).length; }
 
-        // Measure response size (lazy: only if needed for metrics)
-        // Use fast-json-stringify if available, otherwise estimate
-        try {
-          const responseStr = stringify(compactedResult);
-          snapshot.responseSize = Buffer.byteLength(responseStr, "utf8");
-        } catch {
-          // Fallback: estimate size from result object
-          snapshot.responseSize = JSON.stringify(compactedResult).length;
-        }
-
-        // SEMANTIC CACHE: Store result for future lookups
-        if (
-          this.semanticCache &&
-          compactedResult &&
-          shouldStoreSemanticCache({
-            toolName: name,
-            result: compactedResult,
-            responseSize: snapshot.responseSize,
-          })
-        ) {
-          // Use async fire-and-forget to avoid blocking response
-          this.semanticCache
-            .store({
-              toolName: name,
-              queryText: cacheKey,
-              toolArgs: args,
-              response: compactedResult,
-              metadata: {
-                tokensSaved: Math.max(
-                  1,
-                  Math.round((requestSize + (snapshot.responseSize || 0)) / 4)
-                ),
-                originalLatency: snapshot.totalTime,
-              },
-            })
-            .catch((err) => {
-              logger.warn({ err, toolName: name }, "Failed to store in semantic cache");
-            });
+        // SEMANTIC CACHE: store result
+        if (this.semanticCache && compactedResult && shouldStoreSemanticCache({ toolName: name, result: compactedResult, responseSize: snapshot.responseSize })) {
+          this.semanticCache.store({
+            toolName: name, queryText: cacheKey, toolArgs: args, response: compactedResult,
+            metadata: { tokensSaved: Math.max(1, Math.round((requestSize + (snapshot.responseSize || 0)) / 4)), originalLatency: snapshot.totalTime },
+          }).catch((err) => logger.warn({ err, toolName: name }, "Failed to store in semantic cache"));
         }
 
         snapshot.totalTime = Date.now() - startTime;
         this.toolMetricsCollector.recordSnapshot(snapshot);
 
+        // TELEMETRY: record successful invocation (fire-and-forget)
+        void Promise.resolve().then(() => usageTracker.record({
+          session_id: requestId,
+          tool_name: name,
+          params_hash: crypto.createHash("sha256").update(cacheKey).digest("hex").slice(0, 16),
+          started_at: startTime,
+          duration_ms: snapshot.totalTime,
+          success: true,
+          cache_hit: snapshot.cacheHit === true,
+        }));
+
         return compactedResult;
+
       } catch (error) {
         snapshot.totalTime = Date.now() - startTime;
         snapshot.error = error instanceof Error ? error.message : String(error);
-
-        // Classify error
         if (error instanceof McpError) {
-          snapshot.errorCategory =
-            error.code === (ErrorCode.InvalidParams as number) ? "invalid_params" : "mcp_error";
+          snapshot.errorCategory = error.code === (ErrorCode.InvalidParams as number) ? "invalid_params" : "mcp_error";
         } else if (error instanceof Error) {
-          if (error.message.includes("timeout") || error.message.includes("Timeout")) {
-            snapshot.errorCategory = "timeout";
-          } else if (error.message.includes("queue full")) {
-            snapshot.errorCategory = "queue_full";
-          } else {
-            snapshot.errorCategory = "unknown";
-          }
+          snapshot.errorCategory = error.message.includes("timeout") || error.message.includes("Timeout") ? "timeout"
+            : error.message.includes("queue full") ? "queue_full" : "unknown";
         } else {
           snapshot.errorCategory = "unknown";
         }
-
         this.toolMetricsCollector.recordSnapshot(snapshot);
 
+        // TELEMETRY: record failed invocation
+        void Promise.resolve().then(() => usageTracker.record({
+          session_id: requestId,
+          tool_name: name,
+          started_at: startTime,
+          duration_ms: snapshot.totalTime,
+          success: false,
+          error_code: snapshot.errorCategory,
+        }));
+
         if (error instanceof McpError) throw error;
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`
-        );
+        throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
-        // Release permit if it was acquired
-        if (permit) {
-          permit.release();
-        }
+        if (permit) permit.release();
       }
     });
   }
 
+  // ── Resource handlers ─────────────────────────────────────────────────────────
+
   private setupResourceHandlers() {
     this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
       const dynamicResources = await this.guideManager.listAll();
-
       return {
         resources: [
-          {
-            uri: "server://status",
-            name: "Server Status",
-            description: "Current MCP server runtime status and enabled capabilities",
-            mimeType: "application/json",
-          },
-          {
-            uri: "config://current",
-            name: "Current Configuration",
-            description: "Current SecureLLM Bridge configuration",
-            mimeType: "application/toml",
-          },
-          {
-            uri: "logs://audit",
-            name: "Audit Logs",
-            description: "Recent audit log entries",
-            mimeType: "application/json",
-          },
-          {
-            uri: "metrics://usage",
-            name: "Usage Metrics",
-            description: "Provider usage statistics",
-            mimeType: "application/json",
-          },
-          {
-            uri: "metrics://prometheus",
-            name: "Prometheus Metrics",
-            description: "System metrics in Prometheus text format",
-            mimeType: "text/plain",
-          },
-          {
-            uri: "metrics://semantic-cache",
-            name: "Semantic Cache Metrics",
-            description: "Semantic cache performance statistics",
-            mimeType: "application/json",
-          },
-          {
-            uri: "docs://api",
-            name: "API Documentation",
-            description: "API documentation and examples",
-            mimeType: "text/markdown",
-          },
-          ...dynamicResources.map(({ uri, name, description }) => ({
-            uri,
-            name,
-            description,
-            mimeType: "text/markdown",
-          })),
+          { uri: "server://status", name: "Server Status", description: "Current MCP server runtime status and enabled capabilities", mimeType: "application/json" },
+          { uri: "config://current", name: "Current Configuration", description: "Current SecureLLM Bridge configuration", mimeType: "application/toml" },
+          { uri: "logs://audit", name: "Audit Logs", description: "Recent audit log entries", mimeType: "application/json" },
+          { uri: "metrics://usage", name: "Usage Metrics", description: "Provider usage statistics", mimeType: "application/json" },
+          { uri: "metrics://prometheus", name: "Prometheus Metrics", description: "System metrics in Prometheus text format", mimeType: "text/plain" },
+          { uri: "metrics://semantic-cache", name: "Semantic Cache Metrics", description: "Semantic cache performance statistics", mimeType: "application/json" },
+          { uri: "docs://api", name: "API Documentation", description: "API documentation and examples", mimeType: "text/markdown" },
+          ...dynamicResources.map(({ uri, name, description }) => ({ uri, name, description, mimeType: "text/markdown" })),
         ],
       };
     });
 
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const { uri } = request.params;
-
       try {
-        // Handle guide/skill/prompt resources
         if (uri.startsWith("guide://")) {
           const name = uri.replace("guide://", "");
-          const content = await this.guideManager.loadGuide(name);
-          return {
-            contents: [
-              {
-                uri,
-                mimeType: "text/markdown",
-                text: content,
-              },
-            ],
-          };
+          return { contents: [{ uri, mimeType: "text/markdown", text: await this.guideManager.loadGuide(name) }] };
         }
-
         if (uri.startsWith("skill://")) {
           const name = uri.replace("skill://", "");
-          const content = await this.guideManager.loadSkill(name);
-          return {
-            contents: [
-              {
-                uri,
-                mimeType: "text/markdown",
-                text: content,
-              },
-            ],
-          };
+          return { contents: [{ uri, mimeType: "text/markdown", text: await this.guideManager.loadSkill(name) }] };
         }
-
         if (uri.startsWith("prompt://")) {
           const name = uri.replace("prompt://", "");
-          const content = await this.guideManager.loadPrompt(name);
-          return {
-            contents: [
-              {
-                uri,
-                mimeType: "text/markdown",
-                text: content,
-              },
-            ],
-          };
+          return { contents: [{ uri, mimeType: "text/markdown", text: await this.guideManager.loadPrompt(name) }] };
         }
-
-        // Handle existing resources
         switch (uri) {
-          case "server://status":
-            return await this.readServerStatusResource();
-          case "config://current":
-            return await this.readCurrentConfig();
-          case "logs://audit":
-            return await this.readAuditLogs();
-          case "metrics://usage":
-            return await this.readUsageMetrics();
+          case "server://status": return await this.readServerStatusResource();
+          case "config://current": return await this.readCurrentConfig();
+          case "logs://audit": return await this.readAuditLogs();
+          case "metrics://usage": return await this.readUsageMetrics();
           case "metrics://prometheus":
-            return {
-              contents: [
-                {
-                  uri: "metrics://prometheus",
-                  mimeType: "text/plain",
-                  text: this.rateLimiter.getAggregatePrometheusMetrics(),
-                },
-              ],
-            };
+            return { contents: [{ uri: "metrics://prometheus", mimeType: "text/plain", text: this.rateLimiter.getAggregatePrometheusMetrics() }] };
           case "metrics://semantic-cache":
-            return {
-              contents: [
-                {
-                  uri: "metrics://semantic-cache",
-                  mimeType: "application/json",
-                  text: stringify(
-                    this.semanticCache?.getStats() || { error: "Semantic cache not initialized" }
-                  ),
-                },
-              ],
-            };
-          case "docs://api":
-            return await this.readApiDocs();
+            return { contents: [{ uri: "metrics://semantic-cache", mimeType: "application/json", text: stringify(this.semanticCache?.getStats() || { error: "Semantic cache not initialized" }) }] };
+          case "docs://api": return await this.readApiDocs();
           default:
             throw new McpError(ErrorCode.InvalidRequest, `Unknown resource: ${uri}`);
         }
       } catch (error) {
         if (error instanceof McpError) throw error;
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Failed to read resource: ${error instanceof Error ? error.message : String(error)}`
-        );
+        throw new McpError(ErrorCode.InternalError, `Failed to read resource: ${error instanceof Error ? error.message : String(error)}`);
       }
     });
   }
 
-  private async handleProviderTest(args: ProviderTestArgs) {
-    const { provider, prompt, model } = args;
-
-    try {
-      // Wrap API call with rate limiter
-      const result = await this.rateLimiter.execute(provider, async () => {
-        const testScript = `
-          cd "${PROJECT_ROOT}" && \
-          cargo run --bin securellm -- test ${provider} --prompt "${prompt.replace(/"/g, '\\"')}"${model ? ` --model ${model}` : ""}
-        `;
-
-        const { stdout, stderr } = await execAsync(testScript, {
-          cwd: PROJECT_ROOT,
-          timeout: 30000,
-        });
-
-        return { stdout, stderr, success: true };
-      });
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              provider,
-              model: model || "default",
-              prompt,
-              status: "success",
-              output: result.stdout,
-              stderr: result.stderr || null,
-            }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              provider,
-              status: "error",
-              error: error.message,
-              errorType: error.constructor.name,
-            }),
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  // ── Server status builders ────────────────────────────────────────────────────
 
   private buildServerStatus(includeMetrics: boolean = true) {
     const guideInventory = this.guideManager.listAll();
     const uptimeMs = Math.max(0, Math.round(process.uptime() * 1000));
-    const toolCatalog = this.buildToolCatalog();
-
+    const toolCatalog = buildToolCatalog(this.db, ENABLE_KNOWLEDGE);
     return Promise.resolve(guideInventory).then((resources) => ({
       name: "securellm-mcp",
       version: SERVER_VERSION,
@@ -1613,12 +623,7 @@ class SecureLLMBridgeMCPServer {
       uptimeMs,
       projectRoot: this.projectRoot,
       hostname: this.hostname,
-      environment: {
-        nodeVersion: process.version,
-        platform: process.platform,
-        arch: process.arch,
-        logLevel: process.env.LOG_LEVEL || "info",
-      },
+      environment: { nodeVersion: process.version, platform: process.platform, arch: process.arch, logLevel: process.env.LOG_LEVEL || "info" },
       features: {
         knowledgeEnabled: ENABLE_KNOWLEDGE,
         knowledgeReady: this.db !== null,
@@ -1628,9 +633,9 @@ class SecureLLMBridgeMCPServer {
       },
       resources: {
         total: resources.length + 7,
-        guides: resources.filter((resource) => resource.uri.startsWith("guide://")).length,
-        skills: resources.filter((resource) => resource.uri.startsWith("skill://")).length,
-        prompts: resources.filter((resource) => resource.uri.startsWith("prompt://")).length,
+        guides: resources.filter((r) => r.uri.startsWith("guide://")).length,
+        skills: resources.filter((r) => r.uri.startsWith("skill://")).length,
+        prompts: resources.filter((r) => r.uri.startsWith("prompt://")).length,
       },
       middleware: {
         rateLimiterProviders: this.rateLimiter.getAllMetrics().size,
@@ -1639,403 +644,54 @@ class SecureLLMBridgeMCPServer {
       },
       governance: this.buildToolGovernanceSummary(includeMetrics),
       metrics: includeMetrics
-        ? {
-            semanticCache: this.semanticCache?.getStats() || null,
-            toolMetrics: Object.fromEntries(this.toolMetricsCollector.getAllToolMetrics()),
-          }
+        ? { semanticCache: this.semanticCache?.getStats() || null, toolMetrics: Object.fromEntries(this.toolMetricsCollector.getAllToolMetrics()) }
         : undefined,
-      tools: {
-        total: toolCatalog.length,
-      },
+      tools: { total: toolCatalog.length },
     }));
   }
 
   private buildToolGovernanceSummary(includeTools: boolean = false) {
-    const toolCatalog = this.buildToolCatalog();
+    const toolCatalog = buildToolCatalog(this.db, ENABLE_KNOWLEDGE);
     const summary = this.toolGovernance.summarize(toolCatalog);
-
-    if (!includeTools) {
-      return summary;
-    }
-
+    if (!includeTools) return summary;
     return {
       ...summary,
       tools: toolCatalog.map((tool) => {
         const decision = this.toolGovernance.canExecute(tool);
-        return {
-          ...decision.metadata,
-          allowed: decision.allowed,
-          reason: decision.reason,
-        };
+        return { ...decision.metadata, allowed: decision.allowed, reason: decision.reason };
       }),
-    };
-  }
-
-  private async handleServerStatus(args: { include_metrics?: boolean } = {}) {
-    const status = await this.buildServerStatus(args.include_metrics !== false);
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: stringify(status),
-        },
-      ],
     };
   }
 
   private async readServerStatusResource() {
     const status = await this.buildServerStatus(true);
-
-    return {
-      contents: [
-        {
-          uri: "server://status",
-          mimeType: "application/json",
-          text: stringify(status),
-        },
-      ],
-    };
-  }
-
-  private async handleSecurityAudit(args: SecurityAuditArgs) {
-    const { config_file } = args;
-    const configPath = path.resolve(PROJECT_ROOT, config_file);
-
-    try {
-      const configContent = await fs.readFile(configPath, "utf-8");
-
-      const issues: string[] = [];
-      const warnings: string[] = [];
-      const recommendations: string[] = [];
-
-      // Check for hardcoded secrets
-      if (configContent.match(/sk-[a-zA-Z0-9]{32,}/)) {
-        issues.push("⚠️ CRITICAL: Hardcoded API keys detected in configuration");
-      }
-
-      // Check TLS configuration
-      if (configContent.includes("enabled = false") && configContent.includes("[security.tls]")) {
-        warnings.push("TLS is disabled - only use for development");
-      }
-
-      // Check rate limiting
-      if (!configContent.includes("[security.rate_limit]")) {
-        warnings.push("Rate limiting not configured");
-      }
-
-      // Check audit logging
-      if (!configContent.includes("[security.audit]")) {
-        recommendations.push("Consider enabling audit logging for production");
-      }
-
-      // Check for environment variable usage
-      if (!configContent.includes("${") && configContent.includes("api_key")) {
-        recommendations.push("Use environment variables for API keys instead of hardcoding");
-      }
-
-      const result = {
-        config_file,
-        status: issues.length > 0 ? "failed" : warnings.length > 0 ? "warning" : "passed",
-        issues,
-        warnings,
-        recommendations,
-        summary: `Found ${issues.length} critical issues, ${warnings.length} warnings, ${recommendations.length} recommendations`,
-      };
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              status: "error",
-              error: error.message,
-            }),
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleRateLimitCheck(args: RateLimitCheckArgs) {
-    const { provider } = args;
-
-    // This is a mock implementation - in production, this would query actual rate limit state
-    const rateLimits: Record<string, any> = {
-      deepseek: {
-        requests_per_minute: 60,
-        burst_size: 10,
-        current_usage: 0,
-        reset_time: new Date(Date.now() + 60000).toISOString(),
-      },
-      openai: {
-        requests_per_minute: 3500,
-        burst_size: 100,
-        current_usage: 0,
-        reset_time: new Date(Date.now() + 60000).toISOString(),
-      },
-      anthropic: {
-        requests_per_minute: 50,
-        burst_size: 5,
-        current_usage: 0,
-        reset_time: new Date(Date.now() + 60000).toISOString(),
-      },
-      ollama: {
-        requests_per_minute: -1, // unlimited
-        burst_size: -1,
-        current_usage: 0,
-        reset_time: null,
-      },
-    };
-
-    const result = {
-      provider,
-      ...rateLimits[provider],
-      remaining: rateLimits[provider].requests_per_minute - rateLimits[provider].current_usage,
-      status: "ok",
-    };
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: stringify(result),
-        },
-      ],
-    };
-  }
-
-  private async handleBuildAndTest(args: BuildAndTestArgs) {
-    const { test_type } = args;
-
-    let testCommand = "";
-    switch (test_type) {
-      case "unit":
-        testCommand = "cargo test --lib";
-        break;
-      case "integration":
-        testCommand = "cargo test --test '*'";
-        break;
-      case "all":
-        testCommand = "cargo test";
-        break;
-    }
-
-    try {
-      // Wrap build operations with rate limiter to prevent spam
-      const result = await this.rateLimiter.execute("build", async () => {
-        const buildScript = `
-          cd "${PROJECT_ROOT}" && \
-          cargo build && \
-          ${testCommand}
-        `;
-
-        const { stdout, stderr } = await execAsync(buildScript, {
-          cwd: PROJECT_ROOT,
-          timeout: 120000,
-        });
-
-        return { stdout, stderr, success: true };
-      });
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              test_type,
-              status: "success",
-              output: result.stdout,
-              stderr: result.stderr || null,
-            }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              test_type,
-              status: "error",
-              error: error.message,
-              errorType: error.constructor.name,
-            }),
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleProviderConfigValidate(args: ProviderConfigValidateArgs) {
-    const { provider, config_data } = args;
-
-    const issues: string[] = [];
-    const warnings: string[] = [];
-
-    // Basic TOML validation
-    if (!config_data.trim().startsWith("[providers.")) {
-      issues.push("Configuration must start with [providers.PROVIDER_NAME]");
-    }
-
-    // Check required fields
-    const requiredFields = ["enabled", "api_key", "base_url"];
-    for (const field of requiredFields) {
-      if (!config_data.includes(field)) {
-        issues.push(`Missing required field: ${field}`);
-      }
-    }
-
-    // Check for security issues
-    if (config_data.match(/api_key\s*=\s*"sk-/)) {
-      warnings.push("API key appears to be hardcoded - use environment variables");
-    }
-
-    const result = {
-      provider,
-      status: issues.length > 0 ? "invalid" : warnings.length > 0 ? "valid_with_warnings" : "valid",
-      issues,
-      warnings,
-    };
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: stringify(result),
-        },
-      ],
-    };
-  }
-
-  private async handleCryptoKeyGenerate(args: CryptoKeyGenerateArgs) {
-    const { key_type, output_path } = args;
-
-    const outputDir = path.resolve(PROJECT_ROOT, output_path);
-
-    try {
-      // Wrap crypto operations with rate limiter (expensive operations)
-      await this.rateLimiter.execute("crypto", async () => {
-        await fs.mkdir(outputDir, { recursive: true });
-
-        let certCommand = "";
-        if (key_type === "server") {
-          certCommand = `
-            openssl req -x509 -newkey rsa:4096 -keyout "${outputDir}/server.key" \
-              -out "${outputDir}/server.crt" -days 365 -nodes \
-              -subj "/C=US/ST=State/L=City/O=Org/CN=securellm-server"
-          `;
-        } else {
-          certCommand = `
-            openssl req -x509 -newkey rsa:4096 -keyout "${outputDir}/client.key" \
-              -out "${outputDir}/client.crt" -days 365 -nodes \
-              -subj "/C=US/ST=State/L=City/O=Org/CN=securellm-client"
-          `;
-        }
-
-        await execAsync(certCommand);
-      });
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              key_type,
-              output_path: outputDir,
-              files: {
-                certificate: `${key_type}.crt`,
-                private_key: `${key_type}.key`,
-              },
-              status: "success",
-              message: `Generated ${key_type} TLS certificate and key`,
-            }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              status: "error",
-              error: error.message,
-              errorType: error.constructor.name,
-            }),
-          },
-        ],
-        isError: true,
-      };
-    }
+    return { contents: [{ uri: "server://status", mimeType: "application/json", text: stringify(status) }] };
   }
 
   private async readCurrentConfig() {
     try {
       const configPath = path.resolve(PROJECT_ROOT, "config.toml");
       const content = await fs.readFile(configPath, "utf-8");
-
-      return {
-        contents: [
-          {
-            uri: "config://current",
-            mimeType: "application/toml",
-            text: content,
-          },
-        ],
-      };
+      return { contents: [{ uri: "config://current", mimeType: "application/toml", text: content }] };
     } catch {
-      return {
-        contents: [
-          {
-            uri: "config://current",
-            mimeType: "text/plain",
-            text: "Configuration file not found",
-          },
-        ],
-      };
+      return { contents: [{ uri: "config://current", mimeType: "text/plain", text: "Configuration file not found" }] };
     }
   }
 
   private async readAuditLogs() {
-    // Mock audit log data - in production this would read from actual log files
-    const mockLogs = [
-      {
-        timestamp: new Date().toISOString(),
-        request_id: "req_001",
-        provider: "deepseek",
-        model: "deepseek-chat",
-        status: "success",
-        duration_ms: 738,
-        tokens: { prompt: 126, completion: 748 },
-      },
-    ];
-
-    return {
-      contents: [
-        {
-          uri: "logs://audit",
-          mimeType: "application/json",
-          text: stringify(mockLogs),
-        },
-      ],
-    };
+    const mockLogs = [{
+      timestamp: new Date().toISOString(),
+      request_id: "req_001",
+      provider: "deepseek",
+      model: "deepseek-chat",
+      status: "success",
+      duration_ms: 738,
+      tokens: { prompt: 126, completion: 748 },
+    }];
+    return { contents: [{ uri: "logs://audit", mimeType: "application/json", text: stringify(mockLogs) }] };
   }
 
   private async readUsageMetrics() {
-    // Mock usage metrics - in production this would aggregate real data
     const mockMetrics = {
       providers: {
         deepseek: { requests: 10, errors: 0, avg_latency_ms: 750 },
@@ -2047,947 +703,54 @@ class SecureLLMBridgeMCPServer {
       total_errors: 0,
       uptime_seconds: 3600,
     };
-
-    return {
-      contents: [
-        {
-          uri: "metrics://usage",
-          mimeType: "application/json",
-          text: stringify(mockMetrics),
-        },
-      ],
-    };
-  }
-
-  // ===== KNOWLEDGE MANAGEMENT HANDLERS =====
-
-  private async handleCreateSession(args: any) {
-    if (!this.db) {
-      return {
-        content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true,
-      };
-    }
-
-    try {
-      const session = await this.db.createSession(args as CreateSessionInput);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({ session, message: "Session created successfully" }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleSaveKnowledge(args: any) {
-    if (!this.db) {
-      return {
-        content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true,
-      };
-    }
-
-    try {
-      const entry = await this.db.saveKnowledge(args as SaveKnowledgeInput);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({ entry, message: "Knowledge saved successfully" }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleSearchKnowledge(args: any) {
-    if (!this.db) {
-      return {
-        content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true,
-      };
-    }
-
-    try {
-      const results = await this.db.searchKnowledge(args as SearchKnowledgeInput);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({ results, count: results.length }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleLoadSession(args: any) {
-    if (!this.db) {
-      return {
-        content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true,
-      };
-    }
-
-    try {
-      const session = await this.db.getSession(args.session_id);
-      if (!session) {
-        return {
-          content: [{ type: "text", text: "Session not found" }],
-          isError: true,
-        };
-      }
-
-      const entries = await this.db.getRecentKnowledge(args.session_id, 100);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({ session, entries, count: entries.length }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleListSessions(args: any) {
-    if (!this.db) {
-      return {
-        content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true,
-      };
-    }
-
-    try {
-      const sessions = await this.db.listSessions(args.limit || 20, args.offset || 0);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({ sessions, count: sessions.length }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleGetRecentKnowledge(args: any) {
-    if (!this.db) {
-      return {
-        content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true,
-      };
-    }
-
-    try {
-      const entries = await this.db.getRecentKnowledge(args.session_id, args.limit || 20);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({ entries, count: entries.length }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleKnowledgeMaintenance() {
-    if (!this.db) {
-      return {
-        content: [{ type: "text", text: "Knowledge database not available" }],
-        isError: true,
-      };
-    }
-
-    try {
-      await this.db.maintenance();
-      const stats = await this.db.getStats();
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({ message: "Maintenance completed successfully", stats }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleRateLimiterStatus() {
-    try {
-      const allMetrics = this.rateLimiter.getAllMetrics();
-      const status: Record<string, any> = {};
-
-      for (const [provider, metrics] of allMetrics.entries()) {
-        const queueStatus = this.rateLimiter.getQueueStatus(provider);
-        status[provider] = {
-          performance: {
-            totalRequests: metrics.totalRequests,
-            successRate:
-              metrics.totalRequests > 0
-                ? `${((metrics.successfulRequests / metrics.totalRequests) * 100).toFixed(2)}%`
-                : "0%",
-            requestsPerMinute: metrics.requestsPerMinute.toFixed(1),
-            retriedRequests: metrics.retriedRequests,
-            averageRetries:
-              metrics.retriedRequests > 0
-                ? (metrics.totalRetries / metrics.retriedRequests).toFixed(1)
-                : "0",
-          },
-          latency: {
-            average: `${metrics.averageLatency.toFixed(0)}ms`,
-            p50: `${metrics.latencyPercentiles.p50}ms`,
-            p95: `${metrics.latencyPercentiles.p95}ms`,
-            p99: `${metrics.latencyPercentiles.p99}ms`,
-            max: `${metrics.latencyPercentiles.max}ms`,
-          },
-          errors: {
-            total: metrics.failedRequests,
-            byCategory: metrics.errorsByCategory,
-            circuitBreakerTrips: metrics.circuitBreakerActivations,
-          },
-          queue: {
-            current: queueStatus || { queueLength: 0, processing: false },
-            averageLength: metrics.queueMetrics.averageQueueLength.toFixed(1),
-            maxLength: metrics.queueMetrics.maxQueueLength,
-            averageWaitTime:
-              metrics.totalRequests > 0
-                ? `${(metrics.queueMetrics.totalTimeInQueue / metrics.totalRequests).toFixed(0)}ms`
-                : "0ms",
-          },
-          timeWindow: {
-            duration: `${(metrics.timeWindow.durationMs / 1000).toFixed(0)}s`,
-            since: new Date(metrics.timeWindow.startTime).toISOString(),
-          },
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              success: true,
-              timestamp: new Date().toISOString(),
-              providers: status,
-            }),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              success: false,
-              error: error.message,
-            }),
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  // ===== PACKAGE DEBUGGER HANDLERS =====
-
-  private async handlePackageDiagnose(args: any) {
-    try {
-      const result = await this.packageDiagnose.diagnose(args);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              success: false,
-              error: error.message,
-            }),
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  private async handlePackageDownload(args: any) {
-    try {
-      const result = await this.packageDownload.download(args);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              success: false,
-              error: error.message,
-            }),
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  private async handlePackageConfigure(args: any) {
-    try {
-      const result = await this.packageConfigure.configure(args);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify({
-              success: false,
-              error: error.message,
-            }),
-          },
-        ],
-        isError: true,
-      };
-    }
+    return { contents: [{ uri: "metrics://usage", mimeType: "application/json", text: stringify(mockMetrics) }] };
   }
 
   private async readApiDocs() {
-    const docs = `# SecureLLM Bridge API Documentation
-
-## Provider Testing
-Test provider connectivity with sample queries.
-
-## Security Auditing
-Run security checks on configuration files to identify potential issues.
-
-## Rate Limiting
-Check current rate limit status for each provider.
-
-## Build & Test
-Build the project and run test suites.
-
-## Configuration Validation
-Validate provider configuration format and completeness.
-
-## TLS Key Generation
-Generate server and client TLS certificates for secure communication.
-`;
-
-    return {
-      contents: [
-        {
-          uri: "docs://api",
-          mimeType: "text/markdown",
-          text: docs,
-        },
-      ],
-    };
+    const docs = `# SecureLLM Bridge API Documentation\n\n## Provider Testing\nTest provider connectivity with sample queries.\n\n## Security Auditing\nRun security checks on configuration files.\n\n## Rate Limiting\nCheck current rate limit status for each provider.\n\n## Build & Test\nBuild the project and run test suites.\n\n## Configuration Validation\nValidate provider configuration format and completeness.\n\n## TLS Key Generation\nGenerate server and client TLS certificates.\n`;
+    return { contents: [{ uri: "docs://api", mimeType: "text/markdown", text: docs }] };
   }
 
-  // ===== EMERGENCY FRAMEWORK HANDLERS =====
-
-  private async handleEmergencyStatus() {
-    try {
-      const result = await handleEmergencyStatus();
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleEmergencyAbort(args: any) {
-    try {
-      const result = await handleEmergencyAbort(args.force || false);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleEmergencyCooldown() {
-    try {
-      const result = await handleEmergencyCooldown();
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleEmergencyNuke(args: any) {
-    try {
-      const result = await handleEmergencyNuke(args.confirm || false);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleEmergencySwap() {
-    try {
-      const result = await handleEmergencySwap();
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleSystemHealthCheck(args: any) {
-    try {
-      const result = await handleSystemHealthCheck(args.detailed || false);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleSafeRebuildCheck() {
-    try {
-      const result = await handleSafeRebuildCheck();
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  // ===== LAPTOP DEFENSE HANDLERS =====
-
-  private async handleThermalCheck(args: any) {
-    try {
-      const result = await handleThermalCheck(args.max_temp || 75);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleRebuildSafetyCheck() {
-    try {
-      const result = await handleRebuildSafetyCheck();
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleThermalForensics(args: any) {
-    try {
-      const result = await handleThermalForensics(args.duration || 180, args.skip_rebuild || false);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleThermalWarroom(args: any) {
-    try {
-      const result = await handleThermalWarroom(args.duration || 60);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleLaptopVerdict(args: any) {
-    try {
-      const result = await handleLaptopVerdict(args.evidence_dir);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleFullInvestigation() {
-    try {
-      const result = await handleFullInvestigation();
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleForceCooldown() {
-    try {
-      const result = await handleForceCooldown();
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleResetPerformance() {
-    try {
-      const result = await handleResetPerformance();
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  // ===== WEB SEARCH HANDLERS =====
-
-  private async handleWebSearch(args: any) {
-    try {
-      const result = await handleWebSearch(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleNixSearch(args: any) {
-    try {
-      const result = await handleNixSearch(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleGithubSearch(args: any) {
-    try {
-      const result = await handleGithubSearch(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleTechNewsSearch(args: any) {
-    try {
-      const result = await handleTechNewsSearch(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleDiscourseSearch(args: any) {
-    try {
-      const result = await handleDiscourseSearch(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleStackOverflowSearch(args: any) {
-    try {
-      const result = await handleStackOverflowSearch(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleOsintDns(args: any) {
-    try {
-      const result = await handleOsintDns(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleOsintSubdomains(args: any) {
-    try {
-      const result = await handleOsintSubdomains(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleOsintPortScan(args: any) {
-    try {
-      const result = await handleOsintPortScan(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
-
-  private async handleWebCrawl(args: any) {
-    try {
-      const result = await handleWebCrawl(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: stringify(result),
-          },
-        ],
-      };
-    } catch (error: any) {
-      return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
-        isError: true,
-      };
-    }
-  }
+  // ── Run ───────────────────────────────────────────────────────────────────────
 
   async run() {
     const transport = new StdioServerTransport();
-
-    // Start optional Prometheus metrics HTTP server
     const metricsPort = process.env.METRICS_PORT;
     if (metricsPort) {
       try {
         const http = await import("http");
-        const metricsHost = process.env.METRICS_HOST || "0.0.0.0"; // Use 0.0.0.0 for K8s
-        http
-          .createServer((req, res) => {
-            if (req.url === "/metrics") {
-              res.writeHead(200, { "Content-Type": "text/plain" });
-              // Combine rate limiter metrics and tool metrics
-              const rateLimiterMetrics = this.rateLimiter.getAggregatePrometheusMetrics();
-              const toolMetrics = this.toolMetricsCollector.getPrometheusMetrics();
-              res.end([rateLimiterMetrics, toolMetrics].filter(Boolean).join("\n\n"));
-            } else if (req.url === "/health") {
-              res.writeHead(200, { "Content-Type": "application/json" });
-              res.end(
-                JSON.stringify({
-                  status: "ok",
-                  timestamp: new Date().toISOString(),
-                  limiter: this.toolLimiter.getStatus(),
-                })
-              );
-            } else {
-              res.writeHead(404);
-              res.end();
-            }
-          })
-          .listen(parseInt(metricsPort, 10), metricsHost, () => {
-            logger.info(
-              { port: metricsPort, host: metricsHost },
-              "Prometheus metrics server running"
-            );
-          });
+        const metricsHost = process.env.METRICS_HOST || "0.0.0.0";
+        http.createServer((req, res) => {
+          if (req.url === "/metrics") {
+            res.writeHead(200, { "Content-Type": "text/plain" });
+            const rateLimiterMetrics = this.rateLimiter.getAggregatePrometheusMetrics();
+            const toolMetrics = this.toolMetricsCollector.getPrometheusMetrics();
+            res.end([rateLimiterMetrics, toolMetrics].filter(Boolean).join("\n\n"));
+          } else if (req.url === "/health") {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ status: "ok", timestamp: new Date().toISOString(), limiter: this.toolLimiter.getStatus() }));
+          } else {
+            res.writeHead(404);
+            res.end();
+          }
+        }).listen(parseInt(metricsPort, 10), metricsHost, () => {
+          logger.info({ port: metricsPort, host: metricsHost }, "Prometheus metrics server running");
+        });
       } catch (err) {
         logger.error({ err }, "Failed to start metrics server");
       }
     }
-
     await this.server.connect(transport);
     logger.info({ transport: "stdio" }, "SecureLLM Bridge MCP server running");
   }
 }
 
-// Main entry point
 async function main() {
   const server = new SecureLLMBridgeMCPServer();
-
   try {
-    // Initialize async resources (project root, hostname, knowledge DB)
     await server.initialize();
-
-    // Start MCP server
     await server.run();
   } catch (error) {
-    // Use startup logger for fatal errors during initialization (before MCP connection)
     logStartupError("Failed to start MCP server", error as Error);
     process.exit(1);
   }
