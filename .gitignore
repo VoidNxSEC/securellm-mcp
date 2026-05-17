@@ -50,3 +50,6 @@ cloudflared-*
 # OAuth secrets (keep directory structure via .gitkeep)
 secrets/oauth/*
 !secrets/oauth/.gitkeep
+
+# SOPS secrets: commit the encrypted file, ignore plaintext intermediary
+secrets/secrets.yaml.plaintext
