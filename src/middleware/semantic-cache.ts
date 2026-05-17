@@ -233,7 +233,11 @@ export class SemanticCache {
     }
   }
 
-  private estimateTokensSaved(queryText: string, responseText: string, metadata?: Record<string, any>): number {
+  private estimateTokensSaved(
+    queryText: string,
+    responseText: string,
+    metadata?: Record<string, any>
+  ): number {
     if (typeof metadata?.tokensSaved === "number" && metadata.tokensSaved > 0) {
       return metadata.tokensSaved;
     }
@@ -427,22 +431,23 @@ export class SemanticCache {
       }
 
       const now = Date.now();
-      const exactRow = options.provider && options.model
-        ? (this.selectExactWithProviderModelStmt.get(
-            options.toolName,
-            options.queryText,
-            options.provider,
-            options.model,
-            now
-          ) as any)
-        : options.provider
-          ? (this.selectExactWithProviderStmt.get(
+      const exactRow =
+        options.provider && options.model
+          ? (this.selectExactWithProviderModelStmt.get(
               options.toolName,
               options.queryText,
               options.provider,
+              options.model,
               now
             ) as any)
-          : (this.selectExactStmt.get(options.toolName, options.queryText, now) as any);
+          : options.provider
+            ? (this.selectExactWithProviderStmt.get(
+                options.toolName,
+                options.queryText,
+                options.provider,
+                now
+              ) as any)
+            : (this.selectExactStmt.get(options.toolName, options.queryText, now) as any);
 
       if (exactRow) {
         const parsed = JSON.parse(exactRow.response as string);
@@ -453,7 +458,12 @@ export class SemanticCache {
           exactRow.response as string,
           exactRow.expires_at as number
         );
-        await this.recordHit(exactRow.id as string, 1, options.queryText, exactRow.response as string);
+        await this.recordHit(
+          exactRow.id as string,
+          1,
+          options.queryText,
+          exactRow.response as string
+        );
         logger.debug({ toolName: options.toolName }, "Semantic cache HIT (exact match)");
         return parsed;
       }
@@ -489,7 +499,12 @@ export class SemanticCache {
             row.response as string,
             row.expires_at as number
           );
-          await this.recordHit(row.id as string, hit.score, options.queryText, row.response as string);
+          await this.recordHit(
+            row.id as string,
+            hit.score,
+            options.queryText,
+            row.response as string
+          );
           logger.info(
             { toolName: options.toolName, entryId: hit.entryId, similarity: hit.score.toFixed(3) },
             "Semantic cache HIT (PHANTOM)"
@@ -704,7 +719,12 @@ export class SemanticCache {
         entry.lastAccessedAt
       );
       this.setHotCacheValue(
-        this.buildExactCacheKey(options.toolName, options.queryText, options.provider, options.model),
+        this.buildExactCacheKey(
+          options.toolName,
+          options.queryText,
+          options.provider,
+          options.model
+        ),
         entry.id!,
         options.response,
         entry.response!,

@@ -48,9 +48,12 @@ export class ResponseSummarizer {
       tailChars?: number;
     } = {}
   ): string {
-    const maxChars = options.maxChars ?? parseInt(process.env.RESPONSE_TEXT_MAX_CHARS || "16000", 10);
-    const headChars = options.headChars ?? parseInt(process.env.RESPONSE_TEXT_HEAD_CHARS || "6000", 10);
-    const tailChars = options.tailChars ?? parseInt(process.env.RESPONSE_TEXT_TAIL_CHARS || "3000", 10);
+    const maxChars =
+      options.maxChars ?? parseInt(process.env.RESPONSE_TEXT_MAX_CHARS || "16000", 10);
+    const headChars =
+      options.headChars ?? parseInt(process.env.RESPONSE_TEXT_HEAD_CHARS || "6000", 10);
+    const tailChars =
+      options.tailChars ?? parseInt(process.env.RESPONSE_TEXT_TAIL_CHARS || "3000", 10);
 
     if (text.length <= maxChars) {
       return text;
@@ -77,7 +80,9 @@ export class ResponseSummarizer {
     return this.compactToolResultWithStats(result).result;
   }
 
-  static compactToolResultWithStats<T extends ToolLikeResult>(result: T): {
+  static compactToolResultWithStats<T extends ToolLikeResult>(
+    result: T
+  ): {
     result: T;
     stats: CompactionStats;
   } {

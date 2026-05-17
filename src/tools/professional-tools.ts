@@ -14,7 +14,11 @@ const serverHealthSchema = z.object({
     .optional()
     .default(true)
     .describe("Check optional external HTTP services such as Phantom and Cerebro Reranker"),
-  include_git: z.boolean().optional().default(true).describe("Include git repository health details"),
+  include_git: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe("Include git repository health details"),
   timeout_ms: z.number().int().min(250).max(10000).optional().default(2000),
 });
 
@@ -23,7 +27,9 @@ const workspaceQualityGateSchema = z.object({
     .enum(["quick", "standard", "full"])
     .optional()
     .default("standard")
-    .describe("quick: lint/format/build, standard: quick + test, full: quick + test coverage when available"),
+    .describe(
+      "quick: lint/format/build, standard: quick + test, full: quick + test coverage when available"
+    ),
   include_git_status: z
     .boolean()
     .optional()
@@ -70,7 +76,9 @@ const cacheTuningAdvisorSchema = z.object({
 const changeImpactSchema = z.object({
   target: z
     .string()
-    .describe("File or directory to inspect for downstream impact, relative to project root or absolute"),
+    .describe(
+      "File or directory to inspect for downstream impact, relative to project root or absolute"
+    ),
   max_files: z
     .number()
     .int()
@@ -94,7 +102,9 @@ const ciFailureSummarySchema = z
     run_id: z
       .string()
       .optional()
-      .describe("Optional GitHub Actions run ID. When provided, the tool will try `gh run view <id> --log`."),
+      .describe(
+        "Optional GitHub Actions run ID. When provided, the tool will try `gh run view <id> --log`."
+      ),
     include_github_metadata: z
       .boolean()
       .optional()
@@ -140,7 +150,9 @@ const ciBatchTriageSchema = z.object({
     .enum(["triage_recent", "trigger_and_triage"])
     .optional()
     .default("triage_recent")
-    .describe("Either inspect recent workflow runs or trigger a workflow before collecting recent runs"),
+    .describe(
+      "Either inspect recent workflow runs or trigger a workflow before collecting recent runs"
+    ),
   limit_per_repo: z
     .number()
     .int()
@@ -246,9 +258,7 @@ interface GithubRunListItem {
 }
 
 function buildCommand(program: string, args: string[]): string {
-  return [program, ...args]
-    .map((arg) => (/\s/.test(arg) ? JSON.stringify(arg) : arg))
-    .join(" ");
+  return [program, ...args].map((arg) => (/\s/.test(arg) ? JSON.stringify(arg) : arg)).join(" ");
 }
 
 async function safeAccess(targetPath: string): Promise<boolean> {
@@ -378,7 +388,9 @@ function extractGithubActionsContext(logText: string): GithubActionsContext {
       }
     }
 
-    if (/Current runner version:|Operating System|Runner Image|Runner Image Provisioner/i.test(line)) {
+    if (
+      /Current runner version:|Operating System|Runner Image|Runner Image Provisioner/i.test(line)
+    ) {
       runnerLines.push(line);
     }
   }
@@ -399,7 +411,8 @@ function detectCiPatterns(logText: string): CiPatternMatch[] {
       type: "typescript",
       confidence: 0.95,
       title: "TypeScript compilation failure",
-      cause: "The CI log contains TypeScript compiler errors (`TSxxxx`), which usually means type drift or invalid imports.",
+      cause:
+        "The CI log contains TypeScript compiler errors (`TSxxxx`), which usually means type drift or invalid imports.",
       suggestions: [
         "Run `npm run build` locally and fix the first TypeScript error before chasing follow-on errors.",
         "Check recently changed interfaces, renamed exports, and path aliases.",
@@ -437,7 +450,8 @@ function detectCiPatterns(logText: string): CiPatternMatch[] {
       type: "tests",
       confidence: 0.88,
       title: "Test suite failure",
-      cause: "The log contains test assertion markers, suggesting behavioral regression instead of infra-only failure.",
+      cause:
+        "The log contains test assertion markers, suggesting behavioral regression instead of infra-only failure.",
       suggestions: [
         "Re-run the failing test file locally first to isolate whether this is deterministic.",
         "Compare expected outputs with recent code-path changes and fixtures.",
@@ -471,12 +485,15 @@ function detectCiPatterns(logText: string): CiPatternMatch[] {
     });
   }
 
-  if (/Process completed with exit code \d+|Error: Process completed with exit code/i.test(logText)) {
+  if (
+    /Process completed with exit code \d+|Error: Process completed with exit code/i.test(logText)
+  ) {
     patterns.push({
       type: "github_actions",
       confidence: 0.65,
       title: "GitHub Actions step failure",
-      cause: "The workflow step exited non-zero. This usually wraps another underlying compile, test, or script failure.",
+      cause:
+        "The workflow step exited non-zero. This usually wraps another underlying compile, test, or script failure.",
       suggestions: [
         "Scroll upward to the first error block in the same step; the exit code line is usually not the root cause.",
       ],
@@ -488,7 +505,8 @@ function detectCiPatterns(logText: string): CiPatternMatch[] {
       type: "generic",
       confidence: 0.45,
       title: "Generic CI error",
-      cause: "The log contains error markers, but it does not strongly match a known failure family.",
+      cause:
+        "The log contains error markers, but it does not strongly match a known failure family.",
       suggestions: [
         "Review the earliest stack trace or command failure in the log for the actual root cause.",
       ],
@@ -522,7 +540,10 @@ function summarizeCiFailure(logText: string) {
     category: topPattern?.type || "generic",
     confidence: topPattern?.confidence || 0.3,
     failure_signals: failureSignals,
-    suggested_fixes: uniqueLines(patterns.flatMap((pattern) => pattern.suggestions), 6),
+    suggested_fixes: uniqueLines(
+      patterns.flatMap((pattern) => pattern.suggestions),
+      6
+    ),
     github_actions_context: actionsContext,
   };
 }
@@ -542,13 +563,21 @@ function summarizeGithubRunMetadata(metadata: GithubRunMetadata | null | undefin
         conclusion: string | null;
         failed_steps: string[];
       },
-      job_summaries: [] as Array<{ name: string | null; conclusion: string | null; status: string | null }>,
+      job_summaries: [] as Array<{
+        name: string | null;
+        conclusion: string | null;
+        status: string | null;
+      }>,
     };
   }
 
   const jobs = Array.isArray(metadata.jobs) ? metadata.jobs : [];
   const failedJob =
-    jobs.find((job) => ["failure", "cancelled", "timed_out", "startup_failure", "action_required"].includes(job.conclusion || "")) ||
+    jobs.find((job) =>
+      ["failure", "cancelled", "timed_out", "startup_failure", "action_required"].includes(
+        job.conclusion || ""
+      )
+    ) ||
     jobs.find((job) => (job.status || "").toLowerCase() === "failed") ||
     null;
 
@@ -676,9 +705,8 @@ async function collectChangeImpact(
       ? Array.from(
           new Set(
             ((await safeReadText(safeTarget)) || "")
-              .match(/export\s+(?:const|function|class|interface|type)\s+([A-Za-z_]\w*)/g)?.map(
-                (match) => match.replace(/.*\s+([A-Za-z_]\w*)$/, "$1")
-              ) || []
+              .match(/export\s+(?:const|function|class|interface|type)\s+([A-Za-z_]\w*)/g)
+              ?.map((match) => match.replace(/.*\s+([A-Za-z_]\w*)$/, "$1")) || []
           )
         )
       : [];
@@ -706,7 +734,10 @@ async function collectChangeImpact(
     let relation: FileImpactRecord["relation"] | null = null;
 
     for (const needle of importNeedles) {
-      if (text.includes(`export * from "${needle}"`) || text.includes(`export * from '${needle}'`)) {
+      if (
+        text.includes(`export * from "${needle}"`) ||
+        text.includes(`export * from '${needle}'`)
+      ) {
         relation = "re_export";
         score = 4;
         break;
@@ -878,13 +909,15 @@ function summarizeQualityGate(steps: QualityGateStep[]): {
 export const professionalTools: ExtendedTool[] = [
   {
     name: "server_health",
-    description: "Professional runtime health report for the MCP server and its optional dependencies",
+    description:
+      "Professional runtime health report for the MCP server and its optional dependencies",
     inputSchema: zodToMcpSchema(serverHealthSchema),
     defer_loading: true,
   },
   {
     name: "workspace_quality_gate",
-    description: "Run a professional workspace quality gate across formatting, linting, build, and tests",
+    description:
+      "Run a professional workspace quality gate across formatting, linting, build, and tests",
     inputSchema: zodToMcpSchema(workspaceQualityGateSchema),
     defer_loading: true,
   },
@@ -897,19 +930,22 @@ export const professionalTools: ExtendedTool[] = [
   },
   {
     name: "cache_tuning_advisor",
-    description: "Recommend semantic cache and response compaction tuning based on observed tool metrics",
+    description:
+      "Recommend semantic cache and response compaction tuning based on observed tool metrics",
     inputSchema: zodToMcpSchema(cacheTuningAdvisorSchema),
     defer_loading: true,
   },
   {
     name: "change_impact",
-    description: "Estimate which files are most likely to be affected by a change in a target file or directory",
+    description:
+      "Estimate which files are most likely to be affected by a change in a target file or directory",
     inputSchema: zodToMcpSchema(changeImpactSchema),
     defer_loading: true,
   },
   {
     name: "ci_failure_summary",
-    description: "Summarize CI logs into likely root cause, confidence, failure signals, and next fixes",
+    description:
+      "Summarize CI logs into likely root cause, confidence, failure signals, and next fixes",
     inputSchema: zodToMcpSchema(ciFailureSummarySchema),
     defer_loading: true,
     priority: "high",
@@ -919,7 +955,8 @@ export const professionalTools: ExtendedTool[] = [
   },
   {
     name: "tool_control_plane",
-    description: "Inspect tool priority, degraded-mode policy, and enforcement decisions for MCP tools",
+    description:
+      "Inspect tool priority, degraded-mode policy, and enforcement decisions for MCP tools",
     inputSchema: zodToMcpSchema(toolControlPlaneSchema),
     defer_loading: true,
     priority: "high",
@@ -939,14 +976,8 @@ export const professionalTools: ExtendedTool[] = [
   },
 ];
 
-function rankTools<T>(
-  toolMetrics: T[],
-  topN: number,
-  selector: (metric: T) => number
-) {
-  return [...toolMetrics]
-    .sort((a, b) => selector(b) - selector(a))
-    .slice(0, topN);
+function rankTools<T>(toolMetrics: T[], topN: number, selector: (metric: T) => number) {
+  return [...toolMetrics].sort((a, b) => selector(b) - selector(a)).slice(0, topN);
 }
 
 export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
@@ -968,7 +999,7 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
   return {
     async server_health(rawArgs: unknown) {
       const args = serverHealthSchema.parse(rawArgs ?? {});
-      const status = (await deps.getServerStatus(false)) as ServerStatus;
+      const status = (await deps.getServerStatus(false));
       const projectRoot = deps.getProjectRoot();
 
       const [projectRootReadable, packageJsonPresent, flakePresent, buildPresent, gitSummary] =
@@ -982,7 +1013,10 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
 
       const externalServices = args.include_external_services
         ? await Promise.all([
-            checkHttpHealth(`${process.env.PHANTOM_URL ?? "http://localhost:8008"}/health`, args.timeout_ms),
+            checkHttpHealth(
+              `${process.env.PHANTOM_URL ?? "http://localhost:8008"}/health`,
+              args.timeout_ms
+            ),
             checkHttpHealth(
               `${process.env.CEREBRO_RERANKER_URL ?? "http://localhost:8016"}/health`,
               args.timeout_ms
@@ -1082,29 +1116,35 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
 
     async performance_report(rawArgs: unknown) {
       const args = performanceReportSchema.parse(rawArgs ?? {});
-      const status = (await deps.getServerStatus(true)) as ServerStatus;
-      const statusMetrics = ((status as Record<string, unknown>).metrics || {}) as Record<string, unknown>;
-      const rawToolMetrics = (statusMetrics.toolMetrics || {}) as Record<string, Record<string, unknown>>;
-      const metricsList: ToolMetricRecord[] = Object.entries(rawToolMetrics).map(([toolName, metric]) => ({
-        toolName,
-        ...metric,
-      }));
+      const status = (await deps.getServerStatus(true));
+      const statusMetrics = ((status).metrics || {}) as Record<
+        string,
+        unknown
+      >;
+      const rawToolMetrics = (statusMetrics.toolMetrics || {}) as Record<
+        string,
+        Record<string, unknown>
+      >;
+      const metricsList: ToolMetricRecord[] = Object.entries(rawToolMetrics).map(
+        ([toolName, metric]) => ({
+          toolName,
+          ...metric,
+        })
+      );
 
-      const topLatency = rankTools(
-        metricsList,
-        args.top_n,
-        (metric) => Number(metric.averageLatency || 0)
+      const topLatency = rankTools(metricsList, args.top_n, (metric) =>
+        Number(metric.averageLatency || 0)
       ).map((metric) => ({
         tool: metric.toolName,
         average_latency_ms: Math.round(Number(metric.averageLatency || 0)),
-        p95_latency_ms: Math.round(Number((metric.latencyPercentiles as Record<string, unknown>)?.p95 || 0)),
+        p95_latency_ms: Math.round(
+          Number((metric.latencyPercentiles as Record<string, unknown>)?.p95 || 0)
+        ),
         requests: Number(metric.totalRequests || 0),
       }));
 
-      const topTokenSavings = rankTools(
-        metricsList,
-        args.top_n,
-        (metric) => Number(metric.totalCompactionTokensSaved || 0)
+      const topTokenSavings = rankTools(metricsList, args.top_n, (metric) =>
+        Number(metric.totalCompactionTokensSaved || 0)
       ).map((metric) => ({
         tool: metric.toolName,
         compacted_tokens_saved: Number(metric.totalCompactionTokensSaved || 0),
@@ -1116,10 +1156,13 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
         metricsList,
         args.top_n,
         (metric) =>
-          Number(metric.averageOriginalResponseSize || 0) - Number(metric.averageCompactedResponseSize || 0)
+          Number(metric.averageOriginalResponseSize || 0) -
+          Number(metric.averageCompactedResponseSize || 0)
       ).map((metric) => ({
         tool: metric.toolName,
-        average_original_response_bytes: Math.round(Number(metric.averageOriginalResponseSize || 0)),
+        average_original_response_bytes: Math.round(
+          Number(metric.averageOriginalResponseSize || 0)
+        ),
         average_compacted_response_bytes: Math.round(
           Number(metric.averageCompactedResponseSize || metric.averageResponseSize || 0)
         ),
@@ -1147,7 +1190,9 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
                 ]
               : []),
             ...(metricsList.length === 0
-              ? ["Collect runtime traffic first so the performance report has tool metrics to analyze."]
+              ? [
+                  "Collect runtime traffic first so the performance report has tool metrics to analyze.",
+                ]
               : []),
           ]
         : [];
@@ -1170,7 +1215,8 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
                   0
                 ),
                 semantic_cache_tokens_saved: Number(
-                  ((statusMetrics.semanticCache as Record<string, unknown> | undefined)?.tokensSaved as number | undefined) || 0
+                  ((statusMetrics.semanticCache as Record<string, unknown> | undefined)
+                    ?.tokensSaved as number | undefined) || 0
                 ),
               },
               top_latency_tools: topLatency,
@@ -1185,13 +1231,21 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
 
     async cache_tuning_advisor(rawArgs: unknown) {
       const args = cacheTuningAdvisorSchema.parse(rawArgs ?? {});
-      const status = (await deps.getServerStatus(true)) as ServerStatus;
-      const statusMetrics = ((status as Record<string, unknown>).metrics || {}) as Record<string, unknown>;
-      const rawToolMetrics = (statusMetrics.toolMetrics || {}) as Record<string, Record<string, unknown>>;
-      const metricsList: ToolMetricRecord[] = Object.entries(rawToolMetrics).map(([toolName, metric]) => ({
-        toolName,
-        ...metric,
-      }));
+      const status = (await deps.getServerStatus(true));
+      const statusMetrics = ((status).metrics || {}) as Record<
+        string,
+        unknown
+      >;
+      const rawToolMetrics = (statusMetrics.toolMetrics || {}) as Record<
+        string,
+        Record<string, unknown>
+      >;
+      const metricsList: ToolMetricRecord[] = Object.entries(rawToolMetrics).map(
+        ([toolName, metric]) => ({
+          toolName,
+          ...metric,
+        })
+      );
 
       const cacheCandidates = rankTools(
         metricsList.filter((metric) => Number(metric.cacheMisses || 0) > 0),
@@ -1210,10 +1264,13 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
       const compactionCandidates = rankTools(
         metricsList.filter((metric) => Number(metric.averageOriginalResponseSize || 0) > 0),
         args.top_n,
-        (metric) => Number(metric.averageOriginalResponseSize || 0) - Number(metric.averageResponseSize || 0)
+        (metric) =>
+          Number(metric.averageOriginalResponseSize || 0) - Number(metric.averageResponseSize || 0)
       ).map((metric) => ({
         tool: metric.toolName,
-        average_original_response_bytes: Math.round(Number(metric.averageOriginalResponseSize || 0)),
+        average_original_response_bytes: Math.round(
+          Number(metric.averageOriginalResponseSize || 0)
+        ),
         average_compacted_response_bytes: Math.round(Number(metric.averageResponseSize || 0)),
         compaction_rate: Number(metric.compactionRate || 0),
         suggestion:
@@ -1222,10 +1279,8 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
             : "Large responses without compaction suggest a good candidate for custom summarization.",
       }));
 
-      const volatileCandidates = rankTools(
-        metricsList,
-        args.top_n,
-        (metric) => Number(metric.averageLatency || 0)
+      const volatileCandidates = rankTools(metricsList, args.top_n, (metric) =>
+        Number(metric.averageLatency || 0)
       )
         .filter(
           (metric) =>
@@ -1260,13 +1315,19 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
               volatile_or_low_yield_tools: volatileCandidates,
               recommendations: [
                 ...(cacheCandidates.length > 0
-                  ? ["Prioritize the highest miss x latency tools for cache-key stabilization or TTL tuning."]
+                  ? [
+                      "Prioritize the highest miss x latency tools for cache-key stabilization or TTL tuning.",
+                    ]
                   : []),
                 ...(compactionCandidates.length > 0
-                  ? ["The largest original-vs-compacted payload gaps are the best places for custom summaries."]
+                  ? [
+                      "The largest original-vs-compacted payload gaps are the best places for custom summaries.",
+                    ]
                   : []),
                 ...(volatileCandidates.length > 0
-                  ? ["Some tools may cost more to look up in cache than they save; consider explicit exclusion."]
+                  ? [
+                      "Some tools may cost more to look up in cache than they save; consider explicit exclusion.",
+                    ]
                   : []),
               ],
             }),
@@ -1405,7 +1466,9 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
                     ]
                   : []),
                 ...(githubRun?.failed_job?.name
-                  ? [`Start with the failed job '${githubRun.failed_job.name}' before reviewing successful jobs.`]
+                  ? [
+                      `Start with the failed job '${githubRun.failed_job.name}' before reviewing successful jobs.`,
+                    ]
                   : []),
               ],
             }),
@@ -1417,7 +1480,7 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
 
     async tool_control_plane(rawArgs: unknown) {
       const args = toolControlPlaneSchema.parse(rawArgs ?? {});
-      const status = (await deps.getServerStatus(true)) as Record<string, unknown>;
+      const status = (await deps.getServerStatus(true));
       const governance = deps.getToolGovernanceSummary?.(args.include_tools) || {};
 
       return {
@@ -1427,7 +1490,9 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
             text: stringifyGeneric({
               generated_at: new Date().toISOString(),
               governance,
-              metrics_available: Boolean((status.metrics as Record<string, unknown> | undefined)?.toolMetrics),
+              metrics_available: Boolean(
+                (status.metrics as Record<string, unknown> | undefined)?.toolMetrics
+              ),
               recommendations: [
                 "Keep critical diagnostics and incident-response tools in high priority so they bypass degraded-mode surprises.",
                 "Mark expensive batch-style tools carefully; they are the safest first candidates to shed during incident load.",
@@ -1549,7 +1614,9 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
         .slice(0, 8)
         .map(([job, count]) => ({ job, count }));
 
-      const allRuns = repoReports.flatMap((repoReport) => (repoReport.runs as Array<Record<string, unknown>>) || []);
+      const allRuns = repoReports.flatMap(
+        (repoReport) => (repoReport.runs as Array<Record<string, unknown>>) || []
+      );
 
       return {
         content: [
@@ -1573,7 +1640,9 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
                 "Start with the most repeated failure category across repositories before drilling into repo-specific edge cases.",
                 "If one failed job dominates across repos, fix that job template or shared action first.",
                 ...(triggerFailures.length > 0
-                  ? ["Some workflow triggers failed immediately; check workflow name, branch, and repository permissions first."]
+                  ? [
+                      "Some workflow triggers failed immediately; check workflow name, branch, and repository permissions first.",
+                    ]
                   : []),
               ],
               repositories: repoReports,

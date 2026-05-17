@@ -22,10 +22,14 @@ import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 const notifyHookSchema = z.object({
   action: z.enum(["send", "watch"]).describe("Send now or watch a process"),
   // send
-  channel: z.enum(["ntfy.sh", "gotify", "discord", "local"]).optional().default("local").describe("Notification channel"),
+  channel: z
+    .enum(["ntfy.sh", "gotify", "discord", "local"])
+    .optional()
+    .default("local")
+    .describe("Notification channel"),
   message: z.string().describe("Notification body"),
   title: z.string().optional().default("MCP Server").describe("Notification title"),
-  priority: z.enum(["low","normal","high"]).optional().default("normal"),
+  priority: z.enum(["low", "normal", "high"]).optional().default("normal"),
   url: z.string().optional().describe("Custom webhook URL (overrides default channel URL)"),
   // watch
   pid: z.number().int().positive().optional().describe("PID to watch"),
@@ -44,11 +48,19 @@ export const notifyHookTool: ExtendedTool = {
   inputSchema: {
     type: "object",
     properties: {
-      action: { type: "string", enum: ["send","watch"], description: "Send now or watch a process" },
-      channel: { type: "string", enum: ["ntfy.sh","gotify","discord","local"], description: "Notification channel (default: local)" },
+      action: {
+        type: "string",
+        enum: ["send", "watch"],
+        description: "Send now or watch a process",
+      },
+      channel: {
+        type: "string",
+        enum: ["ntfy.sh", "gotify", "discord", "local"],
+        description: "Notification channel (default: local)",
+      },
       message: { type: "string", description: "Notification body" },
       title: { type: "string", description: "Notification title" },
-      priority: { type: "string", enum: ["low","normal","high"], description: "Priority level" },
+      priority: { type: "string", enum: ["low", "normal", "high"], description: "Priority level" },
       url: { type: "string", description: "Custom webhook URL" },
       pid: { type: "number", description: "PID to watch" },
       command: { type: "string", description: "Run command and notify when done" },
@@ -72,7 +84,9 @@ export async function handleNotifyHook(
     } else if (action === "watch") {
       return await watchProcess(args);
     }
-    return { content: [{ type: "text", text: JSON.stringify({ error: `Unknown action: ${action}` }) }] };
+    return {
+      content: [{ type: "text", text: JSON.stringify({ error: `Unknown action: ${action}` }) }],
+    };
   } catch (err: any) {
     return { content: [{ type: "text", text: JSON.stringify({ error: err.message }) }] };
   }
@@ -81,7 +95,11 @@ export async function handleNotifyHook(
 // ─── Send ────────────────────────────────────────────────────────────────────
 
 async function sendNotification(args: {
-  channel?: string; message: string; title?: string; priority?: string; url?: string;
+  channel?: string;
+  message: string;
+  title?: string;
+  priority?: string;
+  url?: string;
 }) {
   const { channel = "local", message, title = "MCP Server", priority = "normal", url } = args;
   const result: any = { channel, sent: false };
@@ -94,9 +112,9 @@ async function sendNotification(args: {
         const resp = await fetch(ntfyUrl, {
           method: "POST",
           headers: {
-            "Title": title,
-            "Priority": priority,
-            "Tags": "computer",
+            Title: title,
+            Priority: priority,
+            Tags: "computer",
           },
           body: message,
           signal: AbortSignal.timeout(5_000),
@@ -138,12 +156,14 @@ async function sendNotification(args: {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            embeds: [{
-              title,
-              description: message,
-              color,
-              timestamp: new Date().toISOString(),
-            }],
+            embeds: [
+              {
+                title,
+                description: message,
+                color,
+                timestamp: new Date().toISOString(),
+              },
+            ],
           }),
           signal: AbortSignal.timeout(5_000),
         });
@@ -157,7 +177,7 @@ async function sendNotification(args: {
         await new Promise<void>((resolve, reject) => {
           exec(
             `notify-send "${title.replace(/"/g, '\\"')}" "${message.replace(/"/g, '\\"')}" --urgency=${priority}`,
-            (error) => error ? reject(error) : resolve()
+            (error) => (error ? reject(error) : resolve())
           );
         });
         result.sent = true;
@@ -180,10 +200,23 @@ async function sendNotification(args: {
 // ─── Watch ───────────────────────────────────────────────────────────────────
 
 async function watchProcess(args: {
-  pid?: number; command?: string; title?: string; channel?: string;
-  message: string; notify_on_exit?: boolean; timeout_ms?: number;
+  pid?: number;
+  command?: string;
+  title?: string;
+  channel?: string;
+  message: string;
+  notify_on_exit?: boolean;
+  timeout_ms?: number;
 }) {
-  const { pid, command, title = "MCP Server", channel = "local", message, notify_on_exit = true, timeout_ms = 60000 } = args;
+  const {
+    pid,
+    command,
+    title = "MCP Server",
+    channel = "local",
+    message,
+    notify_on_exit = true,
+    timeout_ms = 60000,
+  } = args;
 
   let targetPid: number | undefined = pid;
 
@@ -196,9 +229,14 @@ async function watchProcess(args: {
 
   if (!targetPid) {
     return {
-      content: [{ type: "text", text: JSON.stringify({
-        error: "No PID to watch. Provide pid or command.",
-      }) }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            error: "No PID to watch. Provide pid or command.",
+          }),
+        },
+      ],
     };
   }
 
@@ -220,7 +258,9 @@ async function watchProcess(args: {
         const { readFileSync } = await import("fs");
         const statPath = `/proc/${targetPid}/stat`;
         // Process is gone, can't read stat
-      } catch { /* process already gone */ }
+      } catch {
+        /* process already gone */
+      }
       break;
     }
   }
@@ -241,16 +281,22 @@ async function watchProcess(args: {
   }
 
   return {
-    content: [{
-      type: "text",
-      text: JSON.stringify({
-        pid: targetPid,
-        status,
-        duration_ms: Date.now() - startTime,
-        notified: exited && notify_on_exit,
-        message: finalMessage,
-      }, null, 2),
-    }],
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          {
+            pid: targetPid,
+            status,
+            duration_ms: Date.now() - startTime,
+            notified: exited && notify_on_exit,
+            message: finalMessage,
+          },
+          null,
+          2
+        ),
+      },
+    ],
   };
 }
 

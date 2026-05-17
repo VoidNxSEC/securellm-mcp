@@ -78,7 +78,10 @@ describe("professional tools", () => {
     assert.equal(result.content[0].type, "text");
 
     const payload = JSON.parse(result.content[0].text);
-    assert.equal(payload.overall_status === "healthy" || payload.overall_status === "degraded", true);
+    assert.equal(
+      payload.overall_status === "healthy" || payload.overall_status === "degraded",
+      true
+    );
     assert.equal(payload.workspace.project_root, process.cwd());
     assert.equal(Array.isArray(payload.warnings), true);
   });
@@ -290,7 +293,9 @@ describe("professional tools", () => {
     const payload = JSON.parse(result.content[0].text);
 
     assert.equal(payload.github_actions_step, "npm run build");
-    assert.ok(payload.github_actions_annotations.some((line: string) => line.includes("exit code 2")));
+    assert.ok(
+      payload.github_actions_annotations.some((line: string) => line.includes("exit code 2"))
+    );
     assert.ok(payload.runner_context.some((line: string) => line.includes("runner version")));
   });
 
@@ -303,7 +308,9 @@ describe("professional tools", () => {
         blockedTools: includeTools ? ["web_crawl"] : [],
         priorities: { critical: 1, high: 2, normal: 3, low: 0 },
         executionClasses: { realtime: 1, interactive: 2, batch: 2, diagnostic: 1 },
-        tools: includeTools ? [{ name: "ci_failure_summary", priority: "high", allowed: true }] : undefined,
+        tools: includeTools
+          ? [{ name: "ci_failure_summary", priority: "high", allowed: true }]
+          : undefined,
       }),
     });
 
@@ -462,8 +469,12 @@ describe("professional tools", () => {
     assert.equal(payload.repo_count, 2);
     assert.equal(payload.totals.runs_analyzed, 2);
     assert.equal(payload.top_categories[0].count, 1);
-    assert.ok(payload.top_categories.some((item: { category: string }) => item.category === "typescript"));
-    assert.ok(payload.top_categories.some((item: { category: string }) => item.category === "tests"));
+    assert.ok(
+      payload.top_categories.some((item: { category: string }) => item.category === "typescript")
+    );
+    assert.ok(
+      payload.top_categories.some((item: { category: string }) => item.category === "tests")
+    );
     assert.ok(payload.top_failed_jobs.some((item: { job: string }) => item.job === "build"));
     assert.ok(payload.top_failed_jobs.some((item: { job: string }) => item.job === "test"));
     assert.equal(payload.repositories.length, 2);

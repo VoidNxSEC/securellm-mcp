@@ -33,7 +33,7 @@ describe("ResponseSummarizer compaction", () => {
         {
           type: "text",
           text: JSON.stringify(
-                    {
+            {
               items: Array.from({ length: 800 }, (_, i) => ({
                 id: i,
                 value: `entry-${i}-${"x".repeat(80)}`,

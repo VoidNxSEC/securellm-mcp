@@ -24,16 +24,28 @@ import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 
 const pipelineStepSchema = z.object({
   tool: z.string().describe("Tool name to execute"),
-  args: z.record(z.any()).optional().default({}).describe("Arguments (can reference previous outputs with $prefix.field)"),
+  args: z
+    .record(z.any())
+    .optional()
+    .default({})
+    .describe("Arguments (can reference previous outputs with $prefix.field)"),
   output_as: z.string().optional().describe("Alias to reference this step's output later"),
-  on_failure: z.enum(["stop","skip","continue"]).optional().default("stop"),
+  on_failure: z.enum(["stop", "skip", "continue"]).optional().default("stop"),
   timeout_ms: z.number().int().min(500).max(120000).optional().default(30000),
   condition: z.string().optional().describe("Execute only if: '$previous.success === true'"),
 });
 
 const metaToolSchema = z.object({
-  pipeline: z.array(pipelineStepSchema).min(1).max(20).describe("Sequence of tool calls to execute"),
-  parallel: z.boolean().optional().default(false).describe("Execute independent steps in parallel (steps must not reference each other)"),
+  pipeline: z
+    .array(pipelineStepSchema)
+    .min(1)
+    .max(20)
+    .describe("Sequence of tool calls to execute"),
+  parallel: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Execute independent steps in parallel (steps must not reference each other)"),
   stop_on_first_failure: z.boolean().optional().default(true),
   max_total_timeout_ms: z.number().int().min(1000).max(600000).optional().default(120000),
 });
@@ -56,7 +68,7 @@ export const metaToolTool: ExtendedTool = {
             tool: { type: "string", description: "Tool name" },
             args: { type: "object", description: "Arguments ($prefix.field for references)" },
             output_as: { type: "string", description: "Reference alias" },
-            on_failure: { type: "string", enum: ["stop","skip","continue"] },
+            on_failure: { type: "string", enum: ["stop", "skip", "continue"] },
             timeout_ms: { type: "number", description: "Per-step timeout" },
             condition: { type: "string", description: "Conditional execution" },
           },
@@ -78,7 +90,12 @@ export async function handleMetaTool(
   args: z.infer<typeof metaToolSchema>,
   executeTool: (name: string, toolArgs: any) => Promise<any>
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  const { pipeline, parallel = false, stop_on_first_failure = true, max_total_timeout_ms = 120000 } = args;
+  const {
+    pipeline,
+    parallel = false,
+    stop_on_first_failure = true,
+    max_total_timeout_ms = 120000,
+  } = args;
 
   const outputs: Record<string, any> = {};
   const results: any[] = [];
@@ -104,9 +121,19 @@ export async function handleMetaTool(
 
         if (settled.status === "fulfilled") {
           if (step.output_as) outputs[step.output_as] = settled.value;
-          results.push({ step: step.tool, output_as: step.output_as, success: true, result: settled.value });
+          results.push({
+            step: step.tool,
+            output_as: step.output_as,
+            success: true,
+            result: settled.value,
+          });
         } else {
-          results.push({ step: step.tool, output_as: step.output_as, success: false, error: String(settled.reason) });
+          results.push({
+            step: step.tool,
+            output_as: step.output_as,
+            success: false,
+            error: String(settled.reason),
+          });
           if (step.on_failure === "stop" || stop_on_first_failure) break;
         }
       }
@@ -124,13 +151,22 @@ export async function handleMetaTool(
           try {
             const condResult = resolveExpression(step.condition, outputs);
             if (!condResult) {
-              results.push({ step: step.tool, success: false, error: `Condition not met: ${step.condition}`, skipped: true });
+              results.push({
+                step: step.tool,
+                success: false,
+                error: `Condition not met: ${step.condition}`,
+                skipped: true,
+              });
               if (step.on_failure === "skip") continue;
               if (step.on_failure === "stop") break;
               continue;
             }
           } catch {
-            results.push({ step: step.tool, success: false, error: `Invalid condition: ${step.condition}` });
+            results.push({
+              step: step.tool,
+              success: false,
+              error: `Invalid condition: ${step.condition}`,
+            });
             if (step.on_failure === "stop") break;
             continue;
           }
@@ -160,7 +196,10 @@ export async function handleMetaTool(
             error: err.message,
           });
 
-          if (step.on_failure === "stop" || (step.on_failure !== "skip" && step.on_failure !== "continue" && stop_on_first_failure)) {
+          if (
+            step.on_failure === "stop" ||
+            (step.on_failure !== "skip" && step.on_failure !== "continue" && stop_on_first_failure)
+          ) {
             break;
           }
           // on_failure = skip or continue: keep going
@@ -174,31 +213,43 @@ export async function handleMetaTool(
     const skipped = results.filter((r) => r.skipped).length;
 
     return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          pipeline_status: failed === 0 ? "success" : "partial_failure",
-          total_steps: pipeline.length,
-          executed: succeeded + failed,
-          succeeded,
-          failed,
-          skipped,
-          duration_ms: totalMs,
-          outputs: Object.keys(outputs),
-          results,
-        }, null, 2),
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              pipeline_status: failed === 0 ? "success" : "partial_failure",
+              total_steps: pipeline.length,
+              executed: succeeded + failed,
+              succeeded,
+              failed,
+              skipped,
+              duration_ms: totalMs,
+              outputs: Object.keys(outputs),
+              results,
+            },
+            null,
+            2
+          ),
+        },
+      ],
     };
   } catch (err: any) {
     return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          pipeline_status: "error",
-          error: err.message,
-          duration_ms: Date.now() - startTime,
-        }, null, 2),
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              pipeline_status: "error",
+              error: err.message,
+              duration_ms: Date.now() - startTime,
+            },
+            null,
+            2
+          ),
+        },
+      ],
     };
   }
 }
@@ -263,13 +314,19 @@ function resolveExpression(expr: string, outputs: Record<string, any>): any {
 
       // Try to parse JSON if the value is a string
       if (typeof current === "string") {
-        try { current = JSON.parse(current); } catch { /* not JSON */ }
+        try {
+          current = JSON.parse(current);
+        } catch {
+          /* not JSON */
+        }
       }
 
       if (typeof current === "object" && segment in current) {
         current = current[segment];
       } else {
-        throw new Error(`Cannot resolve '${expr}': '${segment}' not found in ${JSON.stringify(Object.keys(current))}`);
+        throw new Error(
+          `Cannot resolve '${expr}': '${segment}' not found in ${JSON.stringify(Object.keys(current))}`
+        );
       }
     }
 
@@ -298,8 +355,14 @@ async function executeWithTimeout<T>(fn: () => Promise<T>, timeoutMs: number): P
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs);
     fn()
-      .then((result) => { clearTimeout(timer); resolve(result); })
-      .catch((err) => { clearTimeout(timer); reject(err); });
+      .then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
   });
 }
 

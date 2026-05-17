@@ -17,20 +17,27 @@ import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
 const nvimContextSchema = z.object({
-  action: z.enum([
-    "get_buffer",      // current file, cursor, filetype
-    "get_selection",   // visual selection text + range
-    "get_diagnostics", // LSP errors/warnings in current buffer
-    "get_visible_range", // lines currently on screen
-    "get_git_blame",   // git blame for current line
-    "list_buffers",    // all open buffers
-    "get_mode",        // current vim mode (normal, insert, visual)
-  ]).describe("What to retrieve from Neovim"),
+  action: z
+    .enum([
+      "get_buffer", // current file, cursor, filetype
+      "get_selection", // visual selection text + range
+      "get_diagnostics", // LSP errors/warnings in current buffer
+      "get_visible_range", // lines currently on screen
+      "get_git_blame", // git blame for current line
+      "list_buffers", // all open buffers
+      "get_mode", // current vim mode (normal, insert, visual)
+    ])
+    .describe("What to retrieve from Neovim"),
 });
 
 // Whitelist of safe vim commands (read-only, no shell)
 const SAFE_VIM_COMMANDS = [
-  "echo", "pwd", "buffers", "marks", "registers", "ls",
+  "echo",
+  "pwd",
+  "buffers",
+  "marks",
+  "registers",
+  "ls",
   "lua print(vim.inspect(...))",
 ];
 
@@ -46,7 +53,15 @@ export const nvimContextTool: ExtendedTool = {
     properties: {
       action: {
         type: "string",
-        enum: ["get_buffer","get_selection","get_diagnostics","get_visible_range","get_git_blame","list_buffers","get_mode"],
+        enum: [
+          "get_buffer",
+          "get_selection",
+          "get_diagnostics",
+          "get_visible_range",
+          "get_git_blame",
+          "list_buffers",
+          "get_mode",
+        ],
         description: "What to retrieve from Neovim",
       },
     },
@@ -60,8 +75,7 @@ export async function handleNvimContext(
   args: z.infer<typeof nvimContextSchema>
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const socketPath =
-    process.env.NVIM_LISTEN_ADDRESS ||
-    `/tmp/nvim-${process.env.USER || "kernelcore"}`;
+    process.env.NVIM_LISTEN_ADDRESS || `/tmp/nvim-${process.env.USER || "kernelcore"}`;
 
   let conn: ReturnType<typeof createConnection> | null = null;
 
@@ -103,19 +117,29 @@ export async function handleNvimContext(
   } catch (err: any) {
     // Graceful error — Neovim might not be running
     return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          error: "Neovim connection failed",
-          detail: err.message,
-          hint: "Is Neovim running? Make sure it was started with: nvim --listen /tmp/nvim-$USER",
-          socket: socketPath,
-        }, null, 2),
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              error: "Neovim connection failed",
+              detail: err.message,
+              hint: "Is Neovim running? Make sure it was started with: nvim --listen /tmp/nvim-$USER",
+              socket: socketPath,
+            },
+            null,
+            2
+          ),
+        },
+      ],
     };
   } finally {
     if (conn) {
-      try { conn.destroy(); } catch { /* ok */ }
+      try {
+        conn.destroy();
+      } catch {
+        /* ok */
+      }
     }
   }
 }
@@ -240,13 +264,7 @@ async function getSelection(nvim: NvimRpc) {
 
     // Get lines in visual range
     const buf = await nvim.call("nvim_get_current_buf");
-    const lines = await nvim.call(
-      "nvim_buf_get_lines",
-      buf,
-      startPos[0] - 1,
-      endPos[0],
-      false
-    );
+    const lines = await nvim.call("nvim_buf_get_lines", buf, startPos[0] - 1, endPos[0], false);
 
     return {
       text: lines.join("\n"),
@@ -282,7 +300,7 @@ async function getDiagnostics(nvim: NvimRpc) {
     items: diagnostics.slice(0, 20).map((d: any) => ({
       line: d.lnum + 1,
       column: d.col + 1,
-      severity: ["error","warning","info","hint"][d.severity - 1] || "unknown",
+      severity: ["error", "warning", "info", "hint"][d.severity - 1] || "unknown",
       message: d.message,
       source: d.source || "unknown",
     })),
@@ -295,13 +313,7 @@ async function getVisibleRange(nvim: NvimRpc) {
   const cursor = await nvim.call("nvim_win_get_cursor", win);
   const topLine = await nvim.call("nvim_win_get_position", win);
   const buf = await nvim.call("nvim_get_current_buf");
-  const lines = await nvim.call(
-    "nvim_buf_get_lines",
-    buf,
-    topLine[0],
-    topLine[0] + height,
-    false
-  );
+  const lines = await nvim.call("nvim_buf_get_lines", buf, topLine[0], topLine[0] + height, false);
 
   return {
     top_line: topLine[0] + 1,
@@ -319,7 +331,9 @@ async function getGitBlame(nvim: NvimRpc) {
     const cursor = await nvim.call("nvim_win_get_cursor", 0);
 
     // Use git blame via nvim built-in
-    const blameInfo = await nvim.call("nvim_exec_lua", `
+    const blameInfo = await nvim.call(
+      "nvim_exec_lua",
+      `
       local buf = ...
       local line = ...
       local file = vim.api.nvim_buf_get_name(buf)
@@ -327,14 +341,17 @@ async function getGitBlame(nvim: NvimRpc) {
       local result = vim.fn.system({"git", "-C", vim.fn.fnamemodify(file, ":h"),
         "blame", "-L", line .. "," .. line, "--porcelain", file})
       return result
-    `, [buf, cursor[0]]);
+    `,
+      [buf, cursor[0]]
+    );
 
     // Parse porcelain format
     if (blameInfo) {
       const lines = (blameInfo as string).split("\n");
       const hash = lines[0]?.split(" ")[0] || "";
       const author = lines.find((l) => l.startsWith("author "))?.replace("author ", "") || "";
-      const authorTime = lines.find((l) => l.startsWith("author-time "))?.replace("author-time ", "") || "";
+      const authorTime =
+        lines.find((l) => l.startsWith("author-time "))?.replace("author-time ", "") || "";
       const summary = lines.find((l) => l.startsWith("summary "))?.replace("summary ", "") || "";
 
       return {

@@ -122,7 +122,9 @@ export class ToolGovernanceManager {
     this.degradedMode = process.env.TOOL_DEGRADED_MODE === "true";
   }
 
-  getMetadata(tool: Pick<ExtendedTool, "name" | "priority" | "execution_class" | "cost_tier" | "volatile">): ToolGovernanceMetadata {
+  getMetadata(
+    tool: Pick<ExtendedTool, "name" | "priority" | "execution_class" | "cost_tier" | "volatile">
+  ): ToolGovernanceMetadata {
     const base = defaultMetadata(tool.name);
     return {
       name: tool.name,
@@ -133,7 +135,9 @@ export class ToolGovernanceManager {
     };
   }
 
-  canExecute(tool: Pick<ExtendedTool, "name" | "priority" | "execution_class" | "cost_tier" | "volatile">): ToolGovernanceDecision {
+  canExecute(
+    tool: Pick<ExtendedTool, "name" | "priority" | "execution_class" | "cost_tier" | "volatile">
+  ): ToolGovernanceDecision {
     const metadata = this.getMetadata(tool);
 
     if (this.allowlist.size > 0 && !this.allowlist.has(tool.name)) {
@@ -175,7 +179,9 @@ export class ToolGovernanceManager {
     return [...tools].sort((a, b) => {
       const metaA = this.getMetadata(a);
       const metaB = this.getMetadata(b);
-      return priorityRank[metaA.priority] - priorityRank[metaB.priority] || a.name.localeCompare(b.name);
+      return (
+        priorityRank[metaA.priority] - priorityRank[metaB.priority] || a.name.localeCompare(b.name)
+      );
     });
   }
 
@@ -212,4 +218,3 @@ export class ToolGovernanceManager {
     return summary;
   }
 }
-

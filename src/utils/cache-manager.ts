@@ -7,7 +7,7 @@ export interface CacheOptions {
   updateAgeOnGet?: boolean;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+ 
 export class CacheManager<K extends NonNullable<unknown>, V extends NonNullable<unknown>> {
   private cache: LRUCache<K, V>;
   private hits = 0;

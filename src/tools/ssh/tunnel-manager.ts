@@ -250,7 +250,7 @@ export class SSHTunnelManager {
             socket.remoteAddress || "127.0.0.1",
             socket.remotePort || 0,
             addr!,
-            port!,
+            port,
             (err, stream) => {
               if (err) {
                 // Reply connection failed

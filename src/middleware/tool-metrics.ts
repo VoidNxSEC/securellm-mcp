@@ -279,7 +279,9 @@ export class ToolMetricsCollector {
     lines.push(`# TYPE ${prefix}_queue_wait_seconds histogram`);
     lines.push(`# HELP ${prefix}_response_compaction_ratio Average response compaction ratio`);
     lines.push(`# TYPE ${prefix}_response_compaction_ratio gauge`);
-    lines.push(`# HELP ${prefix}_response_compaction_tokens_saved_total Estimated tokens saved by response compaction`);
+    lines.push(
+      `# HELP ${prefix}_response_compaction_tokens_saved_total Estimated tokens saved by response compaction`
+    );
     lines.push(`# TYPE ${prefix}_response_compaction_tokens_saved_total counter`);
 
     for (const [toolName, metrics] of this.getAllToolMetrics().entries()) {

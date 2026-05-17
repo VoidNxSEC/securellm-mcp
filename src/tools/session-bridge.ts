@@ -174,10 +174,10 @@ async function handleRecall(
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3_000);
-    const resp = await fetch(`${CEREBRO_API_URL}/api/rag/query`, {
+    const resp = await fetch(`${CEREBRO_API_URL}/intelligence/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: context, limit }),
+      body: JSON.stringify({ query: context, limit, semantic: true }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -242,7 +242,7 @@ async function handleSnapshot(
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5_000);
-      const resp = await fetch(`${CEREBRO_API_URL}/api/rag/ingest`, {
+      const resp = await fetch(`${CEREBRO_API_URL}/actions/rag/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -424,7 +424,7 @@ async function handleSyncCerebro(
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
-    const resp = await fetch(`${CEREBRO_API_URL}/api/rag/ingest`, {
+    const resp = await fetch(`${CEREBRO_API_URL}/actions/rag/ingest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ documents }),
