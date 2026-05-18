@@ -1,16 +1,11 @@
 import { knowledgeTools } from "../tools/knowledge.js";
 import type { KnowledgeDatabase } from "../types/knowledge.js";
 import type { ExtendedTool } from "../types/mcp-tool-extensions.js";
-import {
-  emergencyTools,
-} from "../tools/emergency/index.js";
+import { emergencyTools } from "../tools/emergency/index.js";
 import { laptopDefenseTools } from "../tools/laptop-defense/index.js";
 import { webSearchTools } from "../tools/web-search.js";
 import { researchAgentTool } from "../tools/research-agent.js";
-import {
-  analyzeComplexitySchema,
-  findDeadCodeSchema,
-} from "../tools/codebase-analysis.js";
+import { analyzeComplexitySchema, findDeadCodeSchema } from "../tools/codebase-analysis.js";
 import { advancedCodeAnalysisTool } from "../tools/advanced-code-analysis.js";
 import { socketDebugReportTool } from "../tools/socket-debug-report.js";
 import { zodToMcpSchema } from "../utils/schema-converter.js";
@@ -40,8 +35,14 @@ import { gitSherlockTool } from "../tools/git-sherlock.js";
 import { notifyHookTool } from "../tools/notify-hook.js";
 import { metaToolTool } from "../tools/meta-tool.js";
 import { linuxDebuggingTools } from "../tools/linux-debugging.js";
+import { docTools } from "../tools/doc-tools.js";
+import { interopTools } from "../tools/interop-tools.js";
+import { ecosystemTools } from "../tools/ecosystem-tools.js";
 
-export function buildToolCatalog(db: KnowledgeDatabase | null, enableKnowledge: boolean): ExtendedTool[] {
+export function buildToolCatalog(
+  db: KnowledgeDatabase | null,
+  enableKnowledge: boolean
+): ExtendedTool[] {
   return [
     {
       name: "server_status",
@@ -326,5 +327,8 @@ export function buildToolCatalog(db: KnowledgeDatabase | null, enableKnowledge: 
     notifyHookTool,
     metaToolTool,
     ...linuxDebuggingTools,
+    ...docTools,
+    ...interopTools,
+    ...ecosystemTools,
   ] as ExtendedTool[]; // end buildToolCatalog
 }

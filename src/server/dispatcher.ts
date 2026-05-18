@@ -45,10 +45,7 @@ import {
   getNixCacheStats,
 } from "../tools/web-search.js";
 import { handleResearchAgent } from "../tools/research-agent.js";
-import {
-  analyzeComplexity,
-  findDeadCode,
-} from "../tools/codebase-analysis.js";
+import { analyzeComplexity, findDeadCode } from "../tools/codebase-analysis.js";
 import { handleAdvancedCodeAnalysis } from "../tools/advanced-code-analysis.js";
 import { handleSocketDebugReport } from "../tools/socket-debug-report.js";
 import { devToolHandlers } from "../tools/dev-tools.js";
@@ -83,6 +80,17 @@ import {
   handleDiskAnalyze,
   handleSecurityScan,
 } from "../tools/linux-debugging.js";
+import { handleDocGenerate, handleDocCoverage, handleDocValidate } from "../tools/doc-tools.js";
+import {
+  handleSchemaConvert,
+  handleProjectBridge,
+  handleDataTransform,
+} from "../tools/interop-tools.js";
+import {
+  handleEcosystemMap,
+  handleEcosystemTrace,
+  handleEcosystemSearch,
+} from "../tools/ecosystem-tools.js";
 import { type McpToolResult, wrapTool } from "./wrap.js";
 import { usageTracker } from "../telemetry/usage-tracker.js";
 
@@ -107,7 +115,10 @@ export interface DispatchDeps {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Handler = (args: any) => Promise<any>;
 
-function requireDb(db: KnowledgeDatabase | null, stringify: (o: unknown) => string): KnowledgeDatabase {
+function requireDb(
+  db: KnowledgeDatabase | null,
+  stringify: (o: unknown) => string
+): KnowledgeDatabase {
   if (!db) throw new McpError(ErrorCode.InvalidRequest, "Knowledge database not available");
   return db;
 }
@@ -119,83 +130,155 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
   const map: Record<string, Handler> = {
     // ── Server internals ──────────────────────────────────────────────────
     server_status: async (args) => ({
-      content: [{ type: "text", text: stringify(await deps.getServerStatus(args?.include_metrics !== false)) }],
+      content: [
+        {
+          type: "text",
+          text: stringify(await deps.getServerStatus(args?.include_metrics !== false)),
+        },
+      ],
     }),
     rate_limiter_status: () => deps.getRateLimiterStatus(),
     cache_stats: async () => ({
-      content: [{
-        type: "text",
-        text: stringify({
-          semantic_cache: deps.semanticCache?.getStats() || null,
-          nix_cache: getNixCacheStats(),
-        }),
-      }],
+      content: [
+        {
+          type: "text",
+          text: stringify({
+            semantic_cache: deps.semanticCache?.getStats() || null,
+            nix_cache: getNixCacheStats(),
+          }),
+        },
+      ],
     }),
 
     // ── Provider tools ────────────────────────────────────────────────────
-    provider_test: (args) => w(async () => {
-      const { provider, prompt, model } = args;
-      const testScript = `cd "${deps.projectRoot}" && cargo run --bin securellm -- test ${provider} --prompt "${prompt.replace(/"/g, '\\"')}"${model ? ` --model ${model}` : ""}`;
-      const { stdout, stderr } = await execAsync(testScript, { cwd: deps.projectRoot, timeout: 30000 });
-      return { provider, model: model || "default", prompt, status: "success", output: stdout, stderr: stderr || null };
-    }),
-    security_audit: (args) => w(async () => {
-      const configPath = path.resolve(deps.projectRoot, args.config_file);
-      const configContent = await fs.readFile(configPath, "utf-8");
-      const issues: string[] = [];
-      const warnings: string[] = [];
-      const recommendations: string[] = [];
-      if (configContent.match(/sk-[a-zA-Z0-9]{32,}/)) issues.push("⚠️ CRITICAL: Hardcoded API keys detected");
-      if (configContent.includes("enabled = false") && configContent.includes("[security.tls]")) warnings.push("TLS is disabled");
-      if (!configContent.includes("[security.rate_limit]")) warnings.push("Rate limiting not configured");
-      if (!configContent.includes("[security.audit]")) recommendations.push("Consider enabling audit logging");
-      if (!configContent.includes("${") && configContent.includes("api_key")) recommendations.push("Use environment variables for API keys");
-      return {
-        config_file: args.config_file,
-        status: issues.length > 0 ? "failed" : warnings.length > 0 ? "warning" : "passed",
-        issues, warnings, recommendations,
-        summary: `Found ${issues.length} critical issues, ${warnings.length} warnings, ${recommendations.length} recommendations`,
-      };
-    }),
-    rate_limit_check: (args) => w(async () => {
-      const limits: Record<string, any> = {
-        deepseek: { requests_per_minute: 60, burst_size: 10, current_usage: 0, reset_time: new Date(Date.now() + 60000).toISOString() },
-        openai: { requests_per_minute: 3500, burst_size: 100, current_usage: 0, reset_time: new Date(Date.now() + 60000).toISOString() },
-        anthropic: { requests_per_minute: 50, burst_size: 5, current_usage: 0, reset_time: new Date(Date.now() + 60000).toISOString() },
-        ollama: { requests_per_minute: -1, burst_size: -1, current_usage: 0, reset_time: null },
-      };
-      const lim = limits[args.provider] || { error: "Unknown provider" };
-      return { provider: args.provider, ...lim, remaining: lim.requests_per_minute - lim.current_usage, status: "ok" };
-    }),
-    build_and_test: (args) => w(async () => {
-      const cmds: Record<string, string> = { unit: "cargo test --lib", integration: "cargo test --test '*'", all: "cargo test" };
-      const buildScript = `cd "${deps.projectRoot}" && cargo build && ${cmds[args.test_type]}`;
-      const { stdout, stderr } = await execAsync(buildScript, { cwd: deps.projectRoot, timeout: 120000 });
-      return { test_type: args.test_type, status: "success", output: stdout, stderr: stderr || null };
-    }),
-    provider_config_validate: (args) => w(async () => {
-      const issues: string[] = [];
-      const warnings: string[] = [];
-      if (!args.config_data.trim().startsWith("[providers.")) issues.push("Configuration must start with [providers.PROVIDER_NAME]");
-      for (const field of ["enabled", "api_key", "base_url"]) {
-        if (!args.config_data.includes(field)) issues.push(`Missing required field: ${field}`);
-      }
-      if (args.config_data.match(/api_key\s*=\s*"sk-/)) warnings.push("API key appears to be hardcoded");
-      return {
-        provider: args.provider,
-        status: issues.length > 0 ? "invalid" : warnings.length > 0 ? "valid_with_warnings" : "valid",
-        issues, warnings,
-      };
-    }),
-    crypto_key_generate: (args) => w(async () => {
-      const outputDir = path.resolve(deps.projectRoot, args.output_path);
-      await fs.mkdir(outputDir, { recursive: true });
-      const certCommand = args.key_type === "server"
-        ? `openssl req -x509 -newkey rsa:4096 -keyout "${outputDir}/server.key" -out "${outputDir}/server.crt" -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Org/CN=securellm-server"`
-        : `openssl req -x509 -newkey rsa:4096 -keyout "${outputDir}/client.key" -out "${outputDir}/client.crt" -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Org/CN=securellm-client"`;
-      await execAsync(certCommand);
-      return { key_type: args.key_type, output_path: outputDir, files: { certificate: `${args.key_type}.crt`, private_key: `${args.key_type}.key` }, status: "success" };
-    }),
+    provider_test: (args) =>
+      w(async () => {
+        const { provider, prompt, model } = args;
+        const testScript = `cd "${deps.projectRoot}" && cargo run --bin securellm -- test ${provider} --prompt "${prompt.replace(/"/g, '\\"')}"${model ? ` --model ${model}` : ""}`;
+        const { stdout, stderr } = await execAsync(testScript, {
+          cwd: deps.projectRoot,
+          timeout: 30000,
+        });
+        return {
+          provider,
+          model: model || "default",
+          prompt,
+          status: "success",
+          output: stdout,
+          stderr: stderr || null,
+        };
+      }),
+    security_audit: (args) =>
+      w(async () => {
+        const configPath = path.resolve(deps.projectRoot, args.config_file);
+        const configContent = await fs.readFile(configPath, "utf-8");
+        const issues: string[] = [];
+        const warnings: string[] = [];
+        const recommendations: string[] = [];
+        if (configContent.match(/sk-[a-zA-Z0-9]{32,}/))
+          issues.push("⚠️ CRITICAL: Hardcoded API keys detected");
+        if (configContent.includes("enabled = false") && configContent.includes("[security.tls]"))
+          warnings.push("TLS is disabled");
+        if (!configContent.includes("[security.rate_limit]"))
+          warnings.push("Rate limiting not configured");
+        if (!configContent.includes("[security.audit]"))
+          recommendations.push("Consider enabling audit logging");
+        if (!configContent.includes("${") && configContent.includes("api_key"))
+          recommendations.push("Use environment variables for API keys");
+        return {
+          config_file: args.config_file,
+          status: issues.length > 0 ? "failed" : warnings.length > 0 ? "warning" : "passed",
+          issues,
+          warnings,
+          recommendations,
+          summary: `Found ${issues.length} critical issues, ${warnings.length} warnings, ${recommendations.length} recommendations`,
+        };
+      }),
+    rate_limit_check: (args) =>
+      w(async () => {
+        const limits: Record<string, any> = {
+          deepseek: {
+            requests_per_minute: 60,
+            burst_size: 10,
+            current_usage: 0,
+            reset_time: new Date(Date.now() + 60000).toISOString(),
+          },
+          openai: {
+            requests_per_minute: 3500,
+            burst_size: 100,
+            current_usage: 0,
+            reset_time: new Date(Date.now() + 60000).toISOString(),
+          },
+          anthropic: {
+            requests_per_minute: 50,
+            burst_size: 5,
+            current_usage: 0,
+            reset_time: new Date(Date.now() + 60000).toISOString(),
+          },
+          ollama: { requests_per_minute: -1, burst_size: -1, current_usage: 0, reset_time: null },
+        };
+        const lim = limits[args.provider] || { error: "Unknown provider" };
+        return {
+          provider: args.provider,
+          ...lim,
+          remaining: lim.requests_per_minute - lim.current_usage,
+          status: "ok",
+        };
+      }),
+    build_and_test: (args) =>
+      w(async () => {
+        const cmds: Record<string, string> = {
+          unit: "cargo test --lib",
+          integration: "cargo test --test '*'",
+          all: "cargo test",
+        };
+        const buildScript = `cd "${deps.projectRoot}" && cargo build && ${cmds[args.test_type]}`;
+        const { stdout, stderr } = await execAsync(buildScript, {
+          cwd: deps.projectRoot,
+          timeout: 120000,
+        });
+        return {
+          test_type: args.test_type,
+          status: "success",
+          output: stdout,
+          stderr: stderr || null,
+        };
+      }),
+    provider_config_validate: (args) =>
+      w(async () => {
+        const issues: string[] = [];
+        const warnings: string[] = [];
+        if (!args.config_data.trim().startsWith("[providers."))
+          issues.push("Configuration must start with [providers.PROVIDER_NAME]");
+        for (const field of ["enabled", "api_key", "base_url"]) {
+          if (!args.config_data.includes(field)) issues.push(`Missing required field: ${field}`);
+        }
+        if (args.config_data.match(/api_key\s*=\s*"sk-/))
+          warnings.push("API key appears to be hardcoded");
+        return {
+          provider: args.provider,
+          status:
+            issues.length > 0 ? "invalid" : warnings.length > 0 ? "valid_with_warnings" : "valid",
+          issues,
+          warnings,
+        };
+      }),
+    crypto_key_generate: (args) =>
+      w(async () => {
+        const outputDir = path.resolve(deps.projectRoot, args.output_path);
+        await fs.mkdir(outputDir, { recursive: true });
+        const certCommand =
+          args.key_type === "server"
+            ? `openssl req -x509 -newkey rsa:4096 -keyout "${outputDir}/server.key" -out "${outputDir}/server.crt" -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Org/CN=securellm-server"`
+            : `openssl req -x509 -newkey rsa:4096 -keyout "${outputDir}/client.key" -out "${outputDir}/client.crt" -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Org/CN=securellm-client"`;
+        await execAsync(certCommand);
+        return {
+          key_type: args.key_type,
+          output_path: outputDir,
+          files: { certificate: `${args.key_type}.crt`, private_key: `${args.key_type}.key` },
+          status: "success",
+        };
+      }),
 
     // ── Package tools ─────────────────────────────────────────────────────
     package_diagnose: (args) => w(() => deps.packageDiagnose.diagnose(args)),
@@ -310,20 +393,22 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
     browser_search_aggregate: (args) => new BrowserSearchAggregateTool().execute(args),
 
     // ── Session / Context / Misc ──────────────────────────────────────────
-    session_bridge: (args) => handleSessionBridge(args, {
-      db: deps.db,
-      semanticCache: deps.semanticCache,
-      projectRoot: deps.projectRoot,
-    }),
+    session_bridge: (args) =>
+      handleSessionBridge(args, {
+        db: deps.db,
+        semanticCache: deps.semanticCache,
+        projectRoot: deps.projectRoot,
+      }),
     nvim_context: (args) => handleNvimContext(args),
     nix_daemon: (args) => handleNixDaemon(args),
     git_sherlock: (args) => handleGitSherlock(args),
     notify_hook: (args) => handleNotifyHook(args),
-    meta_tool: (args) => handleMetaTool(args, async (toolName, toolArgs) => {
-      const handler = map[toolName];
-      if (!handler) throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
-      return handler(toolArgs);
-    }),
+    meta_tool: (args) =>
+      handleMetaTool(args, async (toolName, toolArgs) => {
+        const handler = map[toolName];
+        if (!handler) throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
+        return handler(toolArgs);
+      }),
 
     // ── Linux Debugging ───────────────────────────────────────────────────
     journal_analyze: (args) => handleJournalAnalyze(args),
@@ -332,6 +417,21 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
     network_diag: (args) => handleNetworkDiag(args),
     disk_analyze: (args) => handleDiskAnalyze(args),
     security_scan: (args) => handleSecurityScan(args),
+
+    // ── Documentation Tools ──────────────────────────────────────────
+    doc_generate: (args) => handleDocGenerate(args),
+    doc_coverage: (args) => handleDocCoverage(args),
+    doc_validate: (args) => handleDocValidate(args),
+
+    // ── Interoperability Tools ──────────────────────────────────────
+    schema_convert: (args) => handleSchemaConvert(args),
+    project_bridge: (args) => handleProjectBridge(args),
+    data_transform: (args) => handleDataTransform(args),
+
+    // ── Ecosystem Awareness ──────────────────────────────────────────
+    ecosystem_map: (args) => handleEcosystemMap(args),
+    ecosystem_trace: (args) => handleEcosystemTrace(args),
+    ecosystem_search: (args) => handleEcosystemSearch(args),
   };
 
   return map;
