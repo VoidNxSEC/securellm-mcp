@@ -12,6 +12,7 @@ import { join } from "path";
 import { existsSync } from "fs";
 import { promisify } from "util";
 import { logger } from "../../../utils/logger.js";
+import { FilesystemScanner } from "../runtime-gate.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -171,10 +172,17 @@ export class CLIBackend {
   }
 
   async getNextId(): Promise<string> {
+    // Try CLI first
     const all = await this.list();
-    const ids = all.map((a) => parseInt(a.id.replace("ADR-", ""), 10)).filter((n) => !isNaN(n));
-    const maxId = ids.length > 0 ? Math.max(...ids) : 0;
-    return `ADR-${String(maxId + 1).padStart(4, "0")}`;
+    if (all.length > 0) {
+      const ids = all.map((a) => parseInt(a.id.replace("ADR-", ""), 10)).filter((n) => !isNaN(n));
+      const maxId = ids.length > 0 ? Math.max(...ids) : 0;
+      return `ADR-${String(maxId + 1).padStart(4, "0")}`;
+    }
+    // Fallback to filesystem scanner (ADR-0065)
+    logger.info("CLI list returned empty, using filesystem scanner for getNextId");
+    const scanner = new FilesystemScanner(this.repoPath);
+    return scanner.getNextId();
   }
 
   // ─────────────────────────────────────────────

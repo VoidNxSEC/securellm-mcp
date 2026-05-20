@@ -18,9 +18,13 @@ import type {
 } from "./types.js";
 import { stringifyGeneric } from "../../utils/json-schemas.js";
 import { logger } from "../../utils/logger.js";
+import { ADRRuntimeGate, FilesystemScanner } from "./runtime-gate.js";
+import type { RuntimeGateResult, ScannedADR } from "./runtime-gate.js";
 
 const ADR_REPO_PATH = process.env.ADR_REPO_PATH || "/home/kernelcore/master/adr-ledger";
 const backend = new CLIBackend(ADR_REPO_PATH);
+const gate = new ADRRuntimeGate(ADR_REPO_PATH);
+const scanner = new FilesystemScanner(ADR_REPO_PATH);
 
 // ═══════════════════════════════════════════════════════════════
 // Tool definitions
@@ -142,6 +146,12 @@ export const adrTools: ExtendedTool[] = [
         adr_id: { type: "string", description: "ADR ID to validate (omit for all)" },
       },
     },
+  },
+  {
+    name: "adr_gate",
+    description: "ADR Runtime Assurance Gate: probe runtime level before any write (ADR-0065)",
+    defer_loading: false,
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "governance_rules",
@@ -301,7 +311,43 @@ function fail(error: string) {
 async function handleAdrNew(args: ADRCreateArgs) {
   try {
     const { title, project = "GLOBAL", classification = "major" } = args;
-    const id = await backend.getNextId();
+
+    // ═══ ADR-0065: Runtime Assurance Gate ═══
+    const gateResult = await gate.probe();
+    logger.info({ gateResult }, "ADR Gate probe result");
+
+    if (!gateResult.canWrite) {
+      return ok({
+        success: false,
+        blocked: true,
+        gate: {
+          level: gateResult.level,
+          reason: gateResult.reason,
+          adrCount: gateResult.adrCount,
+        },
+        message: `[GATE] Runtime level: ${gateResult.level}. ${gateResult.reason}`,
+        hint:
+          gateResult.level === "degraded-readonly"
+            ? "You can still list and inspect ADRs. Run 'nix develop' for full assured mode."
+            : "Fix the issues above to enable ADR creation.",
+      });
+    }
+
+    // ═══ Use filesystem scanner for next ID (independent of CLI) ═══
+    const id = gateResult.nextId;
+
+    // ═══ Check ID collision ═══
+    const exists = await scanner.exists(id);
+    if (exists) {
+      return ok({
+        success: false,
+        blocked: true,
+        collision: true,
+        gate: { level: gateResult.level },
+        message: `[GATE] ID collision: ${id} already exists on filesystem. Next available: ${await scanner.getNextId()}`,
+      });
+    }
+
     const date = new Date().toISOString().split("T")[0];
     const timestamp = new Date().toISOString();
 
@@ -431,19 +477,40 @@ audit:
 - [Relevant documentation]
 `;
 
-    // Write file directly
+    // ═══ ADR-0065: Exclusive write with wx flag ═══
     const fs = await import("fs/promises");
     const path = await import("path");
     const filePath = path.join(ADR_REPO_PATH, "adr", "proposed", `${id}.md`);
-    await fs.writeFile(filePath, content, "utf-8");
+
+    try {
+      await fs.writeFile(filePath, content, { encoding: "utf-8", flag: "wx" });
+    } catch (writeError: any) {
+      if (writeError.code === "EEXIST") {
+        return ok({
+          success: false,
+          collision: true,
+          message: `[GATE] Exclusive write failed: ${id}.md already exists. Use a different ID.`,
+        });
+      }
+      throw writeError;
+    }
+
+    // ═══ ADR-0065: Post-write validation ═══
+    const validationError = await gate.validatePostWrite(id, gateResult.level);
+    const needsFix = validationError !== null;
 
     return ok({
       success: true,
       id,
-      status: "proposed",
-      message: `ADR created: ${id}`,
+      status: needsFix ? "needs_fix" : "proposed",
+      gate_level: gateResult.level,
+      message: needsFix
+        ? `ADR created but validation failed: ${validationError}. Marked as needs_fix.`
+        : `ADR created: ${id}`,
       file_path: filePath,
-      next_steps: [`Edit the file to fill in details`, `Run adr_accept ${id} when ready`],
+      next_steps: needsFix
+        ? [`Fix validation errors: ${validationError}`, `Re-run validation after fixing`]
+        : [`Edit the file to fill in details`, `Run adr_accept ${id} when ready`],
     });
   } catch (error: any) {
     logger.error({ err: error }, "Failed to create ADR");
@@ -456,21 +523,46 @@ async function handleAdrNewFromResearch(args: ADRCreateArgs) {
     const { title, research_data, project = "GLOBAL" } = args;
     if (!research_data) throw new Error("research_data is required");
 
+    // ═══ ADR-0065: Runtime Assurance Gate ═══
+    const gateResult = await gate.probe();
+    if (!gateResult.canWrite) {
+      return ok({
+        success: false,
+        blocked: true,
+        gate: { level: gateResult.level, reason: gateResult.reason },
+        message: `[GATE] Runtime level: ${gateResult.level}. Cannot create ADR.`,
+      });
+    }
+
     const research = research_data;
     const credibilityScore = ResearchParser.calculateCredibilityScore(research);
     const content = ResearchParser.generateADR(research, title, project);
-    const id = await backend.getNextId();
+    const id = gateResult.nextId;
     const updatedContent = content.replace(/"ADR-\d+"/, `"${id}"`);
 
+    // ═══ Exclusive write with wx flag ═══
     const fs = await import("fs/promises");
     const path = await import("path");
     const filePath = path.join(ADR_REPO_PATH, "adr", "proposed", `${id}.md`);
-    await fs.writeFile(filePath, updatedContent, "utf-8");
+
+    try {
+      await fs.writeFile(filePath, updatedContent, { encoding: "utf-8", flag: "wx" });
+    } catch (writeError: any) {
+      if (writeError.code === "EEXIST") {
+        return ok({
+          success: false,
+          collision: true,
+          message: `[GATE] Exclusive write failed: ${id}.md already exists.`,
+        });
+      }
+      throw writeError;
+    }
 
     return ok({
       success: true,
       id,
       status: "proposed",
+      gate_level: gateResult.level,
       credibility_score: credibilityScore,
       sources_count: research.sources.length,
       message: `ADR generated from research: ${id}`,
@@ -489,8 +581,46 @@ async function handleAdrNewFromResearch(args: ADRCreateArgs) {
 
 async function handleAdrList(args: ADRListArgs) {
   try {
-    const { status, project, format = "table" } = args;
-    const adrs = await backend.list(status, project);
+    const { status: statusFilter, project, format = "table" } = args;
+
+    // ═══ ADR-0065: Try CLI first, fallback to filesystem scanner ═══
+    let adrs: Array<{ id: string; title: string; status: string; date: string }>;
+    let usedFallback = false;
+
+    try {
+      adrs = await backend.list(statusFilter, project);
+      // Bug fix: if CLI returns empty but filesystem has ADRs, use scanner
+      if (adrs.length === 0) {
+        const scanned = await scanner.scanAll();
+        if (scanned.length > 0) {
+          logger.warn(
+            { cliCount: 0, fsCount: scanned.length },
+            "CLI returned 0 ADRs but filesystem has entries — using scanner fallback"
+          );
+          usedFallback = true;
+          adrs = scanned
+            .filter((a: ScannedADR) => !statusFilter || a.status === statusFilter)
+            .map((a: ScannedADR) => ({ id: a.id, title: a.title, status: a.status, date: a.date }));
+        }
+      }
+    } catch {
+      // CLI failed entirely — use scanner
+      logger.warn("CLI list failed, using filesystem scanner fallback");
+      usedFallback = true;
+      const scanned = await scanner.scanAll();
+      adrs = scanned
+        .filter((a: ScannedADR) => !statusFilter || a.status === statusFilter)
+        .map((a: ScannedADR) => ({ id: a.id, title: a.title, status: a.status, date: a.date }));
+    }
+
+    // Get gate level for visibility
+    let gateInfo = "";
+    try {
+      const gateResult = await gate.probe();
+      gateInfo = `\n[Gate: ${gateResult.level}]${usedFallback ? " (scanner fallback)" : ""}`;
+    } catch {
+      // non-blocking
+    }
 
     if (format === "json") {
       return ok({ success: true, count: adrs.length, adrs });
@@ -525,7 +655,12 @@ async function handleAdrList(args: ADRListArgs) {
     }
 
     return {
-      content: [{ type: "text", text: `Total ADRs: ${adrs.length}\n\n${table}${suggestionsText}` }],
+      content: [
+        {
+          type: "text",
+          text: `Total ADRs: ${adrs.length}${gateInfo}\n\n${table}${suggestionsText}`,
+        },
+      ],
     };
   } catch (error: any) {
     logger.error({ err: error }, "Failed to list ADRs");
@@ -565,6 +700,42 @@ async function handleAdrValidate(args: { adr_id?: string }) {
   try {
     const result = await backend.validate(args.adr_id);
     return ok({ success: result.success, output: result.stdout, errors: result.stderr || null });
+  } catch (error: any) {
+    return fail(error.message);
+  }
+}
+
+// ─── ADR-0065: Runtime Assurance Gate ───
+
+async function handleAdrGateStatus() {
+  try {
+    const gateResult = await gate.probe();
+    const duplicates =
+      gateResult.level === "blocked" ? scanner.detectDuplicates(await scanner.scanAll()) : [];
+    return ok({
+      success: true,
+      gate: {
+        level: gateResult.level,
+        canWrite: gateResult.canWrite,
+        reason: gateResult.reason,
+      },
+      diagnostics: {
+        adrCount: gateResult.adrCount,
+        nextId: gateResult.nextId,
+        maxId: gateResult.maxId,
+        structureOk: gateResult.structureOk,
+        schemaAvailable: gateResult.schemaAvailable,
+        cliAvailable: gateResult.cliAvailable,
+        pythonAvailable: gateResult.pythonAvailable,
+      },
+      duplicates: duplicates.length > 0 ? duplicates : undefined,
+      hint:
+        gateResult.level === "degraded-readonly"
+          ? "Run 'nix develop' to upgrade to assured mode."
+          : gateResult.level === "blocked"
+            ? "Fix structure issues to enable ADR operations."
+            : undefined,
+    });
   } catch (error: any) {
     return fail(error.message);
   }
@@ -785,6 +956,7 @@ export const adrHandlers: Record<string, (args: any) => Promise<any>> = {
   adr_search: handleAdrSearch,
   adr_relations: handleAdrRelations,
   adr_validate: handleAdrValidate,
+  adr_gate: handleAdrGateStatus,
   governance_rules: handleGovernanceRules,
   chain_status: handleChainStatus,
   chain_verify: handleChainVerify,
