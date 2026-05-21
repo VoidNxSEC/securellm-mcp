@@ -117,7 +117,9 @@ class UsageTracker {
           error_code: inv.error_code,
         });
         nc.publish(NATS_SUBJECT, new TextEncoder().encode(payload));
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
     });
   }
 
@@ -166,7 +168,11 @@ class UsageTracker {
   }
 
   async close(): Promise<void> {
-    try { await this.nats?.drain(); } catch { /* ignore */ }
+    try {
+      await this.nats?.drain();
+    } catch {
+      /* ignore */
+    }
     this.nats = null;
     this.db?.close();
     this.db = null;

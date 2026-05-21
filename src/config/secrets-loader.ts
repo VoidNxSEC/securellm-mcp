@@ -26,7 +26,10 @@ export function loadSecrets(): void {
       const key = trimmed.slice(0, eqIdx).trim();
       let value = trimmed.slice(eqIdx + 1).trim();
       // Strip surrounding quotes added by sops dotenv output
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
         value = value.slice(1, -1);
       }
       if (key && !process.env[key]) {
@@ -36,6 +39,8 @@ export function loadSecrets(): void {
     }
   } catch (err: any) {
     // Non-fatal: if sops fails (e.g. no GPG agent), fall back to env vars
-    process.stderr.write(`[secrets-loader] SOPS decrypt failed: ${err.message} — using shell environment\n`);
+    process.stderr.write(
+      `[secrets-loader] SOPS decrypt failed: ${err.message} — using shell environment\n`
+    );
   }
 }

@@ -6,18 +6,31 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        
+
         # Fetch software metadata from public registry
-        fetchSoftware = name: pkgs.runCommand "fetch-${name}" {
-          buildInputs = [ pkgs.curl pkgs.jq ];
-        } ''
-          curl -s https://api.voidnxlabs.io/softwares/${name} | \
-            jq -r '.data | "\(.name) \(.version) \(.source_url)"' > $out
-        '';
+        fetchSoftware =
+          name:
+          pkgs.runCommand "fetch-${name}"
+            {
+              buildInputs = [
+                pkgs.curl
+                pkgs.jq
+              ];
+            }
+            ''
+              curl -s https://api.voidnxlabs.io/softwares/${name} | \
+                jq -r '.data | "\(.name) \(.version) \(.source_url)"' > $out
+            '';
 
       in
       {
@@ -32,7 +45,10 @@
               rev = "main";
               sha256 = "0000000000000000000000000000000000000000000000000000";
             };
-            buildInputs = [ pkgs.cargo pkgs.rustc ];
+            buildInputs = [
+              pkgs.cargo
+              pkgs.rustc
+            ];
             buildPhase = "cargo build --release";
             installPhase = "mkdir -p $out/bin && cp target/release/spider-nix $out/bin/";
           };
@@ -46,7 +62,10 @@
               rev = "main";
               sha256 = "0000000000000000000000000000000000000000000000000000";
             };
-            buildInputs = [ pkgs.cargo pkgs.rustc ];
+            buildInputs = [
+              pkgs.cargo
+              pkgs.rustc
+            ];
             buildPhase = "cargo build --release";
             installPhase = "mkdir -p $out/bin && cp target/release/cerebro $out/bin/";
           };

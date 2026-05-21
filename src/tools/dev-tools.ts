@@ -73,19 +73,52 @@ function hasPackageJson(startDir: string): boolean {
   }
 }
 
-async function detectAndRun(command: string, args: string[], cwd: string = process.cwd()) {
+function findFlakeRoot(startDir: string): string | null {
+  let current = path.resolve(startDir);
+  const root = path.parse(current).root;
+
+  while (true) {
+    if (fs.existsSync(path.join(current, "flake.nix"))) {
+      return current;
+    }
+    if (current === root) {
+      return null;
+    }
+    current = path.dirname(current);
+  }
+}
+
+async function detectAndRun(
+  command: string,
+  args: string[],
+  cwd: string = process.cwd(),
+  preferNix: boolean = true
+) {
   const filteredArgs = args.filter((arg) => arg.length > 0);
-  const result = await execa(command, filteredArgs, {
+  const flakeRoot = preferNix ? findFlakeRoot(cwd) : null;
+  const runCommand = flakeRoot ? "nix" : command;
+  const runArgs = flakeRoot
+    ? ["develop", flakeRoot, "--command", command, ...filteredArgs]
+    : filteredArgs;
+
+  const result = await execa(runCommand, runArgs, {
     cwd,
     reject: false,
     preferLocal: true,
+    env: flakeRoot
+      ? {
+          ...process.env,
+          PROJECT_ROOT: process.env.PROJECT_ROOT || flakeRoot,
+          SECURELLM_MCP_QUIET: "1",
+        }
+      : process.env,
   });
 
   return {
     success: result.exitCode === 0,
     stdout: result.stdout,
     stderr: result.stderr,
-    command: formatCommand(command, filteredArgs),
+    command: formatCommand(runCommand, runArgs),
     exitCode: result.exitCode ?? 0,
   } satisfies CommandResult;
 }
@@ -255,7 +288,7 @@ async function handleGithubActions(args: z.infer<typeof manageGithubActionsSchem
       break;
   }
 
-  const result = await detectAndRun(cmd, cmdArgs);
+  const result = await detectAndRun(cmd, cmdArgs, process.cwd(), false);
   return {
     content: [{ type: "text", text: stringifyGeneric(result) }],
     isError: !result.success,

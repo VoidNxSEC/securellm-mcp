@@ -12,20 +12,29 @@ import { spawn } from "child_process";
 import { writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
 
+const PROJECT_ROOT = process.cwd();
 const SERVER_PATH = join(process.cwd(), "build/src/index.js");
-const TIMEOUT = 10000;
+const TIMEOUT = 20000;
+
+function spawnMcpServer(envOverrides: NodeJS.ProcessEnv = {}) {
+  return spawn("nix", ["develop", PROJECT_ROOT, "--command", "node", SERVER_PATH], {
+    cwd: PROJECT_ROOT,
+    stdio: ["pipe", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      PROJECT_ROOT,
+      ENABLE_KNOWLEDGE: "false",
+      LOG_LEVEL: "error",
+      SECURELLM_MCP_QUIET: "1",
+      ...envOverrides,
+    },
+  });
+}
 
 describe("[MCP-1] STDIO Protocol Validation", () => {
   test("Server STDOUT should contain ONLY valid JSON-RPC messages", async () => {
     return new Promise((resolve, reject) => {
-      const server = spawn("node", [SERVER_PATH], {
-        stdio: ["pipe", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          ENABLE_KNOWLEDGE: "false", // Disable DB for faster startup
-          LOG_LEVEL: "error",
-        },
-      });
+      const server = spawnMcpServer();
 
       let stdout = "";
       let stderr = "";
@@ -38,24 +47,21 @@ describe("[MCP-1] STDIO Protocol Validation", () => {
         stderr += data.toString();
       });
 
-      // Send initialize request
-      setTimeout(() => {
-        const initRequest = {
-          jsonrpc: "2.0",
-          id: 1,
-          method: "initialize",
-          params: {
-            protocolVersion: "2024-11-05",
-            capabilities: {},
-            clientInfo: {
-              name: "test-client",
-              version: "1.0.0",
-            },
+      const initRequest = {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: {
+            name: "test-client",
+            version: "1.0.0",
           },
-        };
+        },
+      };
 
-        server.stdin.write(JSON.stringify(initRequest) + "\n");
-      }, 1000);
+      server.stdin.write(JSON.stringify(initRequest) + "\n");
 
       setTimeout(() => {
         server.kill();
@@ -89,7 +95,7 @@ describe("[MCP-1] STDIO Protocol Validation", () => {
           stderr.includes("mcp.log") ? "~/.local/state/securellm-mcp/mcp.log" : "stderr"
         );
         resolve();
-      }, 3000);
+      }, TIMEOUT);
     });
   });
 });

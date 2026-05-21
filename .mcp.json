@@ -3,15 +3,21 @@
     "securellm": {
       "command": "node",
       "args": [
-        "build/src/index.js"
+        "develop",
+        "/home/kernelcore/master/securellm-mcp",
+        "--command",
+        "bash",
+        "-lc",
+        "cd \"/home/kernelcore/master/securellm-mcp\" && exec node \"/home/kernelcore/master/securellm-mcp/build/src/index.js\""
       ],
       "env": {
-        "PROJECT_ROOT": "${PROJECT_ROOT:-.}",
+        "PROJECT_ROOT": "/home/kernelcore/master/securellm-mcp",
         "ENABLE_KNOWLEDGE": "true",
-        "LLAMA_CPP_URL": "${LLAMA_CPP_URL:-http://localhost:8081}",
-        "PHANTOM_URL": "${PHANTOM_URL:-http://localhost:8008}",
-        "CEREBRO_API_URL": "${CEREBRO_API_URL:-http://localhost:8009}",
-        "NATS_URL": "${NATS_URL:-nats://localhost:4222}"
+        "LLAMA_CPP_URL": "http://localhost:8081",
+        "PHANTOM_URL": "http://localhost:8008",
+        "CEREBRO_API_URL": "http://localhost:8009",
+        "NATS_URL": "nats://localhost:4222",
+        "SECURELLM_MCP_QUIET": "1"
       }
     }
   },

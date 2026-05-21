@@ -8,17 +8,40 @@
 
 import { execFile } from "child_process";
 import { readFile, readdir } from "fs/promises";
-import { join } from "path";
+import { basename, join } from "path";
 import { existsSync } from "fs";
 import { promisify } from "util";
 import { logger } from "../../../utils/logger.js";
 import { FilesystemScanner } from "../runtime-gate.js";
+import type { ScannedADR } from "../runtime-gate.js";
 
 const execFileAsync = promisify(execFile);
 
 /** Strip ANSI color/escape sequences from CLI output */
 function stripAnsi(str: string): string {
   return str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").replace(/\x1B\][^\x07]*\x07/g, "");
+}
+
+type ADRListItem = {
+  id: string;
+  title: string;
+  status: string;
+  date: string;
+  project?: string;
+};
+
+function getNumericId(id: string): number {
+  const match = id.match(/^ADR-(\d{4})/);
+  return match ? parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+
+function sortADRList<T extends { id: string }>(adrs: T[]): T[] {
+  return [...adrs].sort((a, b) => getNumericId(a.id) - getNumericId(b.id) || a.id.localeCompare(b.id));
+}
+
+function matchesProject(adr: { project?: string }, project?: string): boolean {
+  if (!project) return true;
+  return adr.project?.toLowerCase() === project.toLowerCase();
 }
 
 export class CLIBackend {
@@ -30,6 +53,22 @@ export class CLIBackend {
     this.adrScript = join(repoPath, "scripts", "adr");
     this.chainDir = join(repoPath, ".chain");
     this.adrDir = join(repoPath, "adr");
+  }
+
+  private async scanList(status?: string, project?: string): Promise<ADRListItem[]> {
+    const scanner = new FilesystemScanner(this.repoPath);
+    const scanned = await scanner.scanAll();
+    return sortADRList(
+      scanned
+        .filter((adr: ScannedADR) => (!status || adr.status === status) && matchesProject(adr, project))
+        .map((adr: ScannedADR) => ({
+          id: adr.id,
+          title: adr.title,
+          status: adr.status,
+          date: adr.date,
+          project: adr.project,
+        }))
+    );
   }
 
   // ─────────────────────────────────────────────
@@ -99,7 +138,11 @@ export class CLIBackend {
   async list(
     status?: string,
     project?: string
-  ): Promise<Array<{ id: string; title: string; status: string; date: string }>> {
+  ): Promise<ADRListItem[]> {
+    if (!existsSync(this.adrScript)) {
+      return this.scanList(status, project);
+    }
+
     const args = ["list", "-f", "json"];
     if (status) args.push("-s", status);
     if (project) args.push("-p", project);
@@ -109,7 +152,7 @@ export class CLIBackend {
       .trim()
       .split("\n")
       .filter((l) => l.startsWith("{"));
-    return lines
+    const parsed = lines
       .map((line) => {
         try {
           return JSON.parse(line);
@@ -117,7 +160,13 @@ export class CLIBackend {
           return null;
         }
       })
-      .filter(Boolean);
+      .filter(Boolean) as ADRListItem[];
+
+    if (parsed.length === 0) {
+      return this.scanList(status, project);
+    }
+
+    return sortADRList(parsed);
   }
 
   async get(id: string): Promise<string | null> {
@@ -129,6 +178,17 @@ export class CLIBackend {
         return readFile(filePath, "utf-8");
       }
     }
+
+    const scanner = new FilesystemScanner(this.repoPath);
+    const match = (await scanner.scanAll()).find((adr) => {
+      const file = basename(adr.filePath);
+      return adr.id === id || file === `${id}.md` || file.startsWith(`${id}-`);
+    });
+
+    if (match) {
+      return readFile(match.filePath, "utf-8");
+    }
+
     return null;
   }
 

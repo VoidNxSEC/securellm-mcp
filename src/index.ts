@@ -16,7 +16,12 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import * as fs from "fs/promises";
 import { createKnowledgeDatabase } from "./knowledge/database.js";
-import { type KnowledgeDatabase, type CreateSessionInput, type SaveKnowledgeInput, type SearchKnowledgeInput } from "./types/knowledge.js";
+import {
+  type KnowledgeDatabase,
+  type CreateSessionInput,
+  type SaveKnowledgeInput,
+  type SearchKnowledgeInput,
+} from "./types/knowledge.js";
 import type { ExtendedTool } from "./types/mcp-tool-extensions.js";
 import { GuideManager } from "./resources/guides.js";
 import * as path from "path";
@@ -60,7 +65,10 @@ function stringify(obj: unknown): string {
 const PROJECT_ROOT = process.env.PROJECT_ROOT || process.cwd();
 const KNOWLEDGE_DB_PATH =
   process.env.KNOWLEDGE_DB_PATH ||
-  path.join(process.env.HOME || process.env.USERPROFILE || ".", ".local/share/securellm/knowledge.db");
+  path.join(
+    process.env.HOME || process.env.USERPROFILE || ".",
+    ".local/share/securellm/knowledge.db"
+  );
 const ENABLE_KNOWLEDGE = process.env.ENABLE_KNOWLEDGE !== "false";
 
 const API_KEYS = {
@@ -130,7 +138,8 @@ class SecureLLMBridgeMCPServer {
     this.professionalToolHandlers = createProfessionalToolHandlers({
       getProjectRoot: () => this.projectRoot,
       getServerStatus: (includeMetrics: boolean) => this.buildServerStatus(includeMetrics),
-      getToolGovernanceSummary: (includeTools: boolean) => this.buildToolGovernanceSummary(includeTools),
+      getToolGovernanceSummary: (includeTools: boolean) =>
+        this.buildToolGovernanceSummary(includeTools),
     });
 
     this.server = new Server(
@@ -165,7 +174,14 @@ class SecureLLMBridgeMCPServer {
     try {
       const rootDetection = await detectProjectRoot();
       this.projectRoot = rootDetection.projectRoot;
-      logger.info({ projectRoot: this.projectRoot, method: rootDetection.method, flakeFound: rootDetection.flakeFound }, "Project root detected");
+      logger.info(
+        {
+          projectRoot: this.projectRoot,
+          method: rootDetection.method,
+          flakeFound: rootDetection.flakeFound,
+        },
+        "Project root detected"
+      );
 
       const availableKeys = Object.entries(API_KEYS)
         .filter(([_, key]) => key.length > 0)
@@ -184,7 +200,10 @@ class SecureLLMBridgeMCPServer {
             logger.warn({ warnings: hostDetection.warnings }, "Host detection warnings");
           }
         } catch (error) {
-          logger.warn({ err: error, defaultHostname: "default" }, "Failed to detect NixOS host, using default hostname");
+          logger.warn(
+            { err: error, defaultHostname: "default" },
+            "Failed to detect NixOS host, using default hostname"
+          );
           this.hostname = "default";
         }
       } else {
@@ -201,10 +220,14 @@ class SecureLLMBridgeMCPServer {
       this.initSemanticCache();
 
       const [phantomResult, rerankerResult] = await Promise.allSettled([
-        fetch(`${process.env.PHANTOM_URL ?? "http://localhost:8008"}/health`, { signal: AbortSignal.timeout(2_000) })
+        fetch(`${process.env.PHANTOM_URL ?? "http://localhost:8008"}/health`, {
+          signal: AbortSignal.timeout(2_000),
+        })
           .then((r) => r.ok)
           .catch(() => false),
-        fetch(`${process.env.CEREBRO_RERANKER_URL ?? "http://localhost:8016"}/health`, { signal: AbortSignal.timeout(2_000) })
+        fetch(`${process.env.CEREBRO_RERANKER_URL ?? "http://localhost:8016"}/health`, {
+          signal: AbortSignal.timeout(2_000),
+        })
           .then((r) => r.ok)
           .catch(() => false),
       ]);
@@ -215,9 +238,14 @@ class SecureLLMBridgeMCPServer {
       if (phantomHealthy) {
         logger.info("✓ Semantic cache ACTIVE via PHANTOM (http://localhost:8008)");
       } else {
-        logger.warn("⚠ Semantic cache DEGRADED — PHANTOM unavailable, falling back to SQLite embeddings");
+        logger.warn(
+          "⚠ Semantic cache DEGRADED — PHANTOM unavailable, falling back to SQLite embeddings"
+        );
       }
-      logger.info({ phantomHealth: phantomHealthy, rerankerHealth: rerankerHealthy }, "[Startup] Optional service health");
+      logger.info(
+        { phantomHealth: phantomHealthy, rerankerHealth: rerankerHealthy },
+        "[Startup] Optional service health"
+      );
 
       logger.info("MCP Server initialization complete");
     } catch (error) {
@@ -230,22 +258,35 @@ class SecureLLMBridgeMCPServer {
     try {
       this.db = createKnowledgeDatabase(KNOWLEDGE_DB_PATH);
       this.disposables.register("knowledge-db", () => {
-        if (this.db) { this.db.close(); this.db = null; }
+        if (this.db) {
+          this.db.close();
+          this.db = null;
+        }
       });
       logger.info({ dbPath: KNOWLEDGE_DB_PATH }, "Knowledge database initialized");
 
-      const isSystemDir = this.projectRoot.startsWith("/etc") || this.projectRoot.startsWith("/usr") ||
-        this.projectRoot.startsWith("/sys") || this.projectRoot.startsWith("/proc") || this.projectRoot === "/nix/store";
+      const isSystemDir =
+        this.projectRoot.startsWith("/etc") ||
+        this.projectRoot.startsWith("/usr") ||
+        this.projectRoot.startsWith("/sys") ||
+        this.projectRoot.startsWith("/proc") ||
+        this.projectRoot === "/nix/store";
       const watcherExplicitlyEnabled = process.env.ENABLE_PROJECT_WATCHER === "true";
       const watcherExplicitlyDisabled = process.env.ENABLE_PROJECT_WATCHER === "false";
-      const shouldStartWatcher = this.projectRoot && (!isSystemDir || watcherExplicitlyEnabled) && !watcherExplicitlyDisabled;
+      const shouldStartWatcher =
+        this.projectRoot &&
+        (!isSystemDir || watcherExplicitlyEnabled) &&
+        !watcherExplicitlyDisabled;
 
       if (shouldStartWatcher) {
         this.projectWatcher = new ProjectWatcher(this.projectRoot);
         this.projectWatcher.setDatabase(this.db);
         this.projectWatcher.start();
         this.disposables.register("project-watcher", () => {
-          if (this.projectWatcher) { this.projectWatcher.stop(); this.projectWatcher = null; }
+          if (this.projectWatcher) {
+            this.projectWatcher.stop();
+            this.projectWatcher = null;
+          }
         });
         this.contextManager = new ContextManager(this.projectRoot, this.db as any);
         this.preActionInterceptor = new PreActionInterceptor(this.contextManager);
@@ -255,18 +296,28 @@ class SecureLLMBridgeMCPServer {
         this.contextManager = new ContextManager(this.projectRoot, this.db as any);
         this.preActionInterceptor = new PreActionInterceptor(this.contextManager);
         this.adrHygieneMiddleware = new ADRHygieneMiddleware();
-        logger.info({ projectRoot: this.projectRoot }, "ProjectWatcher skipped (system dir), Proactive Logic Layer initialized (DB-only mode)");
+        logger.info(
+          { projectRoot: this.projectRoot },
+          "ProjectWatcher skipped (system dir), Proactive Logic Layer initialized (DB-only mode)"
+        );
       }
     } catch (error) {
-      logger.error({ err: error, dbPath: KNOWLEDGE_DB_PATH }, "Failed to initialize knowledge database");
+      logger.error(
+        { err: error, dbPath: KNOWLEDGE_DB_PATH },
+        "Failed to initialize knowledge database"
+      );
       this.db = null;
     }
   }
 
   private initSemanticCache() {
     try {
-      const cacheDbPath = process.env.SEMANTIC_CACHE_DB_PATH ||
-        path.join(process.env.HOME || process.env.USERPROFILE || ".", ".local/share/securellm/semantic_cache.db");
+      const cacheDbPath =
+        process.env.SEMANTIC_CACHE_DB_PATH ||
+        path.join(
+          process.env.HOME || process.env.USERPROFILE || ".",
+          ".local/share/securellm/semantic_cache.db"
+        );
 
       this.semanticCache = new SemanticCache(cacheDbPath, {
         enabled: process.env.ENABLE_SEMANTIC_CACHE !== "false",
@@ -275,7 +326,10 @@ class SecureLLMBridgeMCPServer {
         llamaCppUrl: process.env.LLAMA_CPP_URL || "http://localhost:8081",
       });
       this.disposables.register("semantic-cache", () => {
-        if (this.semanticCache) { this.semanticCache.close(); this.semanticCache = null; }
+        if (this.semanticCache) {
+          this.semanticCache.close();
+          this.semanticCache = null;
+        }
       });
       logger.info({ dbPath: cacheDbPath }, "Semantic cache initialized");
     } catch (error) {
@@ -288,16 +342,25 @@ class SecureLLMBridgeMCPServer {
 
   private async dispatchKnowledge(name: string, args: any): Promise<McpToolResult> {
     if (!this.db) {
-      return { content: [{ type: "text", text: "Knowledge database not available" }], isError: true };
+      return {
+        content: [{ type: "text", text: "Knowledge database not available" }],
+        isError: true,
+      };
     }
     try {
       let result: any;
       switch (name) {
         case "create_session":
-          result = { session: await this.db.createSession(args as CreateSessionInput), message: "Session created successfully" };
+          result = {
+            session: await this.db.createSession(args as CreateSessionInput),
+            message: "Session created successfully",
+          };
           break;
         case "save_knowledge":
-          result = { entry: await this.db.saveKnowledge(args as SaveKnowledgeInput), message: "Knowledge saved successfully" };
+          result = {
+            entry: await this.db.saveKnowledge(args as SaveKnowledgeInput),
+            message: "Knowledge saved successfully",
+          };
           break;
         case "search_knowledge": {
           const results = await this.db.searchKnowledge(args as SearchKnowledgeInput);
@@ -306,7 +369,8 @@ class SecureLLMBridgeMCPServer {
         }
         case "load_session": {
           const session = await this.db.getSession(args.session_id);
-          if (!session) return { content: [{ type: "text", text: "Session not found" }], isError: true };
+          if (!session)
+            return { content: [{ type: "text", text: "Session not found" }], isError: true };
           const entries = await this.db.getRecentKnowledge(args.session_id, 100);
           result = { session, entries, count: entries.length };
           break;
@@ -323,14 +387,23 @@ class SecureLLMBridgeMCPServer {
         }
         case "knowledge_maintenance":
           await this.db.maintenance();
-          result = { message: "Maintenance completed successfully", stats: await this.db.getStats() };
+          result = {
+            message: "Maintenance completed successfully",
+            stats: await this.db.getStats(),
+          };
           break;
         default:
-          return { content: [{ type: "text", text: `Unknown knowledge operation: ${name}` }], isError: true };
+          return {
+            content: [{ type: "text", text: `Unknown knowledge operation: ${name}` }],
+            isError: true,
+          };
       }
       return { content: [{ type: "text", text: stringify(result) }] };
     } catch (error: any) {
-      return { content: [{ type: "text", text: stringify({ error: error.message }) }], isError: true };
+      return {
+        content: [{ type: "text", text: stringify({ error: error.message }) }],
+        isError: true,
+      };
     }
   }
 
@@ -345,14 +418,16 @@ class SecureLLMBridgeMCPServer {
         status[provider] = {
           performance: {
             totalRequests: metrics.totalRequests,
-            successRate: metrics.totalRequests > 0
-              ? `${((metrics.successfulRequests / metrics.totalRequests) * 100).toFixed(2)}%`
-              : "0%",
+            successRate:
+              metrics.totalRequests > 0
+                ? `${((metrics.successfulRequests / metrics.totalRequests) * 100).toFixed(2)}%`
+                : "0%",
             requestsPerMinute: metrics.requestsPerMinute.toFixed(1),
             retriedRequests: metrics.retriedRequests,
-            averageRetries: metrics.retriedRequests > 0
-              ? (metrics.totalRetries / metrics.retriedRequests).toFixed(1)
-              : "0",
+            averageRetries:
+              metrics.retriedRequests > 0
+                ? (metrics.totalRetries / metrics.retriedRequests).toFixed(1)
+                : "0",
           },
           latency: {
             average: `${metrics.averageLatency.toFixed(0)}ms`,
@@ -366,9 +441,10 @@ class SecureLLMBridgeMCPServer {
             current: queueStatus?.queueLength || 0,
             averageLength: metrics.queueMetrics.averageQueueLength.toFixed(1),
             maxLength: metrics.queueMetrics.maxQueueLength,
-            averageWaitTime: metrics.totalRequests > 0
-              ? `${(metrics.queueMetrics.totalTimeInQueue / metrics.totalRequests).toFixed(0)}ms`
-              : "0ms",
+            averageWaitTime:
+              metrics.totalRequests > 0
+                ? `${(metrics.queueMetrics.totalTimeInQueue / metrics.totalRequests).toFixed(0)}ms`
+                : "0ms",
           },
           timeWindow: {
             duration: `${(metrics.timeWindow.durationMs / 1000).toFixed(0)}s`,
@@ -376,9 +452,23 @@ class SecureLLMBridgeMCPServer {
           },
         };
       }
-      return { content: [{ type: "text", text: stringify({ success: true, timestamp: new Date().toISOString(), providers: status }) }] };
+      return {
+        content: [
+          {
+            type: "text",
+            text: stringify({
+              success: true,
+              timestamp: new Date().toISOString(),
+              providers: status,
+            }),
+          },
+        ],
+      };
     } catch (error: any) {
-      return { content: [{ type: "text", text: stringify({ success: false, error: error.message }) }], isError: true };
+      return {
+        content: [{ type: "text", text: stringify({ success: false, error: error.message }) }],
+        isError: true,
+      };
     }
   }
 
@@ -386,20 +476,43 @@ class SecureLLMBridgeMCPServer {
 
   private setupToolHandlers() {
     // Live getters — deps read current values at call time, not at setup time
-    const self = this;
+    const getDb = () => this.db;
+    const getRateLimiter = () => this.rateLimiter;
+    const getSemanticCache = () => this.semanticCache;
+    const getProjectRoot = () => this.projectRoot;
+    const getPackageDiagnose = () => this.packageDiagnose;
+    const getPackageDownload = () => this.packageDownload;
+    const getPackageConfigure = () => this.packageConfigure;
+    const getProfessionalToolHandlers = () => this.professionalToolHandlers;
     const deps: DispatchDeps = {
-      get db() { return self.db; },
-      get rateLimiter() { return self.rateLimiter; },
-      get semanticCache() { return self.semanticCache; },
-      get projectRoot() { return self.projectRoot; },
-      get packageDiagnose() { return self.packageDiagnose; },
-      get packageDownload() { return self.packageDownload; },
-      get packageConfigure() { return self.packageConfigure; },
-      get professionalToolHandlers() { return self.professionalToolHandlers; },
+      get db() {
+        return getDb();
+      },
+      get rateLimiter() {
+        return getRateLimiter();
+      },
+      get semanticCache() {
+        return getSemanticCache();
+      },
+      get projectRoot() {
+        return getProjectRoot();
+      },
+      get packageDiagnose() {
+        return getPackageDiagnose();
+      },
+      get packageDownload() {
+        return getPackageDownload();
+      },
+      get packageConfigure() {
+        return getPackageConfigure();
+      },
+      get professionalToolHandlers() {
+        return getProfessionalToolHandlers();
+      },
       stringify,
-      getServerStatus: (includeMetrics) => self.buildServerStatus(includeMetrics),
-      getRateLimiterStatus: () => self.handleRateLimiterStatus(),
-      handleKnowledge: (name, args) => self.dispatchKnowledge(name, args),
+      getServerStatus: (includeMetrics) => this.buildServerStatus(includeMetrics),
+      getRateLimiterStatus: () => this.handleRateLimiterStatus(),
+      handleKnowledge: (name, args) => this.dispatchKnowledge(name, args),
     };
     const dispatchMap = buildDispatchMap(deps);
 
@@ -416,7 +529,10 @@ class SecureLLMBridgeMCPServer {
       const governanceDecision = this.toolGovernance.canExecute(toolDefinition);
 
       if (!governanceDecision.allowed) {
-        throw new McpError(ErrorCode.InvalidRequest, `Tool '${name}' blocked by governance policy: ${governanceDecision.reason}`);
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          `Tool '${name}' blocked by governance policy: ${governanceDecision.reason}`
+        );
       }
 
       const cacheKey = stableStringify({ name, args });
@@ -429,11 +545,19 @@ class SecureLLMBridgeMCPServer {
         let cached: any = null;
         if (this.semanticCache && shouldAttemptSemanticCache(name)) {
           const cacheLookupStart = Date.now();
-          cached = await this.semanticCache.lookup({ toolName: name, queryText: cacheKey, toolArgs: args });
+          cached = await this.semanticCache.lookup({
+            toolName: name,
+            queryText: cacheKey,
+            toolArgs: args,
+          });
           snapshot.cacheLookupTime = Date.now() - cacheLookupStart;
           snapshot.cacheHit = cached !== null;
           if (cached) {
-            try { snapshot.responseSize = Buffer.byteLength(stringify(cached), "utf8"); } catch { snapshot.responseSize = JSON.stringify(cached).length; }
+            try {
+              snapshot.responseSize = Buffer.byteLength(stringify(cached), "utf8");
+            } catch {
+              snapshot.responseSize = JSON.stringify(cached).length;
+            }
             snapshot.totalTime = Date.now() - startTime;
             snapshot.cacheHit = true;
             this.toolMetricsCollector.recordSnapshot(snapshot);
@@ -461,7 +585,10 @@ class SecureLLMBridgeMCPServer {
           const interception = await this.preActionInterceptor.intercept(name, args);
           snapshot.preActionTime = Date.now() - preActionStart;
           if (!interception.shouldProceed) {
-            throw new McpError(ErrorCode.InvalidParams, interception.reason || "Tool execution blocked by proactive checks");
+            throw new McpError(
+              ErrorCode.InvalidParams,
+              interception.reason || "Tool execution blocked by proactive checks"
+            );
           }
         }
 
@@ -488,68 +615,111 @@ class SecureLLMBridgeMCPServer {
                 text: `\n---\n${hygieneReport.summary}\n${hygieneReport.details.join("\n")}`,
               });
             }
-          } catch { /* non-blocking */ }
+          } catch {
+            /* non-blocking */
+          }
         }
 
         // RESPONSE COMPACTION
         let originalResponseSize = 0;
-        try { originalResponseSize = Buffer.byteLength(stringify(result), "utf8"); } catch { originalResponseSize = JSON.stringify(result).length; }
-        const { result: compactedResult, stats: compactionStats } = ResponseSummarizer.compactToolResultWithStats(result);
+        try {
+          originalResponseSize = Buffer.byteLength(stringify(result), "utf8");
+        } catch {
+          originalResponseSize = JSON.stringify(result).length;
+        }
+        const { result: compactedResult, stats: compactionStats } =
+          ResponseSummarizer.compactToolResultWithStats(result);
         snapshot.originalResponseSize = originalResponseSize;
         snapshot.compactionCharsSaved = compactionStats.savedChars;
         snapshot.compactionTokensSaved = compactionStats.savedTokens;
         snapshot.compactionApplied = compactionStats.compactedFields > 0;
-        try { snapshot.responseSize = Buffer.byteLength(stringify(compactedResult), "utf8"); } catch { snapshot.responseSize = JSON.stringify(compactedResult).length; }
+        try {
+          snapshot.responseSize = Buffer.byteLength(stringify(compactedResult), "utf8");
+        } catch {
+          snapshot.responseSize = JSON.stringify(compactedResult).length;
+        }
 
         // SEMANTIC CACHE: store result
-        if (this.semanticCache && compactedResult && shouldStoreSemanticCache({ toolName: name, result: compactedResult, responseSize: snapshot.responseSize })) {
-          this.semanticCache.store({
-            toolName: name, queryText: cacheKey, toolArgs: args, response: compactedResult,
-            metadata: { tokensSaved: Math.max(1, Math.round((requestSize + (snapshot.responseSize || 0)) / 4)), originalLatency: snapshot.totalTime },
-          }).catch((err) => logger.warn({ err, toolName: name }, "Failed to store in semantic cache"));
+        if (
+          this.semanticCache &&
+          compactedResult &&
+          shouldStoreSemanticCache({
+            toolName: name,
+            result: compactedResult,
+            responseSize: snapshot.responseSize,
+          })
+        ) {
+          this.semanticCache
+            .store({
+              toolName: name,
+              queryText: cacheKey,
+              toolArgs: args,
+              response: compactedResult,
+              metadata: {
+                tokensSaved: Math.max(
+                  1,
+                  Math.round((requestSize + (snapshot.responseSize || 0)) / 4)
+                ),
+                originalLatency: snapshot.totalTime,
+              },
+            })
+            .catch((err) =>
+              logger.warn({ err, toolName: name }, "Failed to store in semantic cache")
+            );
         }
 
         snapshot.totalTime = Date.now() - startTime;
         this.toolMetricsCollector.recordSnapshot(snapshot);
 
         // TELEMETRY: record successful invocation (fire-and-forget)
-        void Promise.resolve().then(() => usageTracker.record({
-          session_id: requestId,
-          tool_name: name,
-          params_hash: crypto.createHash("sha256").update(cacheKey).digest("hex").slice(0, 16),
-          started_at: startTime,
-          duration_ms: snapshot.totalTime,
-          success: true,
-          cache_hit: snapshot.cacheHit === true,
-        }));
+        void Promise.resolve().then(() =>
+          usageTracker.record({
+            session_id: requestId,
+            tool_name: name,
+            params_hash: crypto.createHash("sha256").update(cacheKey).digest("hex").slice(0, 16),
+            started_at: startTime,
+            duration_ms: snapshot.totalTime,
+            success: true,
+            cache_hit: snapshot.cacheHit === true,
+          })
+        );
 
         return compactedResult;
-
       } catch (error) {
         snapshot.totalTime = Date.now() - startTime;
         snapshot.error = error instanceof Error ? error.message : String(error);
         if (error instanceof McpError) {
-          snapshot.errorCategory = error.code === (ErrorCode.InvalidParams as number) ? "invalid_params" : "mcp_error";
+          snapshot.errorCategory =
+            error.code === (ErrorCode.InvalidParams as number) ? "invalid_params" : "mcp_error";
         } else if (error instanceof Error) {
-          snapshot.errorCategory = error.message.includes("timeout") || error.message.includes("Timeout") ? "timeout"
-            : error.message.includes("queue full") ? "queue_full" : "unknown";
+          snapshot.errorCategory =
+            error.message.includes("timeout") || error.message.includes("Timeout")
+              ? "timeout"
+              : error.message.includes("queue full")
+                ? "queue_full"
+                : "unknown";
         } else {
           snapshot.errorCategory = "unknown";
         }
         this.toolMetricsCollector.recordSnapshot(snapshot);
 
         // TELEMETRY: record failed invocation
-        void Promise.resolve().then(() => usageTracker.record({
-          session_id: requestId,
-          tool_name: name,
-          started_at: startTime,
-          duration_ms: snapshot.totalTime,
-          success: false,
-          error_code: snapshot.errorCategory,
-        }));
+        void Promise.resolve().then(() =>
+          usageTracker.record({
+            session_id: requestId,
+            tool_name: name,
+            started_at: startTime,
+            duration_ms: snapshot.totalTime,
+            success: false,
+            error_code: snapshot.errorCategory,
+          })
+        );
 
         if (error instanceof McpError) throw error;
-        throw new McpError(ErrorCode.InternalError, `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`);
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`
+        );
       } finally {
         if (permit) permit.release();
       }
@@ -563,14 +733,54 @@ class SecureLLMBridgeMCPServer {
       const dynamicResources = await this.guideManager.listAll();
       return {
         resources: [
-          { uri: "server://status", name: "Server Status", description: "Current MCP server runtime status and enabled capabilities", mimeType: "application/json" },
-          { uri: "config://current", name: "Current Configuration", description: "Current SecureLLM Bridge configuration", mimeType: "application/toml" },
-          { uri: "logs://audit", name: "Audit Logs", description: "Recent audit log entries", mimeType: "application/json" },
-          { uri: "metrics://usage", name: "Usage Metrics", description: "Provider usage statistics", mimeType: "application/json" },
-          { uri: "metrics://prometheus", name: "Prometheus Metrics", description: "System metrics in Prometheus text format", mimeType: "text/plain" },
-          { uri: "metrics://semantic-cache", name: "Semantic Cache Metrics", description: "Semantic cache performance statistics", mimeType: "application/json" },
-          { uri: "docs://api", name: "API Documentation", description: "API documentation and examples", mimeType: "text/markdown" },
-          ...dynamicResources.map(({ uri, name, description }) => ({ uri, name, description, mimeType: "text/markdown" })),
+          {
+            uri: "server://status",
+            name: "Server Status",
+            description: "Current MCP server runtime status and enabled capabilities",
+            mimeType: "application/json",
+          },
+          {
+            uri: "config://current",
+            name: "Current Configuration",
+            description: "Current SecureLLM Bridge configuration",
+            mimeType: "application/toml",
+          },
+          {
+            uri: "logs://audit",
+            name: "Audit Logs",
+            description: "Recent audit log entries",
+            mimeType: "application/json",
+          },
+          {
+            uri: "metrics://usage",
+            name: "Usage Metrics",
+            description: "Provider usage statistics",
+            mimeType: "application/json",
+          },
+          {
+            uri: "metrics://prometheus",
+            name: "Prometheus Metrics",
+            description: "System metrics in Prometheus text format",
+            mimeType: "text/plain",
+          },
+          {
+            uri: "metrics://semantic-cache",
+            name: "Semantic Cache Metrics",
+            description: "Semantic cache performance statistics",
+            mimeType: "application/json",
+          },
+          {
+            uri: "docs://api",
+            name: "API Documentation",
+            description: "API documentation and examples",
+            mimeType: "text/markdown",
+          },
+          ...dynamicResources.map(({ uri, name, description }) => ({
+            uri,
+            name,
+            description,
+            mimeType: "text/markdown",
+          })),
         ],
       };
     });
@@ -580,32 +790,70 @@ class SecureLLMBridgeMCPServer {
       try {
         if (uri.startsWith("guide://")) {
           const name = uri.replace("guide://", "");
-          return { contents: [{ uri, mimeType: "text/markdown", text: await this.guideManager.loadGuide(name) }] };
+          return {
+            contents: [
+              { uri, mimeType: "text/markdown", text: await this.guideManager.loadGuide(name) },
+            ],
+          };
         }
         if (uri.startsWith("skill://")) {
           const name = uri.replace("skill://", "");
-          return { contents: [{ uri, mimeType: "text/markdown", text: await this.guideManager.loadSkill(name) }] };
+          return {
+            contents: [
+              { uri, mimeType: "text/markdown", text: await this.guideManager.loadSkill(name) },
+            ],
+          };
         }
         if (uri.startsWith("prompt://")) {
           const name = uri.replace("prompt://", "");
-          return { contents: [{ uri, mimeType: "text/markdown", text: await this.guideManager.loadPrompt(name) }] };
+          return {
+            contents: [
+              { uri, mimeType: "text/markdown", text: await this.guideManager.loadPrompt(name) },
+            ],
+          };
         }
         switch (uri) {
-          case "server://status": return await this.readServerStatusResource();
-          case "config://current": return await this.readCurrentConfig();
-          case "logs://audit": return await this.readAuditLogs();
-          case "metrics://usage": return await this.readUsageMetrics();
+          case "server://status":
+            return await this.readServerStatusResource();
+          case "config://current":
+            return await this.readCurrentConfig();
+          case "logs://audit":
+            return await this.readAuditLogs();
+          case "metrics://usage":
+            return await this.readUsageMetrics();
           case "metrics://prometheus":
-            return { contents: [{ uri: "metrics://prometheus", mimeType: "text/plain", text: this.rateLimiter.getAggregatePrometheusMetrics() }] };
+            return {
+              contents: [
+                {
+                  uri: "metrics://prometheus",
+                  mimeType: "text/plain",
+                  text: this.rateLimiter.getAggregatePrometheusMetrics(),
+                },
+              ],
+            };
           case "metrics://semantic-cache":
-            return { contents: [{ uri: "metrics://semantic-cache", mimeType: "application/json", text: stringify(this.semanticCache?.getStats() || { error: "Semantic cache not initialized" }) }] };
-          case "docs://api": return await this.readApiDocs();
+            return {
+              contents: [
+                {
+                  uri: "metrics://semantic-cache",
+                  mimeType: "application/json",
+                  text: stringify(
+                    this.semanticCache?.getStats() || { error: "Semantic cache not initialized" }
+                  ),
+                },
+              ],
+            };
+          case "docs://api":
+            return await this.readApiDocs();
           default:
             throw new McpError(ErrorCode.InvalidRequest, `Unknown resource: ${uri}`);
         }
       } catch (error) {
         if (error instanceof McpError) throw error;
-        throw new McpError(ErrorCode.InternalError, `Failed to read resource: ${error instanceof Error ? error.message : String(error)}`);
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Failed to read resource: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     });
   }
@@ -623,7 +871,12 @@ class SecureLLMBridgeMCPServer {
       uptimeMs,
       projectRoot: this.projectRoot,
       hostname: this.hostname,
-      environment: { nodeVersion: process.version, platform: process.platform, arch: process.arch, logLevel: process.env.LOG_LEVEL || "info" },
+      environment: {
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        logLevel: process.env.LOG_LEVEL || "info",
+      },
       features: {
         knowledgeEnabled: ENABLE_KNOWLEDGE,
         knowledgeReady: this.db !== null,
@@ -644,7 +897,10 @@ class SecureLLMBridgeMCPServer {
       },
       governance: this.buildToolGovernanceSummary(includeMetrics),
       metrics: includeMetrics
-        ? { semanticCache: this.semanticCache?.getStats() || null, toolMetrics: Object.fromEntries(this.toolMetricsCollector.getAllToolMetrics()) }
+        ? {
+            semanticCache: this.semanticCache?.getStats() || null,
+            toolMetrics: Object.fromEntries(this.toolMetricsCollector.getAllToolMetrics()),
+          }
         : undefined,
       tools: { total: toolCatalog.length },
     }));
@@ -665,30 +921,42 @@ class SecureLLMBridgeMCPServer {
 
   private async readServerStatusResource() {
     const status = await this.buildServerStatus(true);
-    return { contents: [{ uri: "server://status", mimeType: "application/json", text: stringify(status) }] };
+    return {
+      contents: [{ uri: "server://status", mimeType: "application/json", text: stringify(status) }],
+    };
   }
 
   private async readCurrentConfig() {
     try {
       const configPath = path.resolve(PROJECT_ROOT, "config.toml");
       const content = await fs.readFile(configPath, "utf-8");
-      return { contents: [{ uri: "config://current", mimeType: "application/toml", text: content }] };
+      return {
+        contents: [{ uri: "config://current", mimeType: "application/toml", text: content }],
+      };
     } catch {
-      return { contents: [{ uri: "config://current", mimeType: "text/plain", text: "Configuration file not found" }] };
+      return {
+        contents: [
+          { uri: "config://current", mimeType: "text/plain", text: "Configuration file not found" },
+        ],
+      };
     }
   }
 
   private async readAuditLogs() {
-    const mockLogs = [{
-      timestamp: new Date().toISOString(),
-      request_id: "req_001",
-      provider: "deepseek",
-      model: "deepseek-chat",
-      status: "success",
-      duration_ms: 738,
-      tokens: { prompt: 126, completion: 748 },
-    }];
-    return { contents: [{ uri: "logs://audit", mimeType: "application/json", text: stringify(mockLogs) }] };
+    const mockLogs = [
+      {
+        timestamp: new Date().toISOString(),
+        request_id: "req_001",
+        provider: "deepseek",
+        model: "deepseek-chat",
+        status: "success",
+        duration_ms: 738,
+        tokens: { prompt: 126, completion: 748 },
+      },
+    ];
+    return {
+      contents: [{ uri: "logs://audit", mimeType: "application/json", text: stringify(mockLogs) }],
+    };
   }
 
   private async readUsageMetrics() {
@@ -703,7 +971,11 @@ class SecureLLMBridgeMCPServer {
       total_errors: 0,
       uptime_seconds: 3600,
     };
-    return { contents: [{ uri: "metrics://usage", mimeType: "application/json", text: stringify(mockMetrics) }] };
+    return {
+      contents: [
+        { uri: "metrics://usage", mimeType: "application/json", text: stringify(mockMetrics) },
+      ],
+    };
   }
 
   private async readApiDocs() {
@@ -720,22 +992,33 @@ class SecureLLMBridgeMCPServer {
       try {
         const http = await import("http");
         const metricsHost = process.env.METRICS_HOST || "0.0.0.0";
-        http.createServer((req, res) => {
-          if (req.url === "/metrics") {
-            res.writeHead(200, { "Content-Type": "text/plain" });
-            const rateLimiterMetrics = this.rateLimiter.getAggregatePrometheusMetrics();
-            const toolMetrics = this.toolMetricsCollector.getPrometheusMetrics();
-            res.end([rateLimiterMetrics, toolMetrics].filter(Boolean).join("\n\n"));
-          } else if (req.url === "/health") {
-            res.writeHead(200, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ status: "ok", timestamp: new Date().toISOString(), limiter: this.toolLimiter.getStatus() }));
-          } else {
-            res.writeHead(404);
-            res.end();
-          }
-        }).listen(parseInt(metricsPort, 10), metricsHost, () => {
-          logger.info({ port: metricsPort, host: metricsHost }, "Prometheus metrics server running");
-        });
+        http
+          .createServer((req, res) => {
+            if (req.url === "/metrics") {
+              res.writeHead(200, { "Content-Type": "text/plain" });
+              const rateLimiterMetrics = this.rateLimiter.getAggregatePrometheusMetrics();
+              const toolMetrics = this.toolMetricsCollector.getPrometheusMetrics();
+              res.end([rateLimiterMetrics, toolMetrics].filter(Boolean).join("\n\n"));
+            } else if (req.url === "/health") {
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(
+                JSON.stringify({
+                  status: "ok",
+                  timestamp: new Date().toISOString(),
+                  limiter: this.toolLimiter.getStatus(),
+                })
+              );
+            } else {
+              res.writeHead(404);
+              res.end();
+            }
+          })
+          .listen(parseInt(metricsPort, 10), metricsHost, () => {
+            logger.info(
+              { port: metricsPort, host: metricsHost },
+              "Prometheus metrics server running"
+            );
+          });
       } catch (err) {
         logger.error({ err }, "Failed to start metrics server");
       }

@@ -96,6 +96,14 @@ import { usageTracker } from "../telemetry/usage-tracker.js";
 
 const execAsync = promisify(exec);
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function nixDevelopShellCommand(projectRoot: string, command: string): string {
+  return `nix develop ${shellQuote(projectRoot)} --command bash -lc ${shellQuote(command)}`;
+}
+
 export interface DispatchDeps {
   db: KnowledgeDatabase | null;
   rateLimiter: SmartRateLimiter;
@@ -154,10 +162,18 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
     provider_test: (args) =>
       w(async () => {
         const { provider, prompt, model } = args;
-        const testScript = `cd "${deps.projectRoot}" && cargo run --bin securellm -- test ${provider} --prompt "${prompt.replace(/"/g, '\\"')}"${model ? ` --model ${model}` : ""}`;
+        const testScript = nixDevelopShellCommand(
+          deps.projectRoot,
+          `cargo run --bin securellm -- test ${shellQuote(provider)} --prompt ${shellQuote(prompt)}${model ? ` --model ${shellQuote(model)}` : ""}`
+        );
         const { stdout, stderr } = await execAsync(testScript, {
           cwd: deps.projectRoot,
           timeout: 30000,
+          env: {
+            ...process.env,
+            PROJECT_ROOT: process.env.PROJECT_ROOT || deps.projectRoot,
+            SECURELLM_MCP_QUIET: "1",
+          },
         });
         return {
           provider,
@@ -232,10 +248,18 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
           integration: "cargo test --test '*'",
           all: "cargo test",
         };
-        const buildScript = `cd "${deps.projectRoot}" && cargo build && ${cmds[args.test_type]}`;
+        const buildScript = nixDevelopShellCommand(
+          deps.projectRoot,
+          `cargo build && ${cmds[args.test_type]}`
+        );
         const { stdout, stderr } = await execAsync(buildScript, {
           cwd: deps.projectRoot,
           timeout: 120000,
+          env: {
+            ...process.env,
+            PROJECT_ROOT: process.env.PROJECT_ROOT || deps.projectRoot,
+            SECURELLM_MCP_QUIET: "1",
+          },
         });
         return {
           test_type: args.test_type,

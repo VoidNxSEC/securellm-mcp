@@ -158,7 +158,9 @@ async function analyzeProject(name: string, pp: string): Promise<ProjectInfo> {
         "owasaka",
       ])
         if (c.toLowerCase().includes(kw)) deps.push(kw);
-    } catch {}
+    } catch {
+      // Optional manifest metadata may be unreadable; discovery should continue.
+    }
   }
   if (existsSync(path.join(pp, "package.json"))) {
     languages.push("TypeScript");
@@ -185,7 +187,9 @@ async function analyzeProject(name: string, pp: string): Promise<ProjectInfo> {
           const r = kw === "nexus" || kw === "bastion" ? "neotron" : kw;
           if (!deps.includes(r)) deps.push(r);
         }
-    } catch {}
+    } catch {
+      // Optional Python project metadata may be unreadable; discovery should continue.
+    }
   }
   if (existsSync(path.join(pp, "go.mod"))) {
     languages.push("Go");
@@ -210,7 +214,9 @@ async function analyzeProject(name: string, pp: string): Promise<ProjectInfo> {
         if (pn !== "nixpkgs" && pn !== "crane" && pn !== "flake" && !deps.includes(pn))
           deps.push(pn);
       }
-    } catch {}
+    } catch {
+      // Optional flake metadata may be unreadable; discovery should continue.
+    }
   }
 
   try {
@@ -230,7 +236,9 @@ async function analyzeProject(name: string, pp: string): Promise<ProjectInfo> {
         ].includes(d.name)
       )
         subprojects.push(d.name);
-  } catch {}
+  } catch {
+    // Optional subproject scan may fail on permissions; discovery should continue.
+  }
 
   if (existsSync(path.join(pp, "README.md"))) {
     try {
@@ -238,7 +246,9 @@ async function analyzeProject(name: string, pp: string): Promise<ProjectInfo> {
       const h1 = lines.find((l) => /^#\s/.test(l));
       if (h1) description = h1.replace(/^#\s+/, "").trim();
       readme = lines.slice(0, 30).join(" ").substring(0, 500);
-    } catch {}
+    } catch {
+      // Optional README metadata may be unreadable; discovery should continue.
+    }
   }
 
   // Role classification
@@ -520,7 +530,9 @@ export async function handleEcosystemTrace(
             context: project.role || project.description,
           });
         }
-      } catch {}
+      } catch {
+        // Individual projects may have unreadable manifests; trace should continue.
+      }
     }
 
     // Build impact analysis
@@ -638,11 +650,15 @@ export async function handleEcosystemSearch(
                     match_count: matchingLines.length,
                   });
                 }
-              } catch {}
+              } catch {
+                // Individual source files may be unreadable; search should continue.
+              }
             }
           }
         }
-      } catch {}
+      } catch {
+        // Individual projects may be unreadable; search should continue.
+      }
     }
 
     const byProject: Record<string, number> = {};

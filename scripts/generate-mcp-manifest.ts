@@ -5,10 +5,11 @@
  * picks up internal function names, resource names, and misses spread operators.
  *
  * Usage:
- *   npm run build && npx tsx scripts/generate-mcp-manifest.ts
- *   npm run build && npx tsx scripts/generate-mcp-manifest.ts --check
+ *   nix develop --command npm run build
+ *   nix develop --command npx tsx scripts/generate-mcp-manifest.ts
+ *   nix develop --command npx tsx scripts/generate-mcp-manifest.ts --check
  *
- * The server must be the freshly built version (npm run build first).
+ * The server must be the freshly built version.
  */
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
@@ -17,21 +18,38 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MCP_JSON_PATH = join(__dirname, "..", ".mcp.json");
-const BUILD_PATH = join(__dirname, "..", "build", "src", "index.js");
+const REPO_ROOT = join(__dirname, "..");
+const MCP_JSON_PATH = join(REPO_ROOT, ".mcp.json");
+const BUILD_PATH = join(REPO_ROOT, "build", "src", "index.js");
 const CHECK_MODE = process.argv.includes("--check");
+
+function mcpServerArgs(): string[] {
+  return [
+    "develop",
+    REPO_ROOT,
+    "--command",
+    "bash",
+    "-lc",
+    `cd ${JSON.stringify(REPO_ROOT)} && exec node ${JSON.stringify(BUILD_PATH)}`,
+  ];
+}
 
 // ─── Call tools/list via MCP JSON-RPC over stdio ───────────────────────────
 
 function callToolsList(): Promise<{ tools: Array<{ name: string; description: string }> }> {
   return new Promise((resolve, reject) => {
-    const child = spawn("node", [BUILD_PATH], {
+    const child = spawn("nix", mcpServerArgs(), {
+      cwd: REPO_ROOT,
       stdio: ["pipe", "pipe", "inherit"],
       env: {
         ...process.env,
-        PROJECT_ROOT: process.env.PROJECT_ROOT || join(__dirname, ".."),
+        PROJECT_ROOT: process.env.PROJECT_ROOT || REPO_ROOT,
         ENABLE_KNOWLEDGE: "true",
         LLAMA_CPP_URL: process.env.LLAMA_CPP_URL || "http://localhost:8081",
+        PHANTOM_URL: process.env.PHANTOM_URL || "http://localhost:8008",
+        CEREBRO_API_URL: process.env.CEREBRO_API_URL || "http://localhost:8009",
+        NATS_URL: process.env.NATS_URL || "nats://localhost:4222",
+        SECURELLM_MCP_QUIET: "1",
       },
     });
 
@@ -120,7 +138,7 @@ async function main() {
     console.log(`  Received ${tools.length} tools from server`);
   } catch (err: any) {
     console.error(`ERROR: Failed to get tools from server: ${err.message}`);
-    console.error("Make sure you ran: npm run build");
+    console.error("Make sure you ran: nix develop --command npm run build");
     console.error("The server must be the freshly compiled version.");
     process.exit(1);
   }
@@ -148,7 +166,7 @@ async function main() {
 
     if (missing.length > 0 || extra.length > 0) {
       console.error(`ERROR: manifest drift — declared=${declared.size} vs actual=${actual.size}`);
-      console.error("Run: npm run build:manifest");
+      console.error("Run: nix develop --command npm run build:manifest");
       process.exit(1);
     }
 
@@ -160,12 +178,16 @@ async function main() {
   const mcpJson = {
     mcpServers: {
       securellm: {
-        command: "node",
-        args: ["build/src/index.js"],
+        command: "nix",
+        args: mcpServerArgs(),
         env: {
-          PROJECT_ROOT: "${PROJECT_ROOT:-.}",
+          PROJECT_ROOT: REPO_ROOT,
           ENABLE_KNOWLEDGE: "true",
-          LLAMA_CPP_URL: "${LLAMA_CPP_URL:-http://localhost:8081}",
+          LLAMA_CPP_URL: process.env.LLAMA_CPP_URL || "http://localhost:8081",
+          PHANTOM_URL: process.env.PHANTOM_URL || "http://localhost:8008",
+          CEREBRO_API_URL: process.env.CEREBRO_API_URL || "http://localhost:8009",
+          NATS_URL: process.env.NATS_URL || "nats://localhost:4222",
+          SECURELLM_MCP_QUIET: "1",
         },
       },
     },

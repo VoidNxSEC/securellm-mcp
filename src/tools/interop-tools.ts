@@ -643,7 +643,8 @@ export async function handleSchemaConvert(
   args: z.infer<typeof schemaConvertSchema>
 ): Promise<McpToolResult> {
   try {
-    let { source, from, to, name, input_is_file } = args;
+    let { source } = args;
+    const { from, to, name, input_is_file } = args;
 
     if (input_is_file) {
       source = readFileSync(source, "utf-8");
@@ -955,7 +956,8 @@ export async function handleDataTransform(
   args: z.infer<typeof dataTransformSchema>
 ): Promise<McpToolResult> {
   try {
-    let { source, input_format, output_format, input_is_file, output_file, pretty } = args;
+    let { source } = args;
+    const { input_format, output_format, input_is_file, output_file, pretty } = args;
 
     if (input_is_file) {
       source = readFileSync(source, "utf-8");

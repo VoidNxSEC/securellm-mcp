@@ -12,6 +12,8 @@ import { existsSync } from "fs";
 import { join } from "path";
 import { logger } from "../../utils/logger.js";
 
+const STATUS_DIRS = ["proposed", "accepted", "rejected", "superseded", "deprecated"];
+
 // ═══════════════════════════════════════════════════════════════
 // Runtime levels
 // ═══════════════════════════════════════════════════════════════
@@ -41,7 +43,13 @@ export interface ScannedADR {
   status: string;
   title: string;
   date: string;
+  project?: string;
   filePath: string;
+}
+
+function parseFrontmatterValue(content: string, field: string): string {
+  const match = content.match(new RegExp(`^${field}:\\s*(?:"([^"]*)"|'([^']*)'|([^\\n#]+))`, "m"));
+  return (match?.[1] ?? match?.[2] ?? match?.[3] ?? "").trim();
 }
 
 /**
@@ -51,6 +59,62 @@ export interface ScannedADR {
 export class FilesystemScanner {
   constructor(private repoPath: string) {}
 
+  private async scanDirectory(
+    dirPath: string,
+    defaultStatus: string,
+    statusFromFrontmatter: boolean
+  ): Promise<ScannedADR[]> {
+    const results: ScannedADR[] = [];
+
+    if (!existsSync(dirPath)) return results;
+
+    let files: string[];
+    try {
+      files = await readdir(dirPath);
+    } catch {
+      return results; // permission denied, etc
+    }
+
+    for (const file of files) {
+      // Regex: ADR-XXXX.md or ADR-XXXX-something.md
+      const match = file.match(/^ADR-(\d{4})(?:-.*)?\.md$/);
+      if (!match) continue;
+
+      const numericId = parseInt(match[1], 10);
+      if (isNaN(numericId)) continue;
+
+      const filePath = join(dirPath, file);
+      let title = "";
+      let date = "";
+      let frontmatterId = "";
+      let status = defaultStatus;
+      let project: string | undefined;
+
+      try {
+        const content = await readFile(filePath, "utf-8");
+        title = parseFrontmatterValue(content, "title");
+        date = parseFrontmatterValue(content, "date");
+        frontmatterId = parseFrontmatterValue(content, "id");
+        project = parseFrontmatterValue(content, "project") || undefined;
+        if (statusFromFrontmatter) status = parseFrontmatterValue(content, "status") || status;
+      } catch {
+        // unreadable file — still include with what we know
+      }
+
+      results.push({
+        id: frontmatterId || `ADR-${match[1]}`,
+        numericId,
+        status,
+        title,
+        date,
+        project,
+        filePath,
+      });
+    }
+
+    return results;
+  }
+
   /**
    * Scan all ADR files across all status directories.
    * Returns sorted by numeric ID.
@@ -58,59 +122,17 @@ export class FilesystemScanner {
   async scanAll(): Promise<ScannedADR[]> {
     const results: ScannedADR[] = [];
     const adrDir = join(this.repoPath, "adr");
+    const docsAdrDir = join(this.repoPath, "docs", "adr");
 
-    if (!existsSync(adrDir)) return results;
-
-    const statusDirs = ["proposed", "accepted", "rejected", "superseded", "deprecated"];
-
-    for (const status of statusDirs) {
-      const statusDir = join(adrDir, status);
-      if (!existsSync(statusDir)) continue;
-
-      let files: string[];
-      try {
-        files = await readdir(statusDir);
-      } catch {
-        continue; // permission denied, etc
-      }
-
-      for (const file of files) {
-        // Regex: ADR-XXXX.md or ADR-XXXX-something.md
-        const match = file.match(/^ADR-(\d{4})(?:-.*)?\.md$/);
-        if (!match) continue;
-
-        const numericId = parseInt(match[1], 10);
-        if (isNaN(numericId)) continue;
-
-        const filePath = join(statusDir, file);
-
-        // Try to extract frontmatter fields
-        let title = "";
-        let date = "";
-        let frontmatterId = "";
-
-        try {
-          const content = await readFile(filePath, "utf-8");
-          title = content.match(/^title:\s*"([^"]+)"/m)?.[1] || "";
-          date = content.match(/^date:\s*"([^"]+)"/m)?.[1] || "";
-          frontmatterId = content.match(/^id:\s*"([^"]+)"/m)?.[1] || "";
-        } catch {
-          // unreadable file — still include with what we know
-        }
-
-        results.push({
-          id: frontmatterId || `ADR-${match[1]}`,
-          numericId,
-          status,
-          title,
-          date,
-          filePath,
-        });
-      }
+    for (const status of STATUS_DIRS) {
+      results.push(...(await this.scanDirectory(join(adrDir, status), status, false)));
     }
 
+    results.push(...(await this.scanDirectory(docsAdrDir, "proposed", true)));
+    results.push(...(await this.scanDirectory(this.repoPath, "proposed", true)));
+
     // Sort by numeric ID ascending
-    results.sort((a, b) => a.numericId - b.numericId);
+    results.sort((a, b) => a.numericId - b.numericId || a.id.localeCompare(b.id));
     return results;
   }
 
@@ -173,13 +195,13 @@ export class ADRRuntimeGate {
     const adrScript = join(this.repoPath, "scripts", "adr");
 
     // 1. Check structure
-    const structureOk =
-      existsSync(proposedDir) && existsSync(acceptedDir) && existsSync(schemaPath);
-
-    // 2. Check schema
     const schemaAvailable = existsSync(schemaPath);
+    const writableStructureOk = existsSync(proposedDir) && existsSync(acceptedDir);
+    const readStructureOk =
+      writableStructureOk || existsSync(adrDir) || existsSync(join(this.repoPath, "docs", "adr"));
+    const structureOk = writableStructureOk && schemaAvailable;
 
-    // 3. Check CLI
+    // 2. Check CLI
     let cliAvailable = false;
     if (existsSync(adrScript)) {
       try {
@@ -197,7 +219,7 @@ export class ADRRuntimeGate {
       }
     }
 
-    // 4. Check Python deps
+    // 3. Check Python deps
     let pythonAvailable = false;
     try {
       const { execFile } = await import("child_process");
@@ -215,13 +237,13 @@ export class ADRRuntimeGate {
       pythonAvailable = false;
     }
 
-    // 5. Scan filesystem (always works if structure is ok)
+    // 4. Scan filesystem (works for both adr/status and docs/adr layouts)
     let adrCount = 0;
     let maxId = 0;
     let nextId = "ADR-0001";
     let duplicates: Array<{ id: string; files: string[] }> = [];
 
-    if (structureOk) {
+    if (readStructureOk) {
       const adrs = await this.scanner.scanAll();
       adrCount = adrs.length;
       maxId = adrs.length > 0 ? Math.max(...adrs.map((a) => a.numericId)) : 0;
@@ -234,7 +256,17 @@ export class ADRRuntimeGate {
     let canWrite: boolean;
     let reason: string;
 
-    if (!structureOk) {
+    if (!structureOk && adrCount > 0) {
+      level = "degraded-readonly";
+      canWrite = false;
+      reason = `Read-only ADR layout detected. Missing writable ledger requirements: ${[
+        !existsSync(proposedDir) && "adr/proposed/",
+        !existsSync(acceptedDir) && "adr/accepted/",
+        !schemaAvailable && ".schema/adr.schema.json",
+      ]
+        .filter(Boolean)
+        .join(", ")}`;
+    } else if (!structureOk) {
       level = "blocked";
       canWrite = false;
       reason = `Repository structure incomplete. Missing: ${[

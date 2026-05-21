@@ -20,8 +20,29 @@ import { stringifyGeneric } from "../../utils/json-schemas.js";
 import { logger } from "../../utils/logger.js";
 import { ADRRuntimeGate, FilesystemScanner } from "./runtime-gate.js";
 import type { RuntimeGateResult, ScannedADR } from "./runtime-gate.js";
+import { existsSync } from "fs";
+import { join } from "path";
 
-const ADR_REPO_PATH = process.env.ADR_REPO_PATH || "/home/kernelcore/master/adr-ledger";
+const DEFAULT_ADR_LEDGER_PATH = "/home/kernelcore/master/adr-ledger";
+
+function hasAdrLayout(repoPath: string): boolean {
+  return existsSync(join(repoPath, "adr")) || existsSync(join(repoPath, "docs", "adr"));
+}
+
+function resolveAdrRepoPath(): string {
+  if (process.env.ADR_REPO_PATH) return process.env.ADR_REPO_PATH;
+
+  const candidates = [
+    process.env.PROJECT_ROOT,
+    process.cwd(),
+    "/home/kernelcore/master/securellm-mcp",
+    DEFAULT_ADR_LEDGER_PATH,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  return candidates.find(hasAdrLayout) || process.env.PROJECT_ROOT || process.cwd();
+}
+
+const ADR_REPO_PATH = resolveAdrRepoPath();
 const backend = new CLIBackend(ADR_REPO_PATH);
 const gate = new ADRRuntimeGate(ADR_REPO_PATH);
 const scanner = new FilesystemScanner(ADR_REPO_PATH);
@@ -599,7 +620,11 @@ async function handleAdrList(args: ADRListArgs) {
           );
           usedFallback = true;
           adrs = scanned
-            .filter((a: ScannedADR) => !statusFilter || a.status === statusFilter)
+            .filter(
+              (a: ScannedADR) =>
+                (!statusFilter || a.status === statusFilter) &&
+                (!project || a.project?.toLowerCase() === project.toLowerCase())
+            )
             .map((a: ScannedADR) => ({ id: a.id, title: a.title, status: a.status, date: a.date }));
         }
       }
@@ -609,7 +634,11 @@ async function handleAdrList(args: ADRListArgs) {
       usedFallback = true;
       const scanned = await scanner.scanAll();
       adrs = scanned
-        .filter((a: ScannedADR) => !statusFilter || a.status === statusFilter)
+        .filter(
+          (a: ScannedADR) =>
+            (!statusFilter || a.status === statusFilter) &&
+            (!project || a.project?.toLowerCase() === project.toLowerCase())
+        )
         .map((a: ScannedADR) => ({ id: a.id, title: a.title, status: a.status, date: a.date }));
     }
 
@@ -641,7 +670,7 @@ async function handleAdrList(args: ADRListArgs) {
     table += `\u255A${"═".repeat(12)}\u2569${"═".repeat(10)}\u2569${"═".repeat(47)}\u2569${"═".repeat(12)}\u255D`;
 
     let suggestionsText = "";
-    if (!status || status === "proposed") {
+    if (!statusFilter || statusFilter === "proposed") {
       try {
         const suggestions = await backend.suggestLifecycleChanges();
         if (suggestions.length > 0) {

@@ -14,8 +14,16 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }@inputs:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      rust-overlay,
+      ...
+    }@inputs:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         overlays = [ (import rust-overlay) ];
         spiderNixPkg = inputs.spider-nix.packages.${system}.default;
@@ -25,7 +33,11 @@
 
         # Toolchain Rust estável com suporte a análise de código
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-          extensions = [ "rust-src" "rust-analyzer" "clippy" ];
+          extensions = [
+            "rust-src"
+            "rust-analyzer"
+            "clippy"
+          ];
         };
 
         # Build the MCP server package
@@ -74,6 +86,8 @@
         };
       in
       {
+        formatter = pkgs.nixfmt;
+
         packages = {
           default = mcpServer;
           mcp = mcpServer;
@@ -112,11 +126,13 @@
             export PUPPETEER_EXECUTABLE_PATH="${pkgs.chromium}/bin/chromium"
             export PUPPETEER_SKIP_DOWNLOAD="1"
             export SPIDER_NIX_BIN="${spiderNixPkg}/bin/spider-nix"
-            echo "🛡️ SecureLLM Dev Environment (Node.js + Rust) Loaded"
-            echo "Rust Version: $(rustc --version)"
-            echo "Node Version: $(node --version)"
-            echo "Chromium: ${pkgs.chromium}/bin/chromium"
-            echo "Spider-Nix: ${spiderNixPkg}/bin/spider-nix"
+            if [ "''${SECURELLM_MCP_QUIET:-0}" != "1" ]; then
+              echo "🛡️ SecureLLM Dev Environment (Node.js + Rust) Loaded"
+              echo "Rust Version: $(rustc --version)"
+              echo "Node Version: $(node --version)"
+              echo "Chromium: ${pkgs.chromium}/bin/chromium"
+              echo "Spider-Nix: ${spiderNixPkg}/bin/spider-nix"
+            fi
           '';
         };
       }

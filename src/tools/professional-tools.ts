@@ -999,7 +999,7 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
   return {
     async server_health(rawArgs: unknown) {
       const args = serverHealthSchema.parse(rawArgs ?? {});
-      const status = (await deps.getServerStatus(false));
+      const status = await deps.getServerStatus(false);
       const projectRoot = deps.getProjectRoot();
 
       const [projectRootReadable, packageJsonPresent, flakePresent, buildPresent, gitSummary] =
@@ -1116,11 +1116,8 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
 
     async performance_report(rawArgs: unknown) {
       const args = performanceReportSchema.parse(rawArgs ?? {});
-      const status = (await deps.getServerStatus(true));
-      const statusMetrics = ((status).metrics || {}) as Record<
-        string,
-        unknown
-      >;
+      const status = await deps.getServerStatus(true);
+      const statusMetrics = (status.metrics || {}) as Record<string, unknown>;
       const rawToolMetrics = (statusMetrics.toolMetrics || {}) as Record<
         string,
         Record<string, unknown>
@@ -1231,11 +1228,8 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
 
     async cache_tuning_advisor(rawArgs: unknown) {
       const args = cacheTuningAdvisorSchema.parse(rawArgs ?? {});
-      const status = (await deps.getServerStatus(true));
-      const statusMetrics = ((status).metrics || {}) as Record<
-        string,
-        unknown
-      >;
+      const status = await deps.getServerStatus(true);
+      const statusMetrics = (status.metrics || {}) as Record<string, unknown>;
       const rawToolMetrics = (statusMetrics.toolMetrics || {}) as Record<
         string,
         Record<string, unknown>
@@ -1480,7 +1474,7 @@ export function createProfessionalToolHandlers(deps: ProfessionalToolDeps) {
 
     async tool_control_plane(rawArgs: unknown) {
       const args = toolControlPlaneSchema.parse(rawArgs ?? {});
-      const status = (await deps.getServerStatus(true));
+      const status = await deps.getServerStatus(true);
       const governance = deps.getToolGovernanceSummary?.(args.include_tools) || {};
 
       return {
