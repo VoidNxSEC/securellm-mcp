@@ -38,6 +38,7 @@ import { linuxDebuggingTools } from "../tools/linux-debugging.js";
 import { docTools } from "../tools/doc-tools.js";
 import { interopTools } from "../tools/interop-tools.js";
 import { ecosystemTools } from "../tools/ecosystem-tools.js";
+import { umbrellaTools } from "../tools/umbrella-tools.js";
 
 export function buildToolCatalog(
   db: KnowledgeDatabase | null,
@@ -330,5 +331,6 @@ export function buildToolCatalog(
     ...docTools,
     ...interopTools,
     ...ecosystemTools,
+    ...umbrellaTools,
   ] as ExtendedTool[]; // end buildToolCatalog
 }

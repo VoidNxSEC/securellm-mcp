@@ -91,6 +91,12 @@ import {
   handleEcosystemTrace,
   handleEcosystemSearch,
 } from "../tools/ecosystem-tools.js";
+import {
+  handleProjectContextSwitcher,
+  handleCrossProjectSearch,
+  handleDependencyGraphAnalyzer,
+  handleContextWindowOptimizer,
+} from "../tools/umbrella-tools.js";
 import { type McpToolResult, wrapTool } from "./wrap.js";
 import { usageTracker } from "../telemetry/usage-tracker.js";
 
@@ -456,6 +462,10 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
     ecosystem_map: (args) => handleEcosystemMap(args),
     ecosystem_trace: (args) => handleEcosystemTrace(args),
     ecosystem_search: (args) => handleEcosystemSearch(args),
+    project_context_switcher: (args) => handleProjectContextSwitcher(args),
+    cross_project_search: (args) => handleCrossProjectSearch(args),
+    dependency_graph_analyzer: (args) => handleDependencyGraphAnalyzer(args),
+    context_window_optimizer: (args) => handleContextWindowOptimizer(args),
   };
 
   return map;
