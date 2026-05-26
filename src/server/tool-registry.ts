@@ -40,6 +40,8 @@ import { interopTools } from "../tools/interop-tools.js";
 import { ecosystemTools } from "../tools/ecosystem-tools.js";
 import { umbrellaTools } from "../tools/umbrella-tools.js";
 
+import { uxTools } from "../tools/bridge-ux.js";
+
 export function buildToolCatalog(
   db: KnowledgeDatabase | null,
   enableKnowledge: boolean
@@ -332,5 +334,6 @@ export function buildToolCatalog(
     ...interopTools,
     ...ecosystemTools,
     ...umbrellaTools,
+    ...uxTools,
   ] as ExtendedTool[]; // end buildToolCatalog
 }

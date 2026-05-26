@@ -98,6 +98,14 @@ import {
   handleContextWindowOptimizer,
 } from "../tools/umbrella-tools.js";
 import { type McpToolResult, wrapTool } from "./wrap.js";
+import {
+  handleUxListSpecs,
+  handleUxGetSpec,
+  handleUxGeneratePrompt,
+  handleUxValidateComponent,
+  handleUxDesignSystem,
+  handleUxCreateSpec,
+} from "../tools/bridge-ux.js";
 import { usageTracker } from "../telemetry/usage-tracker.js";
 
 const execAsync = promisify(exec);
@@ -466,6 +474,14 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
     cross_project_search: (args) => handleCrossProjectSearch(args),
     dependency_graph_analyzer: (args) => handleDependencyGraphAnalyzer(args),
     context_window_optimizer: (args) => handleContextWindowOptimizer(args),
+
+    // ── Bridge UX Design Mode ─────────────────────────────────────────
+    ux_list_specs: () => handleUxListSpecs(),
+    ux_get_spec: (args) => handleUxGetSpec(args),
+    ux_generate_prompt: (args) => handleUxGeneratePrompt(args),
+    ux_validate_component: (args) => handleUxValidateComponent(args),
+    ux_design_system: (args) => handleUxDesignSystem(args),
+    ux_create_spec: (args) => Promise.resolve(handleUxCreateSpec(args)),
   };
 
   return map;
