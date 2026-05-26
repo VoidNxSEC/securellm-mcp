@@ -359,7 +359,7 @@ export async function handleProjectContextSwitcher(
 export async function handleCrossProjectSearch(
   args: z.infer<typeof crossProjectSearchSchema>
 ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
-  const { query, file_patterns, exclude_projects, semantic_mode, max_results_per_project } = args;
+  const { query, file_patterns = ['*.py', '*.rs', '*.go', '*.ts', '*.nix', '*.md', '*.toml', '*.yaml', '*.json'], exclude_projects = [], semantic_mode = false, max_results_per_project = 20 } = args;
 
   const results: Record<string, any> = {};
   let totalHits = 0;
