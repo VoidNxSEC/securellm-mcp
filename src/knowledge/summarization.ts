@@ -9,6 +9,14 @@ import type {
   SummaryType,
   KnowledgeSummary,
 } from "../types/compaction.js";
+import {
+  SessionRowSchema,
+  KnowledgeEntryRowSchema,
+  KnowledgeSummaryRowSchema,
+  safeJsonParse,
+  type SessionRow,
+  type KnowledgeEntryRow,
+} from "./schemas.js";
 
 export interface SummarizationOptions {
   model?: string;
@@ -48,19 +56,23 @@ export class Summarizer {
 
     try {
       // Get session info
-      const session = this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(session_id) as any;
+      const rawSession = this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(session_id);
 
-      if (!session) {
+      if (!rawSession) {
         return {
           success: false,
           error: `Session ${session_id} not found`,
         };
       }
 
+      const session = SessionRowSchema.parse(rawSession);
+
       // Get entries for this session
-      const entries = this.db
+      const rawEntries = this.db
         .prepare("SELECT * FROM knowledge_entries WHERE session_id = ? ORDER BY timestamp ASC")
-        .all(session_id) as any[];
+        .all(session_id);
+
+      const entries = KnowledgeEntryRowSchema.array().parse(rawEntries);
 
       if (entries.length < min_entry_count) {
         return {
@@ -93,7 +105,7 @@ export class Summarizer {
         content: summaryContent,
         entry_count: entries.length,
         token_count: tokenCount,
-        source_entries: entries.map((e: any) => e.id),
+        source_entries: entries.map((e) => e.id),
         metadata: {
           model,
           temperature,
@@ -125,11 +137,12 @@ export class Summarizer {
         summary_id: summaryId,
         summary,
       };
-    } catch (err: any) {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       logger.error({ err, session_id }, "Session summarization failed");
       return {
         success: false,
-        error: err.message,
+        error: message,
       };
     }
   }
@@ -138,8 +151,8 @@ export class Summarizer {
    * Build summarization prompt
    */
   private buildSummarizationPrompt(
-    session: any,
-    entries: any[],
+    session: SessionRow,
+    entries: KnowledgeEntryRow[],
     options: {
       summary_type: SummaryType;
       include_code: boolean;
@@ -149,30 +162,21 @@ export class Summarizer {
     const { summary_type, include_code, include_tags } = options;
 
     // Parse metadata
-    let metadata: any = {};
-    try {
-      metadata = JSON.parse(session.metadata);
-    } catch {
-      // Ignore parse errors
-    }
+    const metadata = safeJsonParse<Record<string, unknown>>(session.metadata, {});
 
     // Collect all tags
     const allTags = new Set<string>();
     if (include_tags) {
       for (const entry of entries) {
-        try {
-          const tags = JSON.parse(entry.tags);
-          tags.forEach((tag: string) => allTags.add(tag));
-        } catch {
-          // Ignore parse errors
-        }
+        const tags = safeJsonParse<string[]>(entry.tags, []);
+        for (const tag of tags) allTags.add(tag);
       }
     }
 
     // Format entries
     const formattedEntries = entries
       .map((entry, idx) => {
-        const tags = include_tags ? JSON.parse(entry.tags || "[]") : [];
+        const tags = include_tags ? safeJsonParse<string[]>(entry.tags, []) : [];
         const content = include_code
           ? entry.content
           : entry.entry_type === "code"
@@ -198,8 +202,9 @@ Session Info:
       prompt += `\n- Tags: ${Array.from(allTags).join(", ")}`;
     }
 
-    if (metadata.project) {
-      prompt += `\n- Project: ${metadata.project}`;
+    const project = metadata.project;
+    if (typeof project === "string" && project.length > 0) {
+      prompt += `\n- Project: ${project}`;
     }
 
     prompt += `\n\nEntries:\n${formattedEntries}\n\n`;
@@ -235,7 +240,7 @@ Clusters:`;
     entry_count: number;
     token_count: number;
     source_entries: number[];
-    metadata: Record<string, any>;
+    metadata: Record<string, unknown>;
   }): Promise<number> {
     const stmt = this.db.prepare(`
       INSERT INTO knowledge_summaries (session_id, summary_type, content, entry_count, token_count, source_entries, metadata)
@@ -260,9 +265,11 @@ Clusters:`;
    */
   private async getSummary(id: number): Promise<KnowledgeSummary | undefined> {
     const stmt = this.db.prepare("SELECT * FROM knowledge_summaries WHERE id = ?");
-    const row = stmt.get(id) as any;
+    const raw = stmt.get(id);
 
-    if (!row) return undefined;
+    if (!raw) return undefined;
+
+    const row = KnowledgeSummaryRowSchema.parse(raw);
 
     return {
       id: row.id,
@@ -272,8 +279,8 @@ Clusters:`;
       entry_count: row.entry_count,
       token_count: row.token_count,
       generated_at: row.generated_at,
-      source_entries: JSON.parse(row.source_entries),
-      metadata: JSON.parse(row.metadata),
+      source_entries: safeJsonParse<number[]>(row.source_entries, []),
+      metadata: safeJsonParse<Record<string, unknown>>(row.metadata, {}),
     };
   }
 
@@ -285,7 +292,7 @@ Clusters:`;
       SELECT * FROM knowledge_summaries WHERE session_id = ? ORDER BY generated_at DESC
     `);
 
-    const rows = stmt.all(sessionId) as any[];
+    const rows = KnowledgeSummaryRowSchema.array().parse(stmt.all(sessionId));
 
     return rows.map((row) => ({
       id: row.id,
@@ -295,8 +302,8 @@ Clusters:`;
       entry_count: row.entry_count,
       token_count: row.token_count,
       generated_at: row.generated_at,
-      source_entries: JSON.parse(row.source_entries),
-      metadata: JSON.parse(row.metadata),
+      source_entries: safeJsonParse<number[]>(row.source_entries, []),
+      metadata: safeJsonParse<Record<string, unknown>>(row.metadata, {}),
     }));
   }
 
@@ -313,7 +320,7 @@ Clusters:`;
       LIMIT ?
     `);
 
-    const rows = stmt.all(query, limit) as any[];
+    const rows = KnowledgeSummaryRowSchema.array().parse(stmt.all(query, limit));
 
     return rows.map((row) => ({
       id: row.id,
@@ -323,8 +330,8 @@ Clusters:`;
       entry_count: row.entry_count,
       token_count: row.token_count,
       generated_at: row.generated_at,
-      source_entries: JSON.parse(row.source_entries),
-      metadata: JSON.parse(row.metadata),
+      source_entries: safeJsonParse<number[]>(row.source_entries, []),
+      metadata: safeJsonParse<Record<string, unknown>>(row.metadata, {}),
     }));
   }
 }
