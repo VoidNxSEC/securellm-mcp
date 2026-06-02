@@ -439,7 +439,7 @@ export class DeepResearchEngine {
             const nixResults = JSON.parse(stdout || "{}");
             const entries = Object.entries(nixResults).slice(0, 3);
             for (const [path, info] of entries) {
-              const pkgInfo = info as any;
+              const pkgInfo = info as { pname?: string; description?: string };
               results.push({
                 source: "official_docs",
                 url: `https://search.nixos.org/packages?query=${encodeURIComponent(pkgInfo.pname || query)}`,

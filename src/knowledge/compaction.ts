@@ -9,6 +9,7 @@ import { createSummarizer } from "./summarization.js";
 import { createDeduplicator } from "./deduplication.js";
 import { createArchiver } from "./archival.js";
 import { createLLMClient } from "../utils/llm-client.js";
+import { z } from "zod";
 import type {
   CompactKnowledgeInput,
   CompactKnowledgeOutput,
@@ -259,13 +260,9 @@ export class CompactionOrchestrator {
         duration_ms: duration,
         errors: errors.length > 0 ? errors : undefined,
       };
-    } catch (err: any) {
-      logger.error({ err }, "Compaction failed");
-
-      // Record failure
-      await this.completeOperation(operationId, {
-        error: err.message,
-      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err: message }, "Compaction failed");
 
       // Attempt rollback if we have a backup
       if (backupPath && !dry_run) {
@@ -400,14 +397,16 @@ export class CompactionOrchestrator {
         LEFT JOIN knowledge_entries ke ON s.id = ke.session_id
       `
       )
-      .get() as any;
+      .get();
+
+    const parsed = z.object({ sessions: z.number(), entries: z.number() }).parse(stats);
 
     const dbSize = this.getDbSize();
 
     return {
       size_mb: dbSize / (1024 * 1024),
-      sessions: stats.sessions || 0,
-      entries: stats.entries || 0,
+      sessions: parsed.sessions,
+      entries: parsed.entries,
     };
   }
 
@@ -438,15 +437,15 @@ export class CompactionOrchestrator {
    * Database integrity check
    */
   private async checkIntegrity(): Promise<boolean> {
-    const result = this.db.pragma("integrity_check") as any[];
+    const result = this.db.pragma("integrity_check") as { integrity_check: string }[];
     return result.length === 1 && result[0].integrity_check === "ok";
   }
 
   /**
    * Foreign key check
    */
-  private async checkForeignKeys(): Promise<any[]> {
-    return this.db.pragma("foreign_key_check") as any[];
+  private async checkForeignKeys(): Promise<unknown[]> {
+    return this.db.pragma("foreign_key_check") as unknown[];
   }
 
   /**
@@ -456,8 +455,10 @@ export class CompactionOrchestrator {
     try {
       const entryCount = this.db
         .prepare("SELECT COUNT(*) as count FROM knowledge_entries")
-        .get() as any;
-      const ftsCount = this.db.prepare("SELECT COUNT(*) as count FROM knowledge_fts").get() as any;
+        .get() as { count: number };
+      const ftsCount = this.db.prepare("SELECT COUNT(*) as count FROM knowledge_fts").get() as {
+        count: number;
+      };
 
       return entryCount.count === ftsCount.count;
     } catch {
@@ -510,7 +511,10 @@ export class CompactionOrchestrator {
   /**
    * Start compaction operation (record in history)
    */
-  private async startOperation(operation: string, metadata: Record<string, any>): Promise<number> {
+  private async startOperation(
+    operation: string,
+    metadata: Record<string, unknown>
+  ): Promise<number> {
     const stmt = this.db.prepare(`
       INSERT INTO compaction_history (operation, started_at, metadata)
       VALUES (?, datetime('now'), ?)

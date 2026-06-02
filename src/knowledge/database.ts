@@ -102,6 +102,9 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
       END;
     `);
 
+    // Migrate existing databases before creating indexes on new columns
+    this.applyMigrations();
+
     // Create indexes for performance
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_entries_session ON knowledge_entries(session_id);
@@ -399,7 +402,7 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
   async searchKnowledge(input: SearchKnowledgeInput): Promise<SearchResult[]> {
     // Use snippet() and highlight() for better search results
     let query = `
-      SELECT 
+      SELECT
         ke.*,
         kf.rank,
         snippet(knowledge_fts, 1, '***', '***', '...', 64) as search_snippet
@@ -913,67 +916,40 @@ export class SQLiteKnowledgeDatabase implements KnowledgeDatabase {
   /**
    * Add missing columns to existing database (for migration)
    */
+  private applyMigrations(): void {
+    const sessionCols = (this.db.prepare("PRAGMA table_info(sessions)").all() as any[]).map(
+      (c: any) => c.name
+    );
+    if (!sessionCols.includes("pinned"))
+      this.db.exec("ALTER TABLE sessions ADD COLUMN pinned INTEGER DEFAULT 0");
+    if (!sessionCols.includes("compaction_exempt"))
+      this.db.exec("ALTER TABLE sessions ADD COLUMN compaction_exempt INTEGER DEFAULT 0");
+    if (!sessionCols.includes("tier"))
+      this.db.exec(
+        "ALTER TABLE sessions ADD COLUMN tier TEXT DEFAULT 'hot' CHECK(tier IN ('hot', 'warm', 'cold', 'frozen'))"
+      );
+
+    const entryCols = (
+      this.db.prepare("PRAGMA table_info(knowledge_entries)").all() as any[]
+    ).map((c: any) => c.name);
+    if (!entryCols.includes("tier"))
+      this.db.exec(
+        "ALTER TABLE knowledge_entries ADD COLUMN tier TEXT DEFAULT 'hot' CHECK(tier IN ('hot', 'warm', 'cold', 'frozen'))"
+      );
+    if (!entryCols.includes("summarized"))
+      this.db.exec("ALTER TABLE knowledge_entries ADD COLUMN summarized INTEGER DEFAULT 0");
+    if (!entryCols.includes("archived"))
+      this.db.exec("ALTER TABLE knowledge_entries ADD COLUMN archived INTEGER DEFAULT 0");
+    if (!entryCols.includes("summary_id"))
+      this.db.exec(
+        "ALTER TABLE knowledge_entries ADD COLUMN summary_id INTEGER REFERENCES knowledge_summaries(id) ON DELETE SET NULL"
+      );
+  }
+
   async migrateSchema(): Promise<void> {
-    logger.info("Starting schema migration for compaction features...");
-
+    logger.info("Running schema migrations...");
     try {
-      // Check if columns exist, add them if not
-      const tableInfo = this.db.prepare("PRAGMA table_info(sessions)").all() as any[];
-      const columnNames = tableInfo.map((col: any) => col.name);
-
-      if (!columnNames.includes("pinned")) {
-        this.db.exec("ALTER TABLE sessions ADD COLUMN pinned INTEGER DEFAULT 0");
-        logger.info("Added 'pinned' column to sessions table");
-      }
-
-      if (!columnNames.includes("compaction_exempt")) {
-        this.db.exec("ALTER TABLE sessions ADD COLUMN compaction_exempt INTEGER DEFAULT 0");
-        logger.info("Added 'compaction_exempt' column to sessions table");
-      }
-
-      if (!columnNames.includes("tier")) {
-        this.db.exec(
-          "ALTER TABLE sessions ADD COLUMN tier TEXT DEFAULT 'hot' CHECK(tier IN ('hot', 'warm', 'cold', 'frozen'))"
-        );
-        logger.info("Added 'tier' column to sessions table");
-      }
-
-      // Check knowledge_entries table
-      const entriesInfo = this.db.prepare("PRAGMA table_info(knowledge_entries)").all() as any[];
-      const entryColumns = entriesInfo.map((col: any) => col.name);
-
-      if (!entryColumns.includes("tier")) {
-        this.db.exec(
-          "ALTER TABLE knowledge_entries ADD COLUMN tier TEXT DEFAULT 'hot' CHECK(tier IN ('hot', 'warm', 'cold', 'frozen'))"
-        );
-        logger.info("Added 'tier' column to knowledge_entries table");
-      }
-
-      if (!entryColumns.includes("summarized")) {
-        this.db.exec("ALTER TABLE knowledge_entries ADD COLUMN summarized INTEGER DEFAULT 0");
-        logger.info("Added 'summarized' column to knowledge_entries table");
-      }
-
-      if (!entryColumns.includes("archived")) {
-        this.db.exec("ALTER TABLE knowledge_entries ADD COLUMN archived INTEGER DEFAULT 0");
-        logger.info("Added 'archived' column to knowledge_entries table");
-      }
-
-      if (!entryColumns.includes("summary_id")) {
-        this.db.exec(
-          "ALTER TABLE knowledge_entries ADD COLUMN summary_id INTEGER REFERENCES knowledge_summaries(id) ON DELETE SET NULL"
-        );
-        logger.info("Added 'summary_id' column to knowledge_entries table");
-      }
-
-      // Create indexes if they don't exist
-      this.db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_entries_tier ON knowledge_entries(tier);
-        CREATE INDEX IF NOT EXISTS idx_entries_summarized ON knowledge_entries(summarized);
-        CREATE INDEX IF NOT EXISTS idx_sessions_tier ON sessions(tier);
-        CREATE INDEX IF NOT EXISTS idx_sessions_pinned ON sessions(pinned);
-      `);
-
+      this.applyMigrations();
       logger.info("Schema migration completed successfully");
     } catch (err) {
       logger.error({ err }, "Schema migration failed");

@@ -1,5 +1,7 @@
 // Type definitions for Knowledge Database Compaction System
 
+import type { SessionRow, KnowledgeEntryRow } from "../knowledge/schemas.js";
+
 export type Tier = "hot" | "warm" | "cold" | "frozen";
 export type SummaryType = "session" | "topic" | "cluster";
 export type CompactionMode = "full" | "incremental" | "archive_only" | "summarize_only";
@@ -16,8 +18,8 @@ export interface KnowledgeSummary {
   entry_count: number;
   token_count: number | null;
   generated_at: string;
-  source_entries: number[]; // Array of entry IDs
-  metadata: Record<string, any>;
+  source_entries: number[]; // Array of entry IDs (parsed from JSON string)
+  metadata: Record<string, unknown>;
 }
 
 export interface CreateSummaryInput {
@@ -27,7 +29,7 @@ export interface CreateSummaryInput {
   entry_count: number;
   token_count?: number;
   source_entries: number[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 // Archive Types
@@ -41,14 +43,14 @@ export interface ArchiveMetadata {
   archived_at: string;
   restore_count: number;
   last_restored: string | null;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface ArchiveData {
   version: string;
   archived_at: string;
-  session: any;
-  entries: any[];
+  session: SessionRow;
+  entries: KnowledgeEntryRow[];
   archive_metadata: {
     original_size_bytes: number;
     compressed_size_bytes: number;
@@ -67,8 +69,8 @@ export interface EntryDuplicate {
 }
 
 export interface DuplicatePair {
-  entry1: any;
-  entry2: any;
+  entry1: KnowledgeEntryRow;
+  entry2: KnowledgeEntryRow;
   similarity: number;
 }
 
@@ -81,7 +83,7 @@ export interface CompactionHistory {
   entries_affected: number | null;
   space_saved: number | null;
   error: string | null;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 // Tier Distribution

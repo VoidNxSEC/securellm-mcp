@@ -15,6 +15,8 @@ import type {
   CompressionType,
   ArchiveData,
 } from "../types/compaction.js";
+import { SessionRowSchema, KnowledgeEntryRowSchema } from "./schemas.js";
+import type { SessionRow } from "./schemas.js";
 
 export class Archiver {
   constructor(private db: Database.Database) {}
@@ -61,16 +63,8 @@ export class Archiver {
         `;
       }
 
-      interface SessionRow {
-        id: string;
-        created_at: string;
-        last_active: string;
-        summary: string | null;
-        entry_count: number;
-        metadata?: string;
-        pinned?: number;
-      }
-      const oldSessions = this.db.prepare(query).all(...params) as SessionRow[];
+      const rawSessions = this.db.prepare(query).all(...params);
+      const oldSessions = SessionRowSchema.array().parse(rawSessions);
 
       if (oldSessions.length === 0) {
         return {
@@ -148,7 +142,8 @@ export class Archiver {
   }> {
     try {
       // Get session data
-      const session = this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as any;
+      const rawSession = this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId);
+      const session = rawSession ? SessionRowSchema.parse(rawSession) : null;
 
       if (!session) {
         logger.warn({ sessionId }, "Session not found");
@@ -156,9 +151,10 @@ export class Archiver {
       }
 
       // Get all entries
-      const entries = this.db
+      const rawEntries = this.db
         .prepare("SELECT * FROM knowledge_entries WHERE session_id = ?")
-        .all(sessionId) as any[];
+        .all(sessionId);
+      const entries = KnowledgeEntryRowSchema.array().parse(rawEntries);
 
       // Calculate original size
       const originalSize = JSON.stringify({ session, entries }).length;
@@ -242,8 +238,9 @@ export class Archiver {
         entries_archived: entries.length,
         space_saved: originalSize,
       };
-    } catch (err: any) {
-      logger.error({ err, sessionId }, "Failed to archive session");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err: message, sessionId }, "Failed to archive session");
       return { success: false, entries_archived: 0, space_saved: 0 };
     }
   }
@@ -309,7 +306,7 @@ export class Archiver {
         .prepare(
           "SELECT * FROM archive_metadata WHERE session_id = ? ORDER BY archived_at DESC LIMIT 1"
         )
-        .get(session_id) as any;
+        .get(session_id) as { archive_file: string } | undefined;
 
       if (!archiveMeta) {
         return {
@@ -425,13 +422,14 @@ export class Archiver {
         session_id,
         entries_restored: archiveData.entries.length,
       };
-    } catch (err: any) {
-      logger.error({ err, session_id }, "Failed to restore session");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err: message, session_id }, "Failed to restore session");
       return {
         success: false,
         session_id,
         entries_restored: 0,
-        error: err.message,
+        error: message,
       };
     }
   }

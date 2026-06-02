@@ -17,6 +17,8 @@ import type {
   DeduplicationMethod,
   DuplicatePair,
 } from "../types/compaction.js";
+import { KnowledgeEntryRowSchema } from "./schemas.js";
+import type { KnowledgeEntryRow } from "./schemas.js";
 
 export class Deduplicator {
   private llmClient: UnifiedLLMClient;
@@ -45,14 +47,15 @@ export class Deduplicator {
     try {
       // Get entries to check
       let query = "SELECT * FROM knowledge_entries";
-      const params: any[] = [];
+      const params: (string | number)[] = [];
 
       if (session_id) {
         query += " WHERE session_id = ?";
         params.push(session_id);
       }
 
-      const entries = this.db.prepare(query).all(...params) as any[];
+      const rawEntries = this.db.prepare(query).all(...params);
+      const entries = KnowledgeEntryRowSchema.array().parse(rawEntries);
 
       if (entries.length < 2) {
         return {
@@ -99,8 +102,9 @@ export class Deduplicator {
         duplicate_pairs: duplicatePairs,
         space_saved_bytes: spaceSaved,
       };
-    } catch (err: any) {
-      logger.error({ err }, "Deduplication failed");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err: message }, "Deduplication failed");
       throw err;
     }
   }
@@ -108,9 +112,9 @@ export class Deduplicator {
   /**
    * Find exact duplicates (same content hash)
    */
-  private async findExactDuplicates(entries: any[]): Promise<DuplicatePair[]> {
+  private async findExactDuplicates(entries: KnowledgeEntryRow[]): Promise<DuplicatePair[]> {
     const pairs: DuplicatePair[] = [];
-    const hashMap = new Map<string, any[]>();
+    const hashMap = new Map<string, KnowledgeEntryRow[]>();
 
     // Group entries by hash
     for (const entry of entries) {
@@ -145,7 +149,10 @@ export class Deduplicator {
   /**
    * Find fuzzy duplicates (Levenshtein similarity)
    */
-  private async findFuzzyDuplicates(entries: any[], threshold: number): Promise<DuplicatePair[]> {
+  private async findFuzzyDuplicates(
+    entries: KnowledgeEntryRow[],
+    threshold: number
+  ): Promise<DuplicatePair[]> {
     const pairs: DuplicatePair[] = [];
 
     for (let i = 0; i < entries.length; i++) {
@@ -172,7 +179,7 @@ export class Deduplicator {
    * Find embedding-based duplicates (semantic similarity)
    */
   private async findEmbeddingDuplicates(
-    entries: any[],
+    entries: KnowledgeEntryRow[],
     threshold: number
   ): Promise<DuplicatePair[]> {
     // Generate embeddings for all entries
@@ -260,8 +267,10 @@ export class Deduplicator {
 
       // Calculate space saved
       const deleteEntries = this.db
-        .prepare(`SELECT content FROM knowledge_entries WHERE id IN (${deleteIds.join(",")})`)
-        .all() as any[];
+        .prepare(
+          `SELECT content FROM knowledge_entries WHERE id IN (${deleteIds.map(() => "?").join(",")})`
+        )
+        .all(...deleteIds) as { content: string }[];
 
       spaceSaved += deleteEntries.reduce((sum, e) => sum + e.content.length, 0);
 

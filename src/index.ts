@@ -15,7 +15,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import * as fs from "fs/promises";
-import { createKnowledgeDatabase } from "./knowledge/database.js";
+import { createKnowledgeDatabase, type SQLiteKnowledgeDatabase } from "./knowledge/database.js";
 import {
   type KnowledgeDatabase,
   type CreateSessionInput,
@@ -38,7 +38,7 @@ import { SemanticCache } from "./middleware/semantic-cache.js";
 import { ContextManager } from "./reasoning/context-manager.js";
 import { PreActionInterceptor } from "./reasoning/proactive/pre-action-interceptor.js";
 import { stringifyGeneric } from "./utils/json-schemas.js";
-import { ToolMetricsCollector } from "./middleware/tool-metrics.js";
+import { ToolMetricsCollector, type ToolMetricsSnapshot } from "./middleware/tool-metrics.js";
 import { ToolExecutionLimiter } from "./middleware/tool-limiter.js";
 import { RequestDeduplicator, stableStringify } from "./middleware/request-deduplicator.js";
 import { ADRHygieneMiddleware } from "./middleware/adr-hygiene.js";
@@ -55,7 +55,7 @@ import type { McpToolResult } from "./server/wrap.js";
 import { usageTracker } from "./telemetry/usage-tracker.js";
 
 const shouldPrettyPrint = process.env.NODE_ENV === "development";
-const SERVER_VERSION = process.env.SECURELLM_MCP_VERSION || "2.1.0";
+const SERVER_VERSION = process.env.SECURELLM_MCP_VERSION || "0.0.1";
 
 function stringify(obj: unknown): string {
   if (shouldPrettyPrint) return JSON.stringify(obj, null, 2);
@@ -288,12 +288,18 @@ class SecureLLMBridgeMCPServer {
             this.projectWatcher = null;
           }
         });
-        this.contextManager = new ContextManager(this.projectRoot, this.db as any);
+        this.contextManager = new ContextManager(
+          this.projectRoot,
+          this.db as SQLiteKnowledgeDatabase
+        );
         this.preActionInterceptor = new PreActionInterceptor(this.contextManager);
         this.adrHygieneMiddleware = new ADRHygieneMiddleware();
         logger.info("Proactive Logic Layer initialized (incl. ADR Hygiene)");
       } else if (isSystemDir && !watcherExplicitlyEnabled) {
-        this.contextManager = new ContextManager(this.projectRoot, this.db as any);
+        this.contextManager = new ContextManager(
+          this.projectRoot,
+          this.db as SQLiteKnowledgeDatabase
+        );
         this.preActionInterceptor = new PreActionInterceptor(this.contextManager);
         this.adrHygieneMiddleware = new ADRHygieneMiddleware();
         logger.info(
@@ -340,7 +346,10 @@ class SecureLLMBridgeMCPServer {
 
   // ── Knowledge dispatcher (consolidates 7 DB handlers) ────────────────────────
 
-  private async dispatchKnowledge(name: string, args: any): Promise<McpToolResult> {
+  private async dispatchKnowledge(
+    name: string,
+    args: Record<string, unknown>
+  ): Promise<McpToolResult> {
     if (!this.db) {
       return {
         content: [{ type: "text", text: "Knowledge database not available" }],
@@ -348,40 +357,45 @@ class SecureLLMBridgeMCPServer {
       };
     }
     try {
-      let result: any;
+      let result: unknown;
       switch (name) {
         case "create_session":
           result = {
-            session: await this.db.createSession(args as CreateSessionInput),
+            session: await this.db.createSession(args as unknown as CreateSessionInput),
             message: "Session created successfully",
           };
           break;
         case "save_knowledge":
           result = {
-            entry: await this.db.saveKnowledge(args as SaveKnowledgeInput),
+            entry: await this.db.saveKnowledge(args as unknown as SaveKnowledgeInput),
             message: "Knowledge saved successfully",
           };
           break;
         case "search_knowledge": {
-          const results = await this.db.searchKnowledge(args as SearchKnowledgeInput);
+          const results = await this.db.searchKnowledge(args as unknown as SearchKnowledgeInput);
           result = { results, count: results.length };
           break;
         }
         case "load_session": {
-          const session = await this.db.getSession(args.session_id);
+          const sessionId = args.session_id as string;
+          const session = await this.db.getSession(sessionId);
           if (!session)
             return { content: [{ type: "text", text: "Session not found" }], isError: true };
-          const entries = await this.db.getRecentKnowledge(args.session_id, 100);
+          const entries = await this.db.getRecentKnowledge(sessionId, 100);
           result = { session, entries, count: entries.length };
           break;
         }
         case "list_sessions": {
-          const sessions = await this.db.listSessions(args.limit || 20, args.offset || 0);
+          const limit = (args.limit as number) || 20;
+          const offset = (args.offset as number) || 0;
+          const sessions = await this.db.listSessions(limit, offset);
           result = { sessions, count: sessions.length };
           break;
         }
         case "get_recent_knowledge": {
-          const entries = await this.db.getRecentKnowledge(args.session_id, args.limit || 20);
+          const sessionId = args.session_id as string;
+          const limit = (args.limit as number) || 20;
+          const entries = await this.db.getRecentKnowledge(sessionId, limit);
           result = { entries, count: entries.length };
           break;
         }
@@ -399,9 +413,10 @@ class SecureLLMBridgeMCPServer {
           };
       }
       return { content: [{ type: "text", text: stringify(result) }] };
-    } catch (error: any) {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       return {
-        content: [{ type: "text", text: stringify({ error: error.message }) }],
+        content: [{ type: "text", text: stringify({ error: message }) }],
         isError: true,
       };
     }
@@ -412,7 +427,7 @@ class SecureLLMBridgeMCPServer {
   private async handleRateLimiterStatus(): Promise<McpToolResult> {
     try {
       const allMetrics = this.rateLimiter.getAllMetrics();
-      const status: Record<string, any> = {};
+      const status: Record<string, unknown> = {};
       for (const [provider, metrics] of allMetrics.entries()) {
         const queueStatus = this.rateLimiter.getQueueStatus(provider);
         status[provider] = {
@@ -464,9 +479,10 @@ class SecureLLMBridgeMCPServer {
           },
         ],
       };
-    } catch (error: any) {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       return {
-        content: [{ type: "text", text: stringify({ success: false, error: error.message }) }],
+        content: [{ type: "text", text: stringify({ success: false, error: message }) }],
         isError: true,
       };
     }
@@ -537,12 +553,30 @@ class SecureLLMBridgeMCPServer {
 
       const cacheKey = stableStringify({ name, args });
       const requestSize = Buffer.byteLength(cacheKey, "utf8");
-      const snapshot: any = { requestId, toolName: name, startTime, requestSize };
-      let permit: any = null;
+      const snapshot: {
+        requestId: string;
+        toolName: string;
+        startTime: number;
+        requestSize: number;
+        cacheLookupTime?: number;
+        cacheHit?: boolean;
+        responseSize?: number;
+        totalTime?: number;
+        queueWaitTime?: number;
+        error?: string;
+        errorCategory?: string;
+        preActionTime?: number;
+        executionTime?: number;
+        originalResponseSize?: number;
+        compactionCharsSaved?: number;
+        compactionTokensSaved?: number;
+        compactionApplied?: boolean;
+      } = { requestId, toolName: name, startTime, requestSize };
+      let permit: { release: () => void } | null = null;
 
       try {
         // SEMANTIC CACHE: check before executing
-        let cached: any = null;
+        let cached: { response: unknown; metadata?: Record<string, unknown> } | null = null;
         if (this.semanticCache && shouldAttemptSemanticCache(name)) {
           const cacheLookupStart = Date.now();
           cached = await this.semanticCache.lookup({
@@ -560,7 +594,7 @@ class SecureLLMBridgeMCPServer {
             }
             snapshot.totalTime = Date.now() - startTime;
             snapshot.cacheHit = true;
-            this.toolMetricsCollector.recordSnapshot(snapshot);
+            this.toolMetricsCollector.recordSnapshot(snapshot as ToolMetricsSnapshot);
             return cached;
           }
         }
@@ -575,7 +609,7 @@ class SecureLLMBridgeMCPServer {
           snapshot.error = queueError instanceof Error ? queueError.message : String(queueError);
           snapshot.errorCategory = "queue_full";
           snapshot.totalTime = Date.now() - startTime;
-          this.toolMetricsCollector.recordSnapshot(snapshot);
+          this.toolMetricsCollector.recordSnapshot(snapshot as ToolMetricsSnapshot);
           throw queueError;
         }
 
@@ -669,7 +703,7 @@ class SecureLLMBridgeMCPServer {
         }
 
         snapshot.totalTime = Date.now() - startTime;
-        this.toolMetricsCollector.recordSnapshot(snapshot);
+        this.toolMetricsCollector.recordSnapshot(snapshot as ToolMetricsSnapshot);
 
         // TELEMETRY: record successful invocation (fire-and-forget)
         void Promise.resolve().then(() =>
@@ -701,7 +735,7 @@ class SecureLLMBridgeMCPServer {
         } else {
           snapshot.errorCategory = "unknown";
         }
-        this.toolMetricsCollector.recordSnapshot(snapshot);
+        this.toolMetricsCollector.recordSnapshot(snapshot as ToolMetricsSnapshot);
 
         // TELEMETRY: record failed invocation
         void Promise.resolve().then(() =>

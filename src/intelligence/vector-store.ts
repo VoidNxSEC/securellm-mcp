@@ -19,12 +19,22 @@ import { logger } from "../utils/logger.js";
  * - LRU Caching for Embeddings and Summaries (Memory speed)
  */
 
+/** Row as stored in SQLite (before Float32Array conversion) */
+interface VectorDocRow {
+  id: string;
+  content: string;
+  summary: string;
+  embedding: Buffer;
+  metadata: string | null;
+  timestamp: number;
+}
+
 interface VectorDocument {
   id: string;
   content: string;
   summary: string;
   embedding: Float32Array;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   timestamp: number;
 }
 
@@ -76,7 +86,7 @@ export class VectorStore {
       );
 
       CREATE INDEX IF NOT EXISTS idx_timestamp ON vector_documents(timestamp);
-      
+
       CREATE VIRTUAL TABLE IF NOT EXISTS vector_fts USING fts5(
         id UNINDEXED,
         content,
@@ -134,7 +144,7 @@ export class VectorStore {
     }
     // Normalize
     const norm = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
-    return embedding.map((val) => val / (norm || 1)) as any;
+    return Float32Array.from(embedding.map((val) => val / (norm || 1)));
   }
 
   /**
@@ -196,7 +206,7 @@ export class VectorStore {
 
     // Store in database
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO vector_documents 
+      INSERT OR REPLACE INTO vector_documents
       (id, content, summary, embedding, metadata, timestamp)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
@@ -232,7 +242,7 @@ export class VectorStore {
 
     // Get all documents
     const stmt = this.db.prepare("SELECT * FROM vector_documents");
-    const documents = stmt.all() as any[];
+    const documents = stmt.all() as VectorDocRow[];
 
     // Calculate similarities
     const results: SearchResult[] = [];
@@ -274,12 +284,12 @@ export class VectorStore {
 
     // Full-text search
     const ftsStmt = this.db.prepare(`
-      SELECT id FROM vector_fts 
+      SELECT id FROM vector_fts
       WHERE vector_fts MATCH ?
       LIMIT ?
     `);
 
-    const ftsResults = ftsStmt.all(query, limit) as any[];
+    const ftsResults = ftsStmt.all(query, limit) as { id: string }[];
     const ftsIds = new Set(ftsResults.map((r) => r.id));
 
     // Merge results, boosting FTS matches
@@ -342,12 +352,12 @@ export class VectorStore {
    */
   getStats() {
     const countStmt = this.db.prepare("SELECT COUNT(*) as count FROM vector_documents");
-    const count = (countStmt.get() as any).count;
+    const count = (countStmt.get() as { count: number }).count;
 
     const sizeStmt = this.db.prepare(
       "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()"
     );
-    const size = (sizeStmt.get() as any).size;
+    const size = (sizeStmt.get() as { size: number }).size;
 
     return {
       documentCount: count,

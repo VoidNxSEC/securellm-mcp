@@ -37,10 +37,11 @@ export function loadSecrets(): void {
         process.env[key] = value;
       }
     }
-  } catch (err: any) {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     // Non-fatal: if sops fails (e.g. no GPG agent), fall back to env vars
     process.stderr.write(
-      `[secrets-loader] SOPS decrypt failed: ${err.message} — using shell environment\n`
+      `[secrets-loader] SOPS decrypt failed: ${message} — using shell environment\n`
     );
   }
 }

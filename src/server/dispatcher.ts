@@ -323,14 +323,19 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
     package_download: (args) => w(() => deps.packageDownload.download(args)),
     package_configure: (args) => w(() => deps.packageConfigure.configure(args)),
 
-    // ── Knowledge handlers (delegated back to server for DB access) ────────
-    create_session: (args) => deps.handleKnowledge("create_session", args),
-    save_knowledge: (args) => deps.handleKnowledge("save_knowledge", args),
-    search_knowledge: (args) => deps.handleKnowledge("search_knowledge", args),
-    load_session: (args) => deps.handleKnowledge("load_session", args),
-    list_sessions: (args) => deps.handleKnowledge("list_sessions", args),
-    get_recent_knowledge: (args) => deps.handleKnowledge("get_recent_knowledge", args),
-    knowledge_maintenance: (args) => deps.handleKnowledge("knowledge_maintenance", args),
+    // ── memories — unified knowledge tool ────────────────────────────
+    memories: (args) => {
+      const { action, ...rest } = args;
+      switch (action) {
+        case "save":    return deps.handleKnowledge("save_knowledge", rest);
+        case "search":  return deps.handleKnowledge("search_knowledge", rest);
+        case "recall":  return deps.handleKnowledge("load_session", rest);
+        case "list":    return deps.handleKnowledge("list_sessions", rest);
+        case "compact": return deps.handleKnowledge("knowledge_maintenance", rest);
+        default:
+          throw new McpError(ErrorCode.InvalidParams, `Unknown memories action: ${action}`);
+      }
+    },
 
     // ── Emergency Framework ───────────────────────────────────────────────
     emergency_status: () => w(handleEmergencyStatus),
@@ -351,20 +356,15 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
     force_cooldown: () => w(handleForceCooldown),
     reset_performance: () => w(handleResetPerformance),
 
-    // ── Web Search ────────────────────────────────────────────────────────
-    web_search: (args) => w(() => handleWebSearch(args)),
-    nix_search: (args) => w(() => handleNixSearch(args)),
-    github_search: (args) => w(() => handleGithubSearch(args)),
-    tech_news_search: (args) => w(() => handleTechNewsSearch(args)),
-    nixos_discourse_search: (args) => w(() => handleDiscourseSearch(args)),
-    stackoverflow_search: (args) => w(() => handleStackOverflowSearch(args)),
-    osint_dns: (args) => w(() => handleOsintDns(args)),
-    osint_subdomains: (args) => w(() => handleOsintSubdomains(args)),
-    osint_portscan: (args) => w(() => handleOsintPortScan(args)),
-    web_crawl: (args) => w(() => handleWebCrawl(args)),
-
-    // ── Research ──────────────────────────────────────────────────────────
-    research_agent: (args) => handleResearchAgent(args),
+    // ── search — consolidated (web + github + research) ──────────────────
+    search: (args) => {
+      const target = args?.target || "web";
+      switch (target) {
+        case "github":   return w(() => handleGithubSearch(args));
+        case "research": return handleResearchAgent(args);
+        default:         return w(() => handleWebSearch(args));
+      }
+    },
 
     // ── ADR — dynamic dispatch via adrHandlers map ─────────────────────────
     ...Object.fromEntries(
@@ -390,45 +390,48 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
       return { content: [{ type: "text", text: deps.stringify(merged) }] };
     },
 
-    // ── Codebase Analysis ─────────────────────────────────────────────────
-    analyze_complexity: (args) => analyzeComplexity(args),
-    find_dead_code: (args) => findDeadCode(args),
-    advanced_code_analysis: (args) => handleAdvancedCodeAnalysis(args),
-    socket_debug_report: (args) => handleSocketDebugReport(args),
+    // ── code_analyze — consolidated ───────────────────────────────────────
+    code_analyze: (args) => {
+      const mode = args?.mode || "complexity";
+      switch (mode) {
+        case "dead_code": return findDeadCode(args);
+        case "full":      return handleAdvancedCodeAnalysis(args);
+        default:          return analyzeComplexity(args);
+      }
+    },
+
+    // ── quality_gate — consolidated ───────────────────────────────────────
+    quality_gate: (args) => {
+      const scope = args?.scope || "all";
+      switch (scope) {
+        case "lint":  return devToolHandlers.lint_code(args);
+        case "test":  return devToolHandlers.run_tests(args);
+        case "docs":  return handleDocValidate(args);
+        default:      return deps.professionalToolHandlers.workspace_quality_gate(args);
+      }
+    },
+
+    // ── system — consolidated ────────────────────────────────────────────
+    system: (args) => {
+      const focus = args?.focus || "health";
+      switch (focus) {
+        case "disk":     return handleDiskAnalyze(args);
+        case "network":  return handleNetworkDiag(args);
+        case "security": return handleSecurityScan(args);
+        default:         return w(() => handleSystemHealthCheck(args?.detailed || false));
+      }
+    },
 
     // ── Secure Execution ──────────────────────────────────────────────────
     execute_in_sandbox: (args) => handleExecuteInSandbox(args),
 
-    // ── SSH ───────────────────────────────────────────────────────────────
-    ssh_execute: (args) => new SSHExecuteTool().execute(args),
-    ssh_file_transfer: (args) => new SSHFileTransferTool().execute(args),
-    ssh_maintenance_check: (args) => new SSHMaintenanceCheckTool().execute(args),
-    ssh_tunnel: (args) => new SSHTunnelTool().execute(args),
-    ssh_jump_host: (args) => new SSHJumpHostTool().execute(args),
-    ssh_session_manager: (args) => new SSHSessionTool().execute(args),
-
-    // ── DX Tools ──────────────────────────────────────────────────────────
-    lint_code: (args) => devToolHandlers.lint_code(args),
-    format_code: (args) => devToolHandlers.format_code(args),
-    run_tests: (args) => devToolHandlers.run_tests(args),
-    github_actions: (args) => devToolHandlers.github_actions(args),
-
-    // ── Professional Operations ───────────────────────────────────────────
-    server_health: (args) => deps.professionalToolHandlers.server_health(args),
-    workspace_quality_gate: (args) => deps.professionalToolHandlers.workspace_quality_gate(args),
-    performance_report: (args) => deps.professionalToolHandlers.performance_report(args),
-    cache_tuning_advisor: (args) => deps.professionalToolHandlers.cache_tuning_advisor(args),
-    change_impact: (args) => deps.professionalToolHandlers.change_impact(args),
-    ci_failure_summary: (args) => deps.professionalToolHandlers.ci_failure_summary(args),
-    tool_control_plane: (args) => deps.professionalToolHandlers.tool_control_plane(args),
-    ci_batch_triage: (args) => deps.professionalToolHandlers.ci_batch_triage(args),
-
     // ── Browser ───────────────────────────────────────────────────────────
     browser_launch_advanced: (args) => new BrowserLaunchAdvancedTool().execute(args),
-    browser_extract_data: (args) => new BrowserExtractDataTool().execute(args),
-    browser_interact_form: (args) => new BrowserInteractFormTool().execute(args),
-    browser_monitor_changes: (args) => new BrowserMonitorChangesTool().execute(args),
-    browser_search_aggregate: (args) => new BrowserSearchAggregateTool().execute(args),
+
+    // ── Professional Operations (kept for internal diagnostics) ───────────
+    server_health: (args) => deps.professionalToolHandlers.server_health(args),
+    performance_report: (args) => deps.professionalToolHandlers.performance_report(args),
+    tool_control_plane: (args) => deps.professionalToolHandlers.tool_control_plane(args),
 
     // ── Session / Context / Misc ──────────────────────────────────────────
     session_bridge: (args) =>
@@ -448,23 +451,6 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
         return handler(toolArgs);
       }),
 
-    // ── Linux Debugging ───────────────────────────────────────────────────
-    journal_analyze: (args) => handleJournalAnalyze(args),
-    process_inspect: (args) => handleProcessInspect(args),
-    systemd_delta: (args) => handleSystemdDelta(args),
-    network_diag: (args) => handleNetworkDiag(args),
-    disk_analyze: (args) => handleDiskAnalyze(args),
-    security_scan: (args) => handleSecurityScan(args),
-
-    // ── Documentation Tools ──────────────────────────────────────────
-    doc_generate: (args) => handleDocGenerate(args),
-    doc_coverage: (args) => handleDocCoverage(args),
-    doc_validate: (args) => handleDocValidate(args),
-
-    // ── Interoperability Tools ──────────────────────────────────────
-    schema_convert: (args) => handleSchemaConvert(args),
-    project_bridge: (args) => handleProjectBridge(args),
-    data_transform: (args) => handleDataTransform(args),
 
     // ── Ecosystem Awareness ──────────────────────────────────────────
     ecosystem_map: (args) => handleEcosystemMap(args),
