@@ -23,7 +23,7 @@ import type { RuntimeGateResult, ScannedADR } from "./runtime-gate.js";
 import { existsSync } from "fs";
 import { join } from "path";
 
-const DEFAULT_ADR_LEDGER_PATH = "/home/kernelcore/master/adr-ledger";
+const DEFAULT_ADR_LEDGER_PATH = "/home/kernelcore/master/staging/adr-ledger";
 
 function hasAdrLayout(repoPath: string): boolean {
   return existsSync(join(repoPath, "adr")) || existsSync(join(repoPath, "docs", "adr"));
@@ -32,11 +32,12 @@ function hasAdrLayout(repoPath: string): boolean {
 function resolveAdrRepoPath(): string {
   if (process.env.ADR_REPO_PATH) return process.env.ADR_REPO_PATH;
 
+  // Priority: explicit ADR_REPO_PATH > PROJECT_ROOT > cwd > adr-ledger staging > adr-ledger master
   const candidates = [
     process.env.PROJECT_ROOT,
     process.cwd(),
-    "/home/kernelcore/master/securellm-mcp",
     DEFAULT_ADR_LEDGER_PATH,
+    "/home/kernelcore/master/adr-ledger",
   ].filter((candidate): candidate is string => Boolean(candidate));
 
   return candidates.find(hasAdrLayout) || process.env.PROJECT_ROOT || process.cwd();
