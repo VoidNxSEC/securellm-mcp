@@ -170,17 +170,14 @@ async function handleRecall(
     results.local = { error: "Local search unavailable" };
   }
 
-  // 2. Cerebro RAG (best-effort, graceful degradation)
+  // 2. Cerebro RAG (best-effort, 8s timeout to allow embedding model warm-up)
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3_000);
     const resp = await fetch(`${CEREBRO_API_URL}/intelligence/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: context, limit, semantic: true }),
-      signal: controller.signal,
+      signal: AbortSignal.timeout(8_000),
     });
-    clearTimeout(timeout);
     if (resp.ok) {
       results.cerebro = await resp.json();
     } else {

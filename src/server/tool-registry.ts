@@ -14,6 +14,7 @@ import { professionalTools } from "../tools/professional-tools.js";
 import {
   browserLaunchAdvancedSchema,
 } from "../tools/browser/index.js";
+import { cerebroRagTools } from "../tools/cerebro-rag.js";
 
 export function buildToolCatalog(
   db: KnowledgeDatabase | null,
@@ -60,6 +61,9 @@ export function buildToolCatalog(
     nvimContextTool,
     ...ecosystemTools,
     ...umbrellaTools,
+
+    // ── Cerebro RAG — direct integration ─────────────────────────────
+    ...cerebroRagTools,
 
     // ── UX design mode ────────────────────────────────────────────────
     ...uxTools,

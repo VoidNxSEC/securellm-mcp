@@ -67,6 +67,12 @@ import {
 } from "../tools/browser/index.js";
 import { adrHandlers } from "../tools/adr/index.js";
 import { handleSessionBridge } from "../tools/session-bridge.js";
+import {
+  handleCerebroRagQuery,
+  handleCerebroRagIngest,
+  handleCerebroRagStatus,
+  handleCerebroRagBenchmark,
+} from "../tools/cerebro-rag.js";
 import { handleNvimContext } from "../tools/nvim-context.js";
 import { handleNixDaemon } from "../tools/nix-daemon.js";
 import { handleGitSherlock } from "../tools/git-sherlock.js";
@@ -460,6 +466,12 @@ export function buildDispatchMap(deps: DispatchDeps): Record<string, Handler> {
     cross_project_search: (args) => handleCrossProjectSearch(args),
     dependency_graph_analyzer: (args) => handleDependencyGraphAnalyzer(args),
     context_window_optimizer: (args) => handleContextWindowOptimizer(args),
+
+    // ── Cerebro RAG ───────────────────────────────────────────────────
+    cerebro_rag_query: (args) => handleCerebroRagQuery(args),
+    cerebro_rag_ingest: (args) => handleCerebroRagIngest(args),
+    cerebro_rag_status: (args) => handleCerebroRagStatus(args),
+    cerebro_rag_benchmark: (args) => handleCerebroRagBenchmark(args),
 
     // ── Bridge UX Design Mode ─────────────────────────────────────────
     ux_list_specs: () => handleUxListSpecs(),

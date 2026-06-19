@@ -1,0 +1,59 @@
+services:
+
+  # ── Cerebro RAG — Knowledge Extraction & Distributed RAG Platform ────────────
+  #
+  # Runs as a sidecar to the MCP server. The MCP server connects to it via
+  # CEREBRO_API_URL (default: http://localhost:8009).
+  #
+  # Build:  docker-compose build cerebro
+  # Start:  docker-compose up -d
+  # Logs:   docker-compose logs -f cerebro
+  # Stop:   docker-compose down
+
+  cerebro:
+    build:
+      context: ../cerebro
+      dockerfile: Dockerfile
+    image: cerebro:latest
+    container_name: securellm_cerebro
+    restart: unless-stopped
+    ports:
+      - "${CEREBRO_PORT:-8009}:8000"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8000"
+      PYTHONUNBUFFERED: "1"
+      # Vector store (chroma = embedded local, no extra service needed)
+      CEREBRO_VECTOR_STORE_PROVIDER: "${CEREBRO_VECTOR_STORE_PROVIDER:-chroma}"
+      CEREBRO_VECTOR_STORE_PERSIST_DIRECTORY: "/app/data/vector_db"
+      CEREBRO_VECTOR_STORE_COLLECTION_NAME: "${CEREBRO_VECTOR_STORE_COLLECTION_NAME:-securellm_knowledge}"
+      # LLM provider (llamacpp = local inference server; see LLAMA_CPP_URL below)
+      CEREBRO_LLM_PROVIDER: "${CEREBRO_LLM_PROVIDER:-llamacpp}"
+      LLAMA_CPP_URL: "${LLAMA_CPP_URL:-http://host.docker.internal:8081}"
+      # API keys (pass from host env; all optional depending on LLM provider)
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
+      GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      # Reranker (used by Cerebro internally)
+      CEREBRO_RERANKER_URL: "http://localhost:8090"
+      # NATS (optional event bus; skip if not running)
+      NATS_URL: "${NATS_URL:-}"
+    volumes:
+      # Share securellm knowledge DB directory with Cerebro for context enrichment
+      - ${HOME}/.local/share/securellm:/app/data
+    extra_hosts:
+      # Allow container to reach host-level services (llama.cpp, NATS, etc.)
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
+    networks:
+      - securellm_net
+
+networks:
+  securellm_net:
+    driver: bridge
