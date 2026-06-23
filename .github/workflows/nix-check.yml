@@ -9,7 +9,7 @@ on:
 jobs:
   flake-check:
     name: Check Nix Flake Evaluation
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

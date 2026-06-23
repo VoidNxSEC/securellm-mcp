@@ -14,7 +14,7 @@ env:
 jobs:
   validate-adrs:
     name: Validate Architecture Decision Records
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
 
     steps:
       - name: Checkout repository
@@ -92,7 +92,7 @@ jobs:
 
   chain-integrity:
     name: Chain & Merkle Integrity
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
 
     steps:
       - name: Checkout repository
@@ -156,7 +156,7 @@ jobs:
 
   enforcement-smoke:
     name: Enforcement Layer Smoke Test (OPA authz)
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
 
     steps:
       - name: Checkout repository
@@ -172,7 +172,7 @@ jobs:
 
   detect-features:
     name: Feature Detection & Integration Check
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
     if: github.event_name == 'push'
 
     steps:
@@ -218,7 +218,7 @@ jobs:
 
   sync-knowledge-base:
     name: Synchronize Knowledge Base
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
     permissions:
       contents: write
     needs: validate-adrs
@@ -254,7 +254,7 @@ jobs:
 
   stf-compliance-check:
     name: STF Protocol Compliance Check
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
 
     steps:
       - name: Checkout repository
@@ -295,7 +295,7 @@ jobs:
 
   code-quality:
     name: Code Quality Checks
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
 
     steps:
       - name: Checkout repository
@@ -319,7 +319,7 @@ jobs:
 
   summary:
     name: Validation Summary
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
     needs: [validate-adrs, chain-integrity, enforcement-smoke, detect-features, stf-compliance-check, code-quality]
     if: always()
 
