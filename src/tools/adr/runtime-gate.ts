@@ -225,8 +225,9 @@ export class ADRRuntimeGate {
       const { execFile } = await import("child_process");
       const { promisify } = await import("util");
       const execFileAsync = promisify(execFile);
+      const pythonBin = process.env.ADR_PYTHON || "python3";
       const result = await execFileAsync(
-        "python3",
+        pythonBin,
         ["-c", "import yaml; import jsonschema; print('ok')"],
         {
           timeout: 5000,

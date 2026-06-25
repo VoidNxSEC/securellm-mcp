@@ -102,7 +102,8 @@ export class CLIBackend {
   ): Promise<{ stdout: string; stderr: string; code: number }> {
     const modulePath = join(this.chainDir, module);
     try {
-      const { stdout, stderr } = await execFileAsync("python3.13", [modulePath, ...args], {
+      const pythonBin = process.env.ADR_PYTHON || "python3.13";
+      const { stdout, stderr } = await execFileAsync(pythonBin, [modulePath, ...args], {
         cwd: this.repoPath,
         timeout: timeoutMs,
         env: { ...process.env, PYTHONPATH: this.chainDir },
